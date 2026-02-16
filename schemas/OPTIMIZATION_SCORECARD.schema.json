@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Optimization Result Scorecard",
+  "description": "Machine-readable optimization result with finding counts, patch stats, and expected delta.",
+  "type": "object",
+  "required": [
+    "findings_total",
+    "findings_approved",
+    "findings_rejected",
+    "patches_generated",
+    "patches_valid",
+    "expected_delta"
+  ],
+  "properties": {
+    "findings_total": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total findings discovered across all domain subagents"
+    },
+    "findings_approved": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Findings approved by adversarial critic"
+    },
+    "findings_rejected": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Findings rejected by adversarial critic (must be ≥1)"
+    },
+    "findings_downgraded": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Findings downgraded by adversarial critic"
+    },
+    "patches_generated": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "description": "Number of patches generated (max 5 per run)"
+    },
+    "patches_valid": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Patches that pass git apply --check"
+    },
+    "expected_delta": {
+      "type": "integer",
+      "description": "Expected composite score improvement"
+    },
+    "categories": {
+      "type": "object",
+      "description": "Finding counts per optimization category",
+      "properties": {
+        "decompose": { "type": "integer", "minimum": 0 },
+        "consolidate": { "type": "integer", "minimum": 0 },
+        "extract": { "type": "integer", "minimum": 0 },
+        "standardize": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "optimizer_version": { "type": "string" },
+        "scorecard_input": { "type": "string" },
+        "target": { "type": "string" }
+      }
+    }
+  }
+}

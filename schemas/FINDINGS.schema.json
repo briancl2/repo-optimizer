@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Findings Table",
+  "description": "Universal findings format used by auditor and optimizer subagents. 7-column table from portfolio_advisor pattern.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["rank", "severity", "finding", "file", "evidence_quote"],
+    "properties": {
+      "rank": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Priority rank (1=most critical)"
+      },
+      "severity": {
+        "type": "string",
+        "enum": ["Critical", "High", "Medium", "Low", "Info"],
+        "description": "Finding severity level"
+      },
+      "finding": {
+        "type": "string",
+        "minLength": 10,
+        "description": "Description of the finding (≥10 chars)"
+      },
+      "file": {
+        "type": "string",
+        "description": "File path where finding was observed"
+      },
+      "token_impact": {
+        "type": "string",
+        "description": "Estimated token impact of addressing this finding"
+      },
+      "evidence_quote": {
+        "type": "string",
+        "minLength": 20,
+        "description": "Literal substring from the file (≥20 chars, no ellipses)"
+      },
+      "verification": {
+        "type": "string",
+        "description": "Command to verify the finding or its resolution"
+      }
+    }
+  }
+}

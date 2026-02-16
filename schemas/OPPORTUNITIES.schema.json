@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Advisor Recommendations",
+  "description": "Structured advisor output with up to 10 prioritized recommendations, each tagged with maturity phase and confidence.",
+  "type": "object",
+  "required": ["target", "recommendations", "meta"],
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Target repository identifier"
+    },
+    "recommendations": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "priority", "type", "phase", "applyTo"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^REC-[0-9]+$",
+            "description": "Recommendation identifier (REC-01 through REC-10)"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 10,
+            "description": "Descriptive recommendation title"
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "Priority rank (1=highest)"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["fix-broken", "add-new", "optimize"],
+            "description": "Recommendation category (L22 ordering: fix-broken > add-new > optimize)"
+          },
+          "phase": {
+            "type": "string",
+            "description": "Target maturity phase (e.g., 'Phase 2→3')"
+          },
+          "applyTo": {
+            "type": "string",
+            "description": "File or directory path this applies to"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "exploratory"],
+            "description": "Confidence level based on evidence strength"
+          },
+          "effort": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "description": "Estimated implementation effort"
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 20,
+            "description": "Evidence quote ≥20 characters"
+          },
+          "verification": {
+            "type": "string",
+            "description": "Command to verify if recommendation was implemented"
+          }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["timestamp", "advisor_version"],
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "advisor_version": { "type": "string" },
+        "heuristic_score": { "type": "integer" },
+        "scorecard_available": { "type": "boolean" },
+        "memory_used": { "type": "boolean" },
+        "target_phase": { "type": "string" }
+      }
+    }
+  }
+}

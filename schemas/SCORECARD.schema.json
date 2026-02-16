@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Repository Audit Scorecard",
+  "description": "Machine-readable audit scorecard with 5 dimensions (D1-D5), composite score, T1/T2 tier checks, and metadata.",
+  "type": "object",
+  "required": ["dimensions", "composite", "max_composite", "tier1_checks", "meta"],
+  "properties": {
+    "dimensions": {
+      "type": "object",
+      "required": [
+        "D1_governance",
+        "D2_surface_health",
+        "D3_skill_maturity",
+        "D4_measurement",
+        "D5_self_improvement"
+      ],
+      "patternProperties": {
+        "^D[1-5]_": {
+          "type": "object",
+          "required": ["score", "max", "tier", "components"],
+          "properties": {
+            "score": { "type": "integer", "minimum": 0, "maximum": 20 },
+            "max": { "type": "integer", "const": 20 },
+            "tier": { "type": "string", "enum": ["T1", "T2", "T3"] },
+            "components": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "score": { "type": "integer" },
+                  "max": { "type": "integer" },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "composite": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "max_composite": { "type": "integer", "const": 100 },
+    "tier1_checks": {
+      "type": "object",
+      "required": ["total", "passed", "failed", "failures"],
+      "properties": {
+        "total": { "type": "integer" },
+        "passed": { "type": "integer" },
+        "failed": { "type": "integer" },
+        "failures": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "tier2_warnings": {
+      "type": "object",
+      "properties": {
+        "total": { "type": "integer" },
+        "triggered": { "type": "integer" },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "required": ["phase", "maturity_score", "timestamp", "auditor_version"],
+      "properties": {
+        "phase": { "type": "string" },
+        "maturity_score": { "type": "integer" },
+        "agents": { "type": "integer" },
+        "skills": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "auditor_version": { "type": "string" }
+      }
+    }
+  }
+}
