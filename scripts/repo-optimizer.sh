@@ -72,8 +72,8 @@ echo "--- Phase 1: Pre-flight ---"
 COMPOSITE=$(python3 -c "import json; d=json.load(open('$AUDIT_DIR/SCORECARD.json')); print(d.get('composite', 0))" 2>/dev/null || echo "?")
 echo "  Composite score: $COMPOSITE/100"
 
-# Count files in target repo for budget tiering
-FILE_COUNT=$(find "$REPO" -type f 2>/dev/null | wc -l | tr -d ' ')
+# Count files in target repo for budget tiering (exclude .git, node_modules)
+FILE_COUNT=$(find "$REPO" -type f -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | wc -l | tr -d ' ')
 echo "  File count: $FILE_COUNT"
 
 # Determine budget tier
@@ -92,7 +92,7 @@ SCOPE_DESC="All files"
 
 if [ "$BUDGET_TIER" = "focused" ]; then
     # AI surfaces + governance files only
-    ELIGIBLE_FILES=$(find "$REPO" -type f \( \
+    ELIGIBLE_FILES=$(find "$REPO" -type f -not -path '*/.git/*' -not -path '*/node_modules/*' \( \
         -name "AGENTS.md" -o -name "*.agent.md" -o -name "*.prompt.md" \
         -o -name "*.instructions.md" -o -name "copilot-instructions.md" \
         -o -name ".cursorrules" -o -name "SKILL.md" \
@@ -102,7 +102,7 @@ if [ "$BUDGET_TIER" = "focused" ]; then
         -o -name "Cargo.toml" -o -name "go.mod" \
     \) 2>/dev/null | wc -l | tr -d ' ')
     # Also count YAML files in root
-    ROOT_YAML=$(find "$REPO" -maxdepth 1 -type f \( -name "*.yml" -o -name "*.yaml" \) 2>/dev/null | wc -l | tr -d ' ')
+    ROOT_YAML=$(find "$REPO" -maxdepth 1 -type f -not -path '*/.git/*' \( -name "*.yml" -o -name "*.yaml" \) 2>/dev/null | wc -l | tr -d ' ')
     ELIGIBLE_FILES=$((ELIGIBLE_FILES + ROOT_YAML))
     SCOPE_DESC="AI surfaces + governance files"
 elif [ "$BUDGET_TIER" = "minimal" ]; then
@@ -113,7 +113,7 @@ elif [ "$BUDGET_TIER" = "minimal" ]; then
     # D4 (organicity): skills/, SKILL.md, .agents/skills/
     # D5 (trajectory): STATUS.md, LEARNINGS.md, HANDOFF-*, ROADMAP.md
     # Fallback: AI surfaces + governance (same as focused) when mapping is unclear
-    ELIGIBLE_FILES=$(find "$REPO" -type f \( \
+    ELIGIBLE_FILES=$(find "$REPO" -type f -not -path '*/.git/*' -not -path '*/node_modules/*' \(
         -name "AGENTS.md" -o -name "*.agent.md" -o -name "*.prompt.md" \
         -o -name "SKILL.md" -o -name "Makefile" -o -name "README.md" \
         -o -name "STATUS.md" -o -name "LEARNINGS.md" -o -name ".gitignore" \
