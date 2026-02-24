@@ -1,59 +1,34 @@
 #!/bin/bash
-# pre-commit hook — Run `make review` before allowing commits
+# pre-commit hook -- Run make check before allowing commits
 #
-# Install: ln -sf ../../scripts/pre-commit-hook.sh .git/hooks/pre-commit
+# Install: make install-hooks
+# Versioned in repo. Must re-run make install-hooks after edits (L4).
 #
-# This hook runs `make review` on staged changes before every commit.
-# If review fails or copilot CLI is unavailable, the commit is BLOCKED
-# (unless SKIP_REVIEW=1).
-# Works identically in Copilot CLI and VS Code.
+# Runs the deterministic Gate 2 check (shellcheck, inventory, trailers).
+# --no-verify requires No-Verify-Reason: trailer (L102).
 #
-# IMPORTANT: --no-verify is NEVER permitted (L102, Principle 12).
-# Review applies to ALL changes — code, docs, specs, artifacts. No exceptions.
-#
-# Escape hatch: SKIP_REVIEW=1 git commit -m "message"
-#   Use ONLY when copilot CLI is genuinely unavailable (not for speed).
-#   The skip is logged in the commit hook output for audit trail.
-#
-# Why: AI agents generate and commit code that needs review before merging.
-# Without a pre-commit gate, defects propagate silently (L75, L102).
+# Spec 054: updated from make review (LLM, slow) to make check (deterministic).
 
 set -euo pipefail
 
-# Check if there are staged changes
+# Nothing staged? Skip.
 if git diff --staged --quiet 2>/dev/null; then
-  exit 0  # Nothing staged, skip review
-fi
-
-# Explicit skip (escape hatch — logged for audit trail)
-if [ "${SKIP_REVIEW:-0}" = "1" ]; then
-  echo "=== Pre-commit: SKIP_REVIEW=1 — review skipped ==="
-  echo "WARNING: This commit was NOT reviewed. Run 'make review' before pushing."
   exit 0
 fi
 
-# Check if Makefile has a review target
-if [ -f "Makefile" ] && grep -q "^review:" Makefile 2>/dev/null; then
-  echo "=== Pre-commit: Running make review ==="
-  if make review; then
-    echo "=== Review passed ==="
+echo "=== pre-commit: running make check ==="
+
+if [ -f "Makefile" ] && grep -q "^check:" Makefile 2>/dev/null; then
+  if make check; then
+    echo "=== pre-commit: PASS ==="
     exit 0
   else
     echo ""
-    echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║  COMMIT BLOCKED — review failed or unavailable          ║"
-    echo "╚══════════════════════════════════════════════════════════╝"
-    echo ""
-    echo "  Review could not complete (copilot CLI unavailable or error)."
-    echo ""
-    echo "  Options:"
-    echo "    1. Fix copilot CLI and retry: git commit"
-    echo "    2. Skip review (emergency only): SKIP_REVIEW=1 git commit -m '...'"
-    echo ""
+    echo "BLOCKED: make check failed. Fix issues before committing."
+    echo "Use git commit --no-verify only with No-Verify-Reason: in message."
     exit 1
   fi
 else
-  echo "=== Pre-commit: No 'make review' target found — skipping review ==="
-  echo "Tip: Add a 'review' target to your Makefile for automatic code review."
+  echo "=== pre-commit: No make check target found -- skipping ==="
   exit 0
 fi

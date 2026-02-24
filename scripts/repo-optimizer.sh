@@ -64,7 +64,7 @@ echo "Patch mode: $PATCH_MODE"
 echo ""
 
 # ============================================================
-# Phase 1: Pre-flight (deterministic — 0 LLM tokens)
+# Phase 1: Pre-flight (deterministic)
 # ============================================================
 echo "--- Phase 1: Pre-flight ---"
 

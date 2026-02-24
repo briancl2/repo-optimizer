@@ -39,7 +39,9 @@ generates unified diff patches validated with `git apply --check`.
 | 1 | reviewing-code-locally | Pre-commit code review via Copilot CLI |
 | 2 | bundle-integrity | Validate optimization output bundle completeness |
 
-## Scripts (7)
+## Scripts (12)
+
+### Domain Scripts
 
 | Script | Purpose |
 |---|---|
@@ -49,6 +51,25 @@ generates unified diff patches validated with `git apply --check`.
 | `scripts/fix-diff-headers.sh` | Hunk header recomputation (L36) |
 | `scripts/validate-patches.sh` | `git apply --check` wrapper |
 | `scripts/compare-scorecards.sh` | Pre/post delta computation |
+
+### Self-Management Scripts (spec 054)
+
+| Script | Purpose |
+|---|---|
+| `scripts/check.sh` | Gate 2 pre-commit check (shellcheck + inventory + trailers) |
+| `scripts/work-init.sh` | Work contract initializer (Gate 1) |
+| `scripts/work-close.sh` | Work contract finalizer (Gate 3 + session grading) |
+| `scripts/score-session.sh` | 4-dimension 15pt session grader |
+| `scripts/pre-commit-hook.sh` | Versioned pre-commit hook (runs make check) |
+| `scripts/pre-push-hook.sh` | Pre-push hook |
+
+## Key Documents
+
+| Document | Purpose |
+|---|---|
+| `docs/invocation-contract.md` | I/O contract for agent and orchestrator invocation (L274) |
+| `LEARNINGS.md` | Append-only operational learnings |
+| `.specify/memory/constitution.md` | Governance (6 domain + 5 self-management principles) |
 
 ## How to Use
 
@@ -70,7 +91,7 @@ make test
 
 | Phase | Description | Tokens |
 |---|---|---|
-| 1. Pre-flight | Read SCORECARD, identify bottom-2 dims | 0 (deterministic) |
+| 1. Pre-flight | Read SCORECARD, identify bottom-2 dims | Deterministic |
 | 2. Discovery | 4 domain subagents find optimization opportunities | ~20K |
 | 3. Critic | Adversarial review — reject ≥1 finding | ~10K |
 | 4. Synthesis | Assemble plan + optional patches | ~15K |

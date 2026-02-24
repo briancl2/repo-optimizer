@@ -35,6 +35,20 @@ You are the repo-optimizer orchestrator. Your job is to produce concrete
 optimization recommendations and optional patches based on SCORECARD.json
 and AUDIT_REPORT.md from the repo-auditor.
 
+## Invocation Contract
+
+See `docs/invocation-contract.md` for the full I/O contract.
+
+**CRITICAL (L274/L6):** When invoked as an agent, call `repo-optimizer.sh`
+as a single command via `run_in_terminal`:
+
+```bash
+bash scripts/repo-optimizer.sh "$REPO" "$AUDIT_DIR" "$OUTPUT_DIR"
+```
+
+Do NOT dispatch discovery subagents individually. The bash orchestrator
+manages directory layout and phase sequencing that downstream tools depend on.
+
 ## Pipeline (4 phases, ≤45K tokens)
 
 ### Phase 1: Pre-flight

@@ -59,9 +59,32 @@ pre-flight.json records the tier and discovery scope for transparency.
 - Patches pass `git apply --check` (or documented why not)
 - OPTIMIZATION_PLAN.md format unchanged (or migration applied)
 
+## Self-Management (added spec 054)
+
+### 7. Work Contracts Required
+All changes must be tracked via `make work` / `make work-close` contracts.
+No file edits without an open work contract. Hypothesis stated before work begins.
+Learnings extracted before work contract closes (or explicit `--no-novel-findings`).
+
+### 8. Spec-Kit for Significant Changes
+Features >160 lines require full spec-kit pipeline: specify -> plan -> tasks -> implement.
+Spec-Exempt trailer for in-pipeline commits only.
+
+### 9. Measurement via Session Grader
+Every work-close invokes `scripts/score-session.sh` producing OPERATING_MODEL_SCORECARD.json.
+PASS threshold: >= 80% (12/15). Measurement is verification (P2).
+
+### 10. Pre-Commit Hook Mandatory
+`make install-hooks` installs `scripts/pre-commit-hook.sh` to `.git/hooks/pre-commit`.
+Hook runs `make check`. No `--no-verify` permitted (constitution principle, L102).
+
+### 11. LEARNINGS.md is Append-Only
+New findings are appended as `| L<N> | description | source |` rows.
+Every work contract must produce >= 1 learning or document why not.
+
 ## Governance
 
 This constitution supersedes informal practices. Amendments require
 documented rationale and review.
 
-**Version**: 1.0 | **Ratified**: 2026-02-16
+**Version**: 2.0 | **Ratified**: 2026-02-24 | **Spec**: 054
