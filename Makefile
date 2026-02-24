@@ -41,6 +41,7 @@ test:
 	@echo "=== Running optimizer test suite ==="
 	@bash tests/test-critic-rejects.sh
 	@bash tests/test-patches-apply.sh
+	@bash tests/test-preflight-tiers.sh
 	@bash tests/test-self-management.sh
 	@bash tests/test-grader-golden.sh
 	@echo ""

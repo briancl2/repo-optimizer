@@ -113,7 +113,7 @@ elif [ "$BUDGET_TIER" = "minimal" ]; then
     # D4 (organicity): skills/, SKILL.md, .agents/skills/
     # D5 (trajectory): STATUS.md, LEARNINGS.md, HANDOFF-*, ROADMAP.md
     # Fallback: AI surfaces + governance (same as focused) when mapping is unclear
-    ELIGIBLE_FILES=$(find "$REPO" -type f -not -path '*/.git/*' -not -path '*/node_modules/*' \(
+    ELIGIBLE_FILES=$(find "$REPO" -type f -not -path '*/.git/*' -not -path '*/node_modules/*' \( \
         -name "AGENTS.md" -o -name "*.agent.md" -o -name "*.prompt.md" \
         -o -name "SKILL.md" -o -name "Makefile" -o -name "README.md" \
         -o -name "STATUS.md" -o -name "LEARNINGS.md" -o -name ".gitignore" \
