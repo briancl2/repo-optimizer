@@ -52,6 +52,9 @@ TEMPLATE
 # Replace placeholder with actual description
 sed -i '' "s|DESC_PLACEHOLDER|${DESC}|" "$WORK_DIR/WORK.md"
 
+# ── Record session start SHA (spec 057: R-SESSSCOPE) ─────────────────
+git rev-parse HEAD > "$WORK_DIR/.start_sha" 2>/dev/null || echo "" > "$WORK_DIR/.start_sha"
+
 # ── Snapshot LEARNINGS.md baseline ────────────────────────────────────
 if [ -f LEARNINGS.md ]; then
     grep -cE '^\| L[0-9]+' LEARNINGS.md > "$WORK_DIR/.learnings_baseline_count" 2>/dev/null || echo "0" > "$WORK_DIR/.learnings_baseline_count"

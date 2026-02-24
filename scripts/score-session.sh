@@ -47,7 +47,31 @@ items = sys.argv[1:]
 print(json.dumps(items))
 " "$@"
 }
+# ── Session-scoped commit list (spec 057: R-SESSSCOPE) ─────────────
+START_SHA=""
+if [[ -f "$WORK_DIR/.start_sha" ]]; then
+    START_SHA=$(tr -d '[:space:]' < "$WORK_DIR/.start_sha")
+fi
 
+get_session_shas() {
+    if [[ -n "$START_SHA" ]] && git -C "$REPO_ROOT" merge-base --is-ancestor "$START_SHA" HEAD 2>/dev/null; then
+        git -C "$REPO_ROOT" log --format='%H' "${START_SHA}..HEAD" 2>/dev/null
+    else
+        git -C "$REPO_ROOT" log --format='%H' -5 2>/dev/null
+    fi
+}
+
+SESSION_SHAS=$(get_session_shas)
+if [[ -z "$SESSION_SHAS" ]]; then
+    SESSION_COMMIT_COUNT=0
+else
+    SESSION_COMMIT_COUNT=$(echo "$SESSION_SHAS" | wc -l | tr -d ' ')
+fi
+if [[ -n "$START_SHA" ]] && git -C "$REPO_ROOT" merge-base --is-ancestor "$START_SHA" HEAD 2>/dev/null; then
+    COMMIT_SCOPE="session-scoped ($SESSION_COMMIT_COUNT commits since $(echo "$START_SHA" | cut -c1-7))"
+else
+    COMMIT_SCOPE="recent commits (fallback, no .start_sha)"
+fi
 # ==============================
 # DIMENSION 1: hypothesis_discipline (max 3)
 # ==============================
@@ -101,10 +125,10 @@ else
     gi_evidence+=("0pt: Gate 1 incomplete (WORK.md or pre-audit/ missing)")
 fi
 
-# Check 2: Last 5 git commits have Spec-ID or Spec-Exempt trailer
+# Check 2: Session-scoped commits have Spec-ID or Spec-Exempt trailer (spec 057)
 trailer_total=0
 trailer_pass=0
-for sha in $(cd "$REPO_ROOT" && git log --format='%H' -5 2>/dev/null); do
+for sha in $SESSION_SHAS; do
     trailer_total=$((trailer_total + 1))
     body=$(cd "$REPO_ROOT" && git log --format='%B' -1 "$sha" 2>/dev/null)
     if echo "$body" | grep -qE '(Spec-ID:|Spec-Exempt:)'; then
@@ -113,14 +137,14 @@ for sha in $(cd "$REPO_ROOT" && git log --format='%H' -5 2>/dev/null); do
 done
 if [[ $trailer_total -gt 0 ]] && [[ $trailer_pass -eq $trailer_total ]]; then
     gi_score=$((gi_score + 1))
-    gi_evidence+=("1pt: All $trailer_total recent commits have Spec-ID/Spec-Exempt trailer")
+    gi_evidence+=("1pt: All $trailer_total $COMMIT_SCOPE commits have Spec-ID/Spec-Exempt trailer")
 else
-    gi_evidence+=("0pt: $trailer_pass/$trailer_total recent commits have trailers")
+    gi_evidence+=("0pt: $trailer_pass/$trailer_total $COMMIT_SCOPE commits have trailers")
 fi
 
-# Check 3: No --no-verify detected in last 5 commits
+# Check 3: No --no-verify detected in session commits (spec 057)
 noverify_count=0
-for sha in $(cd "$REPO_ROOT" && git log --format='%H' -5 2>/dev/null); do
+for sha in $SESSION_SHAS; do
     body=$(cd "$REPO_ROOT" && git log --format='%B' -1 "$sha" 2>/dev/null)
     if echo "$body" | grep -q 'No-Verify-Reason:'; then
         noverify_count=$((noverify_count + 1))
@@ -128,9 +152,9 @@ for sha in $(cd "$REPO_ROOT" && git log --format='%H' -5 2>/dev/null); do
 done
 if [[ $noverify_count -eq 0 ]]; then
     gi_score=$((gi_score + 1))
-    gi_evidence+=("1pt: No --no-verify detected in recent commits")
+    gi_evidence+=("1pt: No --no-verify detected in $COMMIT_SCOPE")
 else
-    gi_evidence+=("0pt: $noverify_count commits with No-Verify-Reason")
+    gi_evidence+=("0pt: $noverify_count commits with No-Verify-Reason in $COMMIT_SCOPE")
 fi
 
 # Check 4: post-audit/ exists (Gate 3 ran)
@@ -259,9 +283,9 @@ else
     sc_evidence+=("0pt: No critique evidence in work dir")
 fi
 
-# Check 3: Fix evidence (commit after review/critique referencing a fix)
+# Check 3: Fix evidence (session-scoped commit referencing a fix, spec 057)
 FIX_FOUND=0
-for sha in $(cd "$REPO_ROOT" && git log --format='%H' -5 2>/dev/null); do
+for sha in $SESSION_SHAS; do
     msg=$(cd "$REPO_ROOT" && git log --format='%s' -1 "$sha" 2>/dev/null)
     if echo "$msg" | grep -qiE '(fix|correct|address|resolve|incorporate)'; then
         FIX_FOUND=1
@@ -270,9 +294,9 @@ for sha in $(cd "$REPO_ROOT" && git log --format='%H' -5 2>/dev/null); do
 done
 if [[ $FIX_FOUND -eq 1 ]]; then
     sc_score=$((sc_score + 1))
-    sc_evidence+=("1pt: Fix-related commit found in recent history")
+    sc_evidence+=("1pt: Fix-related commit found in $COMMIT_SCOPE")
 else
-    sc_evidence+=("0pt: No fix-related commits in recent history")
+    sc_evidence+=("0pt: No fix-related commits in $COMMIT_SCOPE")
 fi
 
 # Check 4: Assessment evidence (scorecard or assessment file)
