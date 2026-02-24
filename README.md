@@ -33,6 +33,22 @@ make review
 - **Mode A (Outbound):** Run from this repo targeting an external repo
 - **Mode B (Inbound):** Invoked from within a target repo pointing at this repo
 
+See `docs/invocation-contract.md` for the full I/O contract.
+
+## Self-Management (spec 054)
+
+repo-optimizer is a self-managing repo-agent with governance, measurement, and self-improvement:
+
+```bash
+make check                     # Gate 2: shellcheck + inventory + trailers
+make work DESC="description"   # Gate 1: open work contract
+make work-close WORK=<dir>     # Gate 3: close contract + session grader
+make test                      # All tests (domain + infrastructure)
+make install-hooks             # Install pre-commit hook
+```
+
+See `AGENTS.md` for full script inventory and `.specify/memory/constitution.md` for governance.
+
 ## Dependencies
 
 Shared primitives from [repo-agent-core](https://github.com/briancl2/repo-agent-core) (copied, not symlinked).
