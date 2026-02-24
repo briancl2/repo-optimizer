@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0.0",
+  "session_id": "m55-regrade",
+  "timestamp": "2026-02-24T11:56:02Z",
+  "work_dir": "work/20260224T115428Z",
+  "grader_version": "099db59",
+  "dimensions": {
+    "hypothesis_discipline": {
+      "score": 3,
+      "max": 3,
+      "evidence": [
+        "1pt: WORK.md has Prediction filled in",
+        "1pt: PASS/FAIL criteria explicit in WORK.md",
+        "1pt: Hypothesis stated checkbox marked"
+      ]
+    },
+    "gate_integrity": {
+      "score": 2,
+      "max": 4,
+      "evidence": [
+        "1pt: Gate 1 ran (WORK.md + pre-audit/ present)",
+        "0pt: 4/5 recent commits have trailers",
+        "0pt: 1 commits with No-Verify-Reason",
+        "1pt: Gate 3 ran (post-audit/ present)"
+      ]
+    },
+    "learning_extraction": {
+      "score": 4,
+      "max": 4,
+      "evidence": [
+        "1pt: 1 new L-number entries since baseline",
+        "1pt: New entries use pipe-delimited table format",
+        "1pt: New entries have non-empty source column",
+        "1pt: New entries have non-trivial content (>20 chars)"
+      ]
+    },
+    "self_correction": {
+      "score": 2,
+      "max": 4,
+      "evidence": [
+        "0pt: No review evidence in work dir",
+        "0pt: No critique evidence in work dir",
+        "1pt: Fix-related commit found in recent history",
+        "1pt: Assessment/scorecard evidence in work dir"
+      ]
+    }
+  },
+  "composite": {
+    "score": 11,
+    "max": 15,
+    "percentage": 73.3
+  },
+  "verdict": "PARTIAL"
+}

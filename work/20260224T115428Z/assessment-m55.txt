@@ -1,0 +1,1 @@
+M5.5 validation self-assessment: SCORECARD produced 10/15 PARTIAL. Dimensions: hypothesis 3/3, gate 2/4 (legacy commits), learning 4/4, self_correction 1/4 (no review/critique for trivial change). No dimension at 0. Domain tests PASS=PASS (stable). Infrastructure works end-to-end.
