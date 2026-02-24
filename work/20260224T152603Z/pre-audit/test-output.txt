@@ -1,0 +1,56 @@
+=== Running optimizer test suite ===
+=== Critic Rejection Requirement Test ===
+  ✓ Critic requires ≥1 rejection
+  ✓ Anti-goals defined
+  ✓ Verdict format specified
+
+  PASS: 3  FAIL: 0
+  VERDICT: PASS
+=== Patch Application Test ===
+  ✓ validate-patches.sh exists and is executable
+  ✓ fix-diff-headers.sh exists and is executable
+  ✓ generate-patches.sh exists and is executable
+
+  PASS: 3  FAIL: 0
+  VERDICT: PASS
+=== Self-Management Infrastructure Tests ===
+  PASS: LEARNINGS.md exists
+  PASS: Constitution has self-management
+  PASS: Constitution has Auditor-First
+  PASS: Constitution has Critic-Mandatory
+  PASS: Constitution has Patch Validation
+  PASS: Makefile has check target
+  PASS: Makefile has work target
+  PASS: Makefile has work-close target
+  PASS: check.sh exists
+  PASS: work-init.sh exists
+  PASS: work-close.sh exists
+  PASS: score-session.sh exists
+  PASS: pre-commit-hook.sh exists
+  PASS: OPERATING_MODEL_SCORECARD schema exists
+  PASS: Schema is valid JSON
+  PASS: Invocation contract exists
+  PASS: 0 occurrences of '0 LLM tokens'
+  PASS: Agent file references invocation contract
+
+=== Self-Management Test Summary ===
+  PASS: 18  FAIL: 0
+  VERDICT: PASS
+=== Fixture 1: Well-formed (positive) ===
+  PASS: SCORECARD.json produced
+  PASS: hypothesis_discipline (expected=3, got=3)
+  PASS: gate_integrity >= 1 (expected=true, got=true)
+
+=== Fixture 2: Missing pre-audit (negative) ===
+  PASS: SCORECARD.json produced
+  PASS: gate_integrity missing pre-audit (expected=true, got=true)
+
+=== Fixture 3: Fabricated learnings (negative) ===
+  PASS: SCORECARD.json produced
+  PASS: learning_extraction with empty source (expected=true, got=true)
+
+=== Golden Fixture Summary ===
+  PASS: 7  FAIL: 0
+  VERDICT: PASS
+
+=== All tests passed ===

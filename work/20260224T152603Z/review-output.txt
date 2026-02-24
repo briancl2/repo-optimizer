@@ -1,0 +1,13 @@
+Reviewing 3 staged file(s)...
+
+**[LOW]** tests/test-preflight-tiers.sh (lines 22-29): The check function swallows all output (>/dev/null 2>&1) and only prints the first two positional args. On failure, no diagnostic output showing why.
+> FIX APPLIED: Capture output to temp file and cat on failure.
+
+**[LOW]** tests/test-preflight-tiers.sh (lines 43-53): open(...) used without context manager in Python snippet.
+> FIX APPLIED: Changed to with open(...) as f: pattern.
+
+**[NIT]** tests/test-preflight-tiers.sh (lines 116-117): Creating 1100 individual files via for loop is slow.
+> ACCEPTED: Acceptable for test -- runs in ~2s, clarity > speed for test code.
+
+Summary: 3 findings (0 critical, 0 high, 0 medium, 2 low, 1 nit)
+Findings addressed: 2/2 substantive (both LOWs fixed), 1 NIT accepted.
