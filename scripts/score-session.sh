@@ -151,7 +151,7 @@ le_evidence=()
 new_learnings=0
 if [[ -f "$REPO_ROOT/LEARNINGS.md" ]] && [[ -f "$WORK_DIR/.learnings_baseline_count" ]]; then
     baseline=$(cat "$WORK_DIR/.learnings_baseline_count")
-    current=$(grep -cE '^\| L[0-9]+' "$REPO_ROOT/LEARNINGS.md" 2>/dev/null || echo "0")
+    current=$(grep -cE '^\| L[0-9]+' "$REPO_ROOT/LEARNINGS.md" 2>/dev/null) || current=0
     new_learnings=$((current - baseline))
     if [[ $new_learnings -gt 0 ]]; then
         le_score=$((le_score + 1))
@@ -165,7 +165,7 @@ fi
 
 # Check 2: New entries have table format (pipe-separated)
 if [[ $new_learnings -gt 0 ]]; then
-    table_count=$(grep -cE '^\| L[0-9]+\s*\|' "$REPO_ROOT/LEARNINGS.md" 2>/dev/null || echo "0")
+    table_count=$(grep -cE '^\| L[0-9]+\s*\|' "$REPO_ROOT/LEARNINGS.md" 2>/dev/null) || table_count=0
     if [[ $table_count -ge $current ]]; then
         le_score=$((le_score + 1))
         le_evidence+=("1pt: New entries use pipe-delimited table format")
@@ -198,7 +198,7 @@ fi
 
 # Check 4: New entries have non-trivial content (>20 chars in description)
 if [[ $new_learnings -gt 0 ]]; then
-    trivial_count=0
+    rm -f "$WORK_DIR/.trivial_check_tmp"
     grep -E '^\| L[0-9]+' "$REPO_ROOT/LEARNINGS.md" 2>/dev/null | tail -n "$new_learnings" | while IFS= read -r line; do
         desc_col=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
         desc_len=${#desc_col}
