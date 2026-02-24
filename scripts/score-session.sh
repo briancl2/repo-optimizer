@@ -362,6 +362,21 @@ with open(sys.argv[17], 'w') as f:
   "$total_score" "$total_max" "$percentage" "$verdict" \
   "$output_file"
 
+# Validate output against schema (spec 055, R-SCHEMAVAL)
+SCHEMA_FILE="$REPO_ROOT/schemas/OPERATING_MODEL_SCORECARD.schema.json"
+if command -v jsonschema >/dev/null 2>&1; then
+  if jsonschema -i "$output_file" "$SCHEMA_FILE" 2>/dev/null; then
+    echo "Schema validation: PASS"
+  else
+    echo "ERROR: SCORECARD failed schema validation" >&2
+    echo "  Schema: $SCHEMA_FILE" >&2
+    echo "  Output: $output_file" >&2
+    exit 1
+  fi
+else
+  echo "WARN: jsonschema CLI not found, skipping SCORECARD validation" >&2
+fi
+
 echo "SCORECARD: $verdict ($total_score/$total_max = $percentage%)"
 echo "  hypothesis_discipline:      $hd_score/3"
 echo "  gate_integrity:             $gi_score/4"
