@@ -32,6 +32,34 @@ generates unified diff patches validated with `git apply --check`.
 | 7 | repo-optimizer-critic | claude-opus-4.6 | Adversarial critic (MANDATORY) |
 | 8 | repo-optimizer-synthesis | claude-opus-4.6 | Findings + patch summary synthesis |
 
+## Spec-Kit Agents (9)
+
+Standard spec-kit pipeline agents (added by spec 054 bootstrap). Dual dispatch:
+interactive (VS Code `runSubagent`) or batch (`spec-orchestrator.sh` → Copilot CLI).
+
+| # | Agent | Purpose |
+|---|---|---|
+| 1 | speckit.specify | Elicit requirements, produce spec skeleton |
+| 2 | speckit.plan | Generate implementation plan from spec |
+| 3 | speckit.tasks | Break plan into discrete tasks |
+| 4 | speckit.analyze | Analyze codebase for spec impact |
+| 5 | speckit.implement | Execute implementation tasks |
+| 6 | speckit.checklist | Validate spec completion checklist |
+| 7 | speckit.clarify | Resolve ambiguities in specs |
+| 8 | speckit.constitution | Enforce governance constraints |
+| 9 | speckit.taskstoissues | Convert tasks to GitHub Issues |
+
+## Spec-Kit Helpers (4)
+
+Infrastructure scripts in `.specify/scripts/bash/` (added by spec 054 bootstrap).
+
+| Script | Purpose |
+|---|---|
+| `check-prerequisites.sh` | Validate spec-kit prerequisites before operations |
+| `common.sh` | Shared functions for spec-kit scripts |
+| `setup-plan.sh` | Initialize plan directory structure |
+| `update-agent-context.sh` | Refresh agent context from spec state |
+
 ## Skills (2)
 
 | # | Skill | Purpose |

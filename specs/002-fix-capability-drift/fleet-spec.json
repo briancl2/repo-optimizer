@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0.0",
+  "spec_id": "002-fix-capability-drift-by-documenting-undo",
+  "generated_at": "2026-03-03T18:05:17Z",
+  "source": {
+    "run_id": "0261e874dda9ecee",
+    "ds_finding_ids": [
+      "DS-20"
+    ],
+    "target_id": "repo-optimizer",
+    "advisor_model": "claude-opus-4.6",
+    "dispatch_script_sha": "96aadf41b77faef2"
+  },
+  "spec": {
+    "title": "Fix capability drift by documenting undocumented tools",
+    "problem_statement": "DS-20 capability drift at 34% (threshold 20%). 13 undocumented tools: 8 spec-kit agents (.github/agents/speckit.*.agent.md) and 5 .specify/scripts/bash/ helpers. All are spec-kit infrastructure added by spec 054 (self-management bootstrap).",
+    "evidence": [
+      "DS-20 capability drift at 34% (threshold 20%). 13 undocumented tools: 8 spec-kit agents (.github/agents/speckit.*.agent.md) and 5 .specify/scripts/bash/ helpers. All are spec-kit infrastructure added by spec 054 (self-management bootstrap)."
+    ],
+    "goals": [
+      "Resolve DS-20 finding: Fix capability drift by documenting undocumented tools",
+      "Verify fix with acceptance criteria",
+      "No regressions (make check passes)"
+    ],
+    "acceptance_criteria": [
+      "DS-20 no longer fires on target repo",
+      "make check passes",
+      "No regressions in SCORECARD composite"
+    ],
+    "layer": "system",
+    "priority": "fix-broken",
+    "effort": "low"
+  },
+  "plan": {
+    "summary": "Fix DS-20 (Fix capability drift by documenting undocumented tools) by following the standard spec-kit approach for fix-broken issues in the system layer.",
+    "files_to_modify": [
+      {
+        "path": "TBD (filled during plan phase)",
+        "action": "modify",
+        "description": "Primary fix target"
+      }
+    ],
+    "approach": [
+      "Run capability drift detection to identify undocumented tools",
+      "Categorize undocumented items: document, exclude, or archive",
+      "Update AGENTS.md with missing tool references",
+      "Verify drift <=20%"
+    ],
+    "verification_commands": [
+      "make check",
+      "# Re-run DS detection to verify fix"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "T1",
+      "description": "Run capability drift detection to identify undocumented tools",
+      "file": "TBD",
+      "parallel": false,
+      "done": false
+    },
+    {
+      "id": "T2",
+      "description": "Categorize undocumented items: document, exclude, or archive",
+      "file": "TBD",
+      "parallel": false,
+      "done": false
+    },
+    {
+      "id": "T3",
+      "description": "Update AGENTS.md with missing tool references",
+      "file": "TBD",
+      "parallel": false,
+      "done": false
+    },
+    {
+      "id": "T4",
+      "description": "Verify drift <=20%",
+      "file": "TBD",
+      "parallel": false,
+      "done": false
+    }
+  ]
+}
