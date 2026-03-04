@@ -50,6 +50,15 @@ if [ ! -f "$AUDIT_DIR/SCORECARD.json" ]; then
     exit 1
 fi
 
+# ── C4: Pre-operation guard rails (Stage 11.2) ───────────────────────
+GUARD_SCRIPT="$SCRIPT_DIR/operation-guard.sh"
+if [ -x "$GUARD_SCRIPT" ]; then
+    if ! bash "$GUARD_SCRIPT" "$REPO" 2>&1; then
+        echo "ERROR: Operation guard FAILED. Aborting optimization." >&2
+        exit 1
+    fi
+fi
+
 REPO_NAME="$(basename "$REPO")"
 mkdir -p "$OUTPUT_DIR"
 
@@ -287,3 +296,21 @@ echo "  $OUTPUT_DIR/pre-flight.json"
 echo "  $OUTPUT_DIR/OPTIMIZATION_PLAN.md"
 echo "  $OUTPUT_DIR/OPTIMIZATION_SCORECARD.json"
 echo "================================================================"
+
+# ── C1: Runtime evaluation of optimization quality (Stage 11.2) ──────
+EVAL_SCRIPT="$SCRIPT_DIR/score-operation.sh"
+if [ -x "$EVAL_SCRIPT" ]; then
+    echo ""
+    bash "$EVAL_SCRIPT" "$OUTPUT_DIR" || true
+    bash "$EVAL_SCRIPT" "$OUTPUT_DIR" --json > "$OUTPUT_DIR/OPERATION_EVAL.json" 2>/dev/null || true
+fi
+
+# ── Release lockfile (C4 cleanup) ────────────────────────────────────
+LOCKDIR="/tmp/repo-optimizer-locks"
+LOCKFILE="$LOCKDIR/$(echo "$REPO" | tr '/' '_').lock"
+if [ -f "$LOCKFILE" ]; then
+    LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null || echo "")
+    if [ "$LOCK_PID" = "$$" ]; then
+        rm -f "$LOCKFILE"
+    fi
+fi

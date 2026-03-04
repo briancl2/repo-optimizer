@@ -40,7 +40,7 @@ fi
 
 # ── Inventory match ───────────────────────────────────────────────────
 echo "-- inventory --"
-EXPECTED=12  # 8 original + check.sh + work-init.sh + work-close.sh + score-session.sh
+EXPECTED=14  # 12 prev + 2 C1/C4 (operation-guard.sh + score-operation.sh, Stage 11.2)
 COUNTED=$(find scripts -maxdepth 1 -name '*.sh' -type f | wc -l | tr -d ' ')
 if [ "$COUNTED" != "$EXPECTED" ]; then
     echo "  WARNING: expected $EXPECTED scripts, found $COUNTED"
