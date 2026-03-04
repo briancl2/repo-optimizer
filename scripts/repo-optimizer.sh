@@ -50,17 +50,18 @@ if [ ! -f "$AUDIT_DIR/SCORECARD.json" ]; then
     exit 1
 fi
 
-# ── C4: Pre-operation guard rails (Stage 11.2) ───────────────────────
+# ── C4: Shared lockdir (H3 fix: single definition, passed to guard) ──
+LOCKDIR="/tmp/repo-optimizer-locks"
+
 GUARD_SCRIPT="$SCRIPT_DIR/operation-guard.sh"
 if [ -x "$GUARD_SCRIPT" ]; then
-    if ! bash "$GUARD_SCRIPT" "$REPO" 2>&1; then
+    if ! bash "$GUARD_SCRIPT" "$REPO" --lockdir "$LOCKDIR" 2>&1; then
         echo "ERROR: Operation guard FAILED. Aborting optimization." >&2
         exit 1
     fi
 fi
 
 # ── C4: Acquire operation lock (PID matches this process) ────────────
-LOCKDIR="/tmp/repo-optimizer-locks"
 LOCKFILE="$LOCKDIR/$(echo "$REPO" | tr '/' '_').lock"
 mkdir -p "$LOCKDIR"
 echo $$ > "$LOCKFILE"
