@@ -59,6 +59,13 @@ if [ -x "$GUARD_SCRIPT" ]; then
     fi
 fi
 
+# ── C4: Acquire operation lock (PID matches this process) ────────────
+LOCKDIR="/tmp/repo-optimizer-locks"
+LOCKFILE="$LOCKDIR/$(echo "$REPO" | tr '/' '_').lock"
+mkdir -p "$LOCKDIR"
+echo $$ > "$LOCKFILE"
+trap 'rm -f "$LOCKFILE"' EXIT
+
 REPO_NAME="$(basename "$REPO")"
 mkdir -p "$OUTPUT_DIR"
 
@@ -305,12 +312,4 @@ if [ -x "$EVAL_SCRIPT" ]; then
     bash "$EVAL_SCRIPT" "$OUTPUT_DIR" --json > "$OUTPUT_DIR/OPERATION_EVAL.json" 2>/dev/null || true
 fi
 
-# ── Release lockfile (C4 cleanup) ────────────────────────────────────
-LOCKDIR="/tmp/repo-optimizer-locks"
-LOCKFILE="$LOCKDIR/$(echo "$REPO" | tr '/' '_').lock"
-if [ -f "$LOCKFILE" ]; then
-    LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null || echo "")
-    if [ "$LOCK_PID" = "$$" ]; then
-        rm -f "$LOCKFILE"
-    fi
-fi
+# Lockfile cleanup handled by trap EXIT (set at lock acquisition)

@@ -108,8 +108,8 @@ fi
 
 echo "GUARD: PASS ($PASS checks passed)"
 
-# Acquire lock for this operation
-mkdir -p "$LOCKDIR"
-echo $$ > "$LOCKFILE"
+# NOTE: Lock acquisition moved to the calling script (repo-optimizer.sh)
+# so the lock PID matches the actual long-running operation process.
+# Guard only CHECKS, does not acquire. (v150 critique CRITICAL-1 fix)
 
 exit 0
