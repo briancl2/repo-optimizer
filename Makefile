@@ -1,4 +1,4 @@
-.PHONY: review optimize patch-check test validate help install-hooks check work work-close spec-init
+.PHONY: review optimize patch-check test validate help install-hooks check work work-close health spec-init
 
 TARGET ?= .
 AUDIT ?= audit_output
@@ -65,6 +65,14 @@ work:
 
 work-close:
 	@bash scripts/work-close.sh "$(WORK)"
+
+health:
+	@echo "=== Operations Health (last 5 entries) ==="
+	@if [ -f work/OPERATIONS_LEDGER.jsonl ]; then \
+		tail -5 work/OPERATIONS_LEDGER.jsonl | python3 -c "import sys,json; entries=[json.loads(l) for l in sys.stdin]; print(f'Entries: {len(entries)}'); [print(f'  {e.get(\"timestamp\",\"?\")}: {e.get(\"event_type\",\"?\")} score={e.get(\"data\",{}).get(\"composite_score\",\"?\")}'  ) for e in entries]" 2>/dev/null || echo "  (parse error)"; \
+	else \
+		echo "  No operations ledger yet (work/OPERATIONS_LEDGER.jsonl)"; \
+	fi
 
 spec-init:
 	@if [ -f .specify/scripts/bash/create-new-feature.sh ]; then \
