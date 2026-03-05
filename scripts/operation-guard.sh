@@ -3,7 +3,7 @@
 #
 # Deterministic checks that run BEFORE each fleet operation to prevent
 # contaminated runs. Catches: missing target, dirty git state, concurrent
-# operations (lockfile), missing required tools, missing prerequisites.
+# operations (lockfile), missing required tools.
 #
 # Usage: bash scripts/operation-guard.sh <target_repo> [--lockdir <dir>]
 #
@@ -11,7 +11,7 @@
 #   0 — all checks passed, safe to proceed
 #   1 — one or more checks failed, operation should abort
 #
-# Source: Stage 11.2 (C4 guard rails). Adapted from repo-auditor pattern.
+# Source: Stage 11.1 T8 pattern audit (C4). Validated in v149 pilot (3/3 PASS).
 
 set -euo pipefail
 
@@ -77,6 +77,7 @@ if [ -f "$LOCKFILE" ]; then
     if kill -0 "$LOCK_PID" 2>/dev/null; then
         check "Concurrent lock" "FAIL" "active lock (PID $LOCK_PID)"
     else
+        # Stale lock — remove it
         rm -f "$LOCKFILE"
         check "Concurrent lock" "PASS" "stale lock removed"
     fi
@@ -108,7 +109,7 @@ fi
 
 echo "GUARD: PASS ($PASS checks passed)"
 
-# NOTE: Lock acquisition moved to the calling script (repo-optimizer.sh)
+# NOTE: Lock acquisition moved to the calling script (repo-auditor.sh)
 # so the lock PID matches the actual long-running operation process.
 # Guard only CHECKS, does not acquire. (v150 critique CRITICAL-1 fix)
 
