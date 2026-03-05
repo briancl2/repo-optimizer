@@ -61,26 +61,35 @@ manages directory layout and phase sequencing that downstream tools depend on.
 
 ### Phase 2: Discovery
 
-Dispatch 4 domain subagents using v3.1 handoff template:
+Dispatch 4 domain subagents sequentially. For each domain:
+1. Read `.agents/<domain>-optimizer.agent.md` to get its specific instructions
+2. Follow those instructions against the target repo
+3. Collect findings in a 7-column markdown table per domain
+4. Write each domain's findings to `$OUTPUT_DIR/payloads/<domain>.md`
 
+Domain agents (in order):
 - **decomposition-optimizer** → Break >200L files into focused components
 - **consolidation-optimizer** → Merge near-duplicates, eliminate dead code
 - **extraction-optimizer** → Promote inline scripts to skills
 - **standardization-optimizer** → Normalize naming, frontmatter, patterns
 
-Each subagent returns a 7-column findings table. Max 30 findings per subagent.
+Max 30 findings per subagent.
 
 ### Phase 3: Critic (MANDATORY — L29)
 
-Dispatch **repo-optimizer-critic** to review ALL findings.
+Read `.agents/repo-optimizer-critic.agent.md` for critic instructions.
+Review ALL findings from Phase 2.
 
 Verdicts: [APPROVED], [DOWNGRADED], [REJECTED]
-- Must reject ≥1 finding per run (or provide explicit justification)
+- Must reject >=1 finding per run (or provide explicit justification)
 - Anti-goals: metric-chasing, delta-hack, premature deletion, false precision
 
-### Phase 4: Patch Generation (only if --patch flag)
+### Phase 4: Synthesis + Patches
 
-For APPROVED findings only:
+Read `.agents/repo-optimizer-synthesis.agent.md` for synthesis instructions.
+Combine critic-approved findings into OPTIMIZATION_PLAN.md.
+
+For APPROVED findings only (if --patch flag):
 1. Generate unified diffs
 2. Post-process hunk headers with `scripts/fix-diff-headers.sh`
 3. Validate with `git apply --check`
