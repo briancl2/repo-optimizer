@@ -1,0 +1,25 @@
+# config/policy.yaml — Operational policy for repo-optimizer
+# Extracted from AGENTS.md prose + scripts (Stage 13 Pattern P3)
+version: 1
+
+thresholds:
+  max_patches_per_run: 5          # from AGENTS.md stop rules
+  max_recommendations: 10         # from AGENTS.md stop rules
+  max_timeout_seconds: 600        # from run-continuous-loop.sh
+  patch_generation_timeout: 300   # per-patch timeout
+
+quality_gates:
+  min_patch_valid_rate: 0.8       # 80% of patches must pass git apply --check
+  critic_required: true           # adversarial critic is mandatory (L29)
+  min_critic_rejections: 1        # must reject >= 1 finding per run
+  max_file_size_lines: 200        # files > 200L flagged for decomposition
+
+bounds:
+  max_findings_per_subagent: 10   # bound subagent output
+  max_patch_size_lines: 100       # single patch should be < 100L
+  max_optimization_retries: 2     # retry failed generation max 2 times
+
+ratchet:
+  enabled: false
+  consecutive_passes_required: 5
+  decrease_pct: 0.02
