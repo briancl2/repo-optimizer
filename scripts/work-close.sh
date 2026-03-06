@@ -149,6 +149,21 @@ else
     echo "  WARNING: scripts/score-session.sh not found (skipping session grader)."
 fi
 
+# ── Operations ledger (13.1.5: T1 mechanical) ─────────────────────────
+# Append JSONL event to work/OPERATIONS_LEDGER.jsonl for fleet-level observability.
+# Schema: compatible with BMA score-ledger-event.schema.json.
+OPS_LEDGER="$REPO_ROOT/work/OPERATIONS_LEDGER.jsonl"
+_ops_ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+_ops_rid=$(echo "ops-$(basename "$WORK_DIR")-$PRE_RESULT-$POST_RESULT" | shasum -a 256 | head -c 16)
+_ops_ver=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+_ops_event="{\"event_type\":\"work-close\",\"run_id\":\"$_ops_rid\",\"timestamp\":\"$_ops_ts\",\"target_id\":\"$(basename "$REPO_ROOT")\",\"source\":{\"script\":\"work-close.sh\",\"version\":\"$_ops_ver\"},\"data\":{\"test_pre\":\"$PRE_RESULT\",\"test_post\":\"$POST_RESULT\",\"learnings_added\":$LEARNINGS_ADDED,\"work_dir\":\"$(basename "$WORK_DIR")\"}}"
+if echo "$_ops_event" | python3 -c "import json,sys; json.loads(sys.stdin.read())" 2>/dev/null; then
+    echo "$_ops_event" >> "$OPS_LEDGER"
+    echo "  Ops ledger: recorded (learnings=$LEARNINGS_ADDED)"
+else
+    echo "  WARNING: Ops ledger event failed JSON validation (skipped)."
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────
 echo ""
 echo "=== Work Close Summary ==="
