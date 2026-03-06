@@ -65,15 +65,18 @@ else
 fi
 
 # ── Baseline: run make test as pre-audit ──────────────────────────────
+# Timeout: 120s max. test-preflight-tiers.sh invokes repo-optimizer.sh which
+# dispatches copilot CLI (5-15 min per call). Without timeout, fleet work-init
+# hangs indefinitely. 120s is enough for deterministic tests.
 echo "=== Work Init: $WORK_DIR ==="
 echo "  Description: $DESC"
 mkdir -p "$WORK_DIR/pre-audit"
 
-if make test > "$WORK_DIR/pre-audit/test-output.txt" 2>&1; then
+if timeout 120 make test > "$WORK_DIR/pre-audit/test-output.txt" 2>&1; then
     echo "  Baseline: make test PASS"
     echo "PASS" > "$WORK_DIR/pre-audit/test-result.txt"
 else
-    echo "  WARNING: make test failed at baseline"
+    echo "  WARNING: make test failed or timed out at baseline"
     echo "FAIL" > "$WORK_DIR/pre-audit/test-result.txt"
 fi
 
