@@ -1,0 +1,5 @@
+{
+  "input_composite": 60,
+  "budget_tier": "standard",
+  "bottom_dimensions": ["D2_surface_health", "D3_skill_maturity"]
+}

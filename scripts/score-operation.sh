@@ -9,15 +9,17 @@
 #
 # Usage: bash scripts/score-operation.sh <optimizer_output_dir> [--json]
 #
-# Checks (8 total, 20 points max):
+# Checks (10 total, 24 points max):
 #   1. pre-flight.json exists and valid (3pt)
 #   2. Bottom-2 dimensions identified (2pt)
-#   3. OPTIMIZATION_PLAN.md exists and non-trivial (3pt)
+#   3. OPTIMIZATION_PLAN.md exists and non-trivial (3pt) — threshold: 50 lines
 #   4. OPTIMIZATION_SCORECARD.json exists and valid (2pt)
 #   5. Patch generation attempted (if --patch mode) (2pt)
 #   6. No timeout/error indicators (2pt)
 #   7. Budget tier assigned (2pt)
 #   8. Input SCORECARD referenced (4pt)
+#   9. Approved findings >=1 in plan (2pt) — content quality gate
+#  10. Target files referenced in plan (2pt) — content quality gate
 #
 # Exit codes:
 #   0 — evaluation complete (score in stdout)
@@ -40,7 +42,7 @@ if [ ! -d "$OPT_DIR" ]; then
 fi
 
 SCORE=0
-MAX=20
+MAX=24
 ISSUES=""
 EVIDENCE=""
 
@@ -94,8 +96,11 @@ fi
 PLAN="$OPT_DIR/OPTIMIZATION_PLAN.md"
 if [ -f "$PLAN" ]; then
     PLAN_LINES=$(wc -l < "$PLAN" | tr -d ' ')
-    if [ "$PLAN_LINES" -ge 20 ]; then
+    if [ "$PLAN_LINES" -ge 50 ]; then
         add_score 3 "OPTIMIZATION_PLAN.md exists ($PLAN_LINES lines)"
+    elif [ "$PLAN_LINES" -ge 20 ]; then
+        add_score 2 "OPTIMIZATION_PLAN.md exists but short ($PLAN_LINES lines)"
+        add_issue "OPTIMIZATION_PLAN.md is <50 lines ($PLAN_LINES lines)"
     elif [ "$PLAN_LINES" -ge 5 ]; then
         add_score 1 "OPTIMIZATION_PLAN.md exists but sparse ($PLAN_LINES lines)"
         add_issue "OPTIMIZATION_PLAN.md is sparse ($PLAN_LINES lines)"
@@ -213,6 +218,29 @@ except:
     fi
 fi
 
+# ── Check 9: Approved findings >=1 in plan (2pt) ─────────────────────
+if [ -f "$PLAN" ]; then
+    # Look for positive approval indicators: "(APPROVED)", "## Approved", "Status: Approved"
+    # Exclude negative phrases like "No findings approved" or "0 approved"
+    APPROVED_COUNT=$(grep -ciE '(\(APPROVED\)|## Approved|Status:\s*Approved|findings?.*approved.*[1-9])' "$PLAN" 2>/dev/null || echo "0")
+    if [ "$APPROVED_COUNT" -ge 1 ]; then
+        add_score 2 "Plan contains approved findings ($APPROVED_COUNT)"
+    else
+        add_issue "0 approved findings in OPTIMIZATION_PLAN.md"
+    fi
+fi
+
+# ── Check 10: Target files referenced in plan (2pt) ──────────────────
+if [ -f "$PLAN" ]; then
+    # Look for file path patterns: paths with extensions or directory separators
+    FILE_REFS=$(grep -cE '(\./|/[a-zA-Z_-]+\.(sh|py|md|json|yml|yaml|js|ts|toml)|[a-zA-Z_-]+/[a-zA-Z_-]+\.[a-z]+)' "$PLAN" 2>/dev/null || echo "0")
+    if [ "$FILE_REFS" -ge 1 ]; then
+        add_score 2 "Plan references target files ($FILE_REFS references)"
+    else
+        add_issue "0 target files referenced in OPTIMIZATION_PLAN.md"
+    fi
+fi
+
 # ── Output ────────────────────────────────────────────────────────────
 if [ "$JSON_MODE" = "true" ]; then
     ISSUES_JSON=$(printf '%b' "$ISSUES" | sed 's/^  - //' | python3 -c "
@@ -221,8 +249,8 @@ lines = [l.strip() for l in sys.stdin if l.strip()]
 print(json.dumps(lines))
 " 2>/dev/null || echo '[]')
     VERDICT="PASS"
-    if [ "$SCORE" -lt 14 ]; then VERDICT="FAIL"; fi
-    if [ "$SCORE" -ge 14 ] && [ "$SCORE" -lt 18 ]; then VERDICT="WARN"; fi
+    if [ "$SCORE" -lt 16 ]; then VERDICT="FAIL"; fi
+    if [ "$SCORE" -ge 16 ] && [ "$SCORE" -lt 21 ]; then VERDICT="WARN"; fi
 
     python3 -c "
 import json, sys
@@ -249,8 +277,8 @@ else
     fi
     echo ""
     VERDICT="PASS"
-    if [ "$SCORE" -lt 14 ]; then VERDICT="FAIL"; fi
-    if [ "$SCORE" -ge 14 ] && [ "$SCORE" -lt 18 ]; then VERDICT="WARN"; fi
+    if [ "$SCORE" -lt 16 ]; then VERDICT="FAIL"; fi
+    if [ "$SCORE" -ge 16 ] && [ "$SCORE" -lt 21 ]; then VERDICT="WARN"; fi
     echo "OPERATION EVAL: $SCORE/$MAX ($VERDICT)"
 fi
 
