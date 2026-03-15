@@ -44,7 +44,7 @@ echo "  Output: $OUTPUT_DIR"
 # Run optimizer pre-flight
 echo ""
 echo "--- Running optimizer pre-flight ---"
-bash "$OPT_DIR/scripts/repo-optimizer.sh" "$TARGET" "$AUDIT_DIR" "$OUTPUT_DIR" 2>&1
+OPTIMIZER_PREFLIGHT_ONLY=true bash "$OPT_DIR/scripts/repo-optimizer.sh" "$TARGET" "$AUDIT_DIR" "$OUTPUT_DIR" 2>&1
 
 # Verify outputs
 echo ""

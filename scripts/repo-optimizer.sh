@@ -14,6 +14,11 @@
 #   OPTIMIZATION_SCORECARD.json — Machine-readable results
 #   PATCH_PACK/*.patch         — Unified diff patches (only with --patch)
 #
+# Environment:
+#   OPTIMIZER_PREFLIGHT_ONLY=true  Skip Copilot-backed phases 2-4 and emit
+#                                  pre-flight stubs only. Intended for
+#                                  deterministic tests and readiness probes.
+#
 # Pipeline:
 #   Phase 1: Pre-flight (read SCORECARD, identify bottom-2 dimensions)
 #   Phase 2: Discovery (4 domain subagents — requires LLM)
@@ -30,6 +35,14 @@ AUDIT_DIR="${2:?Usage: repo-optimizer.sh <repo_path> <audit_dir> [output_dir] [-
 OUTPUT_DIR="${3:-optimizer_output}"
 PATCH_MODE="false"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PREFLIGHT_ONLY_RAW="$(printf '%s' "${OPTIMIZER_PREFLIGHT_ONLY:-false}" | tr '[:upper:]' '[:lower:]')"
+PREFLIGHT_ONLY="false"
+
+case "$PREFLIGHT_ONLY_RAW" in
+    1|true|yes)
+        PREFLIGHT_ONLY="true"
+        ;;
+esac
 
 # Parse --patch flag
 for arg in "$@"; do
@@ -225,7 +238,9 @@ echo ""
 echo "  Pre-flight context written to $OUTPUT_DIR/pre-flight.json"
 
 # Check if copilot CLI is available for direct dispatch
-if command -v copilot >/dev/null 2>&1; then
+if [ "$PREFLIGHT_ONLY" = "true" ]; then
+    echo "  Pre-flight-only mode enabled (OPTIMIZER_PREFLIGHT_ONLY=true) — skipping Copilot-backed phases"
+elif command -v copilot >/dev/null 2>&1; then
     PAYLOADS_DIR="$OUTPUT_DIR/payloads"
     mkdir -p "$PAYLOADS_DIR"
 

@@ -18,6 +18,7 @@ generates unified diff patches validated with `git apply --check`.
 - `--no-verify` is NEVER permitted (L102)
 - AGENTS.md is the canonical instruction surface (L104)
 - Target repos are NEVER modified directly — only patches produced
+- Deterministic tests must stay pre-flight-only; use `OPTIMIZER_PREFLIGHT_ONLY=true` when exercising `repo-optimizer.sh` inside the local test suite
 
 ## Agents (8)
 

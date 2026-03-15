@@ -68,7 +68,7 @@ echo "agent" > "$REPO_FULL/AGENTS.md"
 echo "readme" > "$REPO_FULL/README.md"
 
 OUTPUT_FULL="$TEST_DIR/out-full"
-check bash "$OPT_DIR/scripts/repo-optimizer.sh" "$REPO_FULL" "$AUDIT_DIR" "$OUTPUT_FULL"
+check env OPTIMIZER_PREFLIGHT_ONLY=true bash "$OPT_DIR/scripts/repo-optimizer.sh" "$REPO_FULL" "$AUDIT_DIR" "$OUTPUT_FULL"
 TOTAL=$((TOTAL + 1))
 if [ -f "$OUTPUT_FULL/pre-flight.json" ]; then
     TIER=$(python3 -c "import json; print(json.load(open('$OUTPUT_FULL/pre-flight.json'))['budget_tier'])")
@@ -96,7 +96,7 @@ done
 echo "agent" > "$REPO_FOCUSED/AGENTS.md"
 
 OUTPUT_FOCUSED="$TEST_DIR/out-focused"
-check bash "$OPT_DIR/scripts/repo-optimizer.sh" "$REPO_FOCUSED" "$AUDIT_DIR" "$OUTPUT_FOCUSED"
+check env OPTIMIZER_PREFLIGHT_ONLY=true bash "$OPT_DIR/scripts/repo-optimizer.sh" "$REPO_FOCUSED" "$AUDIT_DIR" "$OUTPUT_FOCUSED"
 TOTAL=$((TOTAL + 1))
 if [ -f "$OUTPUT_FOCUSED/pre-flight.json" ]; then
     TIER=$(python3 -c "import json; print(json.load(open('$OUTPUT_FOCUSED/pre-flight.json'))['budget_tier'])")
@@ -125,7 +125,7 @@ echo "agent" > "$REPO_MINIMAL/AGENTS.md"
 echo "makefile" > "$REPO_MINIMAL/Makefile"
 
 OUTPUT_MINIMAL="$TEST_DIR/out-minimal"
-check bash "$OPT_DIR/scripts/repo-optimizer.sh" "$REPO_MINIMAL" "$AUDIT_DIR" "$OUTPUT_MINIMAL"
+check env OPTIMIZER_PREFLIGHT_ONLY=true bash "$OPT_DIR/scripts/repo-optimizer.sh" "$REPO_MINIMAL" "$AUDIT_DIR" "$OUTPUT_MINIMAL"
 TOTAL=$((TOTAL + 1))
 if [ -f "$OUTPUT_MINIMAL/pre-flight.json" ]; then
     TIER=$(python3 -c "import json; print(json.load(open('$OUTPUT_MINIMAL/pre-flight.json'))['budget_tier'])")

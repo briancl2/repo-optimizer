@@ -47,6 +47,8 @@ make test                      # All tests (domain + infrastructure)
 make install-hooks             # Install pre-commit hook
 ```
 
+`make test` is deterministic by contract. The suite uses `OPTIMIZER_PREFLIGHT_ONLY=true` when it exercises `repo-optimizer.sh` so budget-tier coverage never blocks on Copilot-backed phases.
+
 See `AGENTS.md` for full script inventory and `.specify/memory/constitution.md` for governance.
 
 ## Dependencies
