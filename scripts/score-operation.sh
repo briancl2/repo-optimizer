@@ -134,14 +134,43 @@ else
     add_score 1 "No PATCH_PACK (report-only mode)"
 fi
 
-# ── Check 6: No timeout/error indicators (2pt) ───────────────────────
+# ── Check 6: Runtime receipts / timeout indicators (2pt) ─────────────
+RUNTIME_RECEIPTS="$OPT_DIR/RUNTIME_RECEIPTS.json"
+RUNTIME_PHASE_FAILURES=""
+if [ -f "$RUNTIME_RECEIPTS" ]; then
+    RUNTIME_PHASE_FAILURES=$(python3 - "$RUNTIME_RECEIPTS" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+issues = []
+for phase_name in ("critic", "synthesis"):
+    phase = payload.get("phases", {}).get(phase_name, {})
+    status = phase.get("status", "")
+    receipt_class = phase.get("receipt_class", "")
+    if status.startswith("failed_") or status in {"skipped_missing_agent", "skipped_upstream_critic_failure"}:
+        issues.append(f"{phase_name}:{status}/{receipt_class}")
+
+print("; ".join(issues))
+PY
+)
+fi
+
 FALLBACK_SIGNALS=0
 for f in "$OPT_DIR"/*.md "$OPT_DIR"/*.txt "$OPT_DIR"/*.json; do
     if [ -f "$f" ] && grep -qi 'timeout\|timed out\|TIMEOUT\|error.*fatal' "$f" 2>/dev/null; then
         FALLBACK_SIGNALS=$((FALLBACK_SIGNALS + 1))
     fi
 done
-if [ "$FALLBACK_SIGNALS" -eq 0 ]; then
+
+if [ -n "$RUNTIME_PHASE_FAILURES" ]; then
+    add_score 1 "Runtime receipts classify fail-closed phase issues ($RUNTIME_PHASE_FAILURES)"
+    add_issue "Runtime receipts classify fail-closed phase issues: $RUNTIME_PHASE_FAILURES"
+elif [ "$FALLBACK_SIGNALS" -eq 0 ]; then
     add_score 2 "No timeout or error indicators"
 else
     add_score 1 "Timeout/error indicators detected ($FALLBACK_SIGNALS files)"

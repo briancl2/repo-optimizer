@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.0 | Spec: 054 | Date: 2026-02-24
+> Version: 1.1 | Spec: 054 | Date: 2026-03-30
 
 ## Purpose
 
@@ -24,6 +24,10 @@ agent (copilot CLI). All consumers must follow this contract.
 | `OPTIMIZATION_PLAN.md` | YES | Human-readable optimization plan |
 | `OPTIMIZATION_SCORECARD.json` | YES | Machine-readable scoring of optimization |
 | `pre-flight.json` | YES | Pre-flight analysis (budget tier, bottom-2 dimensions) |
+| `runtime-safe-target-context.md` | YES | Deterministic inventory for safe LLM discovery |
+| `critic-phase-receipt.json` | YES | Critic phase artifact-contract receipt |
+| `synthesis-phase-receipt.json` | YES | Synthesis phase artifact-contract receipt |
+| `RUNTIME_RECEIPTS.json` | YES | Phase-by-phase runtime status and fail-closed receipts |
 | `PATCH_PACK/*.patch` | Only with --patch | Unified diff patches |
 
 ## Error Codes
@@ -65,10 +69,29 @@ All outputs go to `$output_dir/`:
 - `$output_dir/pre-flight.json`
 - `$output_dir/OPTIMIZATION_PLAN.md`
 - `$output_dir/OPTIMIZATION_SCORECARD.json`
+- `$output_dir/critic-phase-receipt.json`
+- `$output_dir/synthesis-phase-receipt.json`
+- `$output_dir/RUNTIME_RECEIPTS.json`
 - `$output_dir/PATCH_PACK/*.patch` (if --patch)
+
+## Terminal Artifact Contract
+
+Copilot-backed critic and synthesis phases are fail-closed on one authoritative
+artifact contract:
+
+- critic producer: final non-tool `assistant.message` content materialized to
+  `critic-verdicts.md`
+- synthesis producer: final non-tool `assistant.message` content materialized to
+  `OPTIMIZATION_PLAN.md`
+- diagnostic fallback: retained `*.jsonl` transcript plus explicit
+  `critic-phase-receipt.json` / `synthesis-phase-receipt.json`
+- downstream rule: synthesis consumes `critic-verdicts.md` only when the critic
+  receipt status is `completed`; otherwise the runtime skips synthesis with an
+  explicit upstream failure receipt instead of attempting a missing-path read
 
 ## Version History
 
 | Version | Date | Change |
 |---|---|---|
+| 1.1 | 2026-03-30 | Added per-phase artifact-contract receipts and explicit fail-closed terminal artifact rules |
 | 1.0 | 2026-02-24 | Initial contract (spec 054) |

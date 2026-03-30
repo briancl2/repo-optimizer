@@ -4,7 +4,7 @@ description: >
   Adversarial critic that approves, downgrades, or rejects findings
   before patch generation. Applies evidence-quality filters and anti-goals.
 model: claude-opus-4.6
-tools: [read, search, execute]
+tools: [read, search]
 stop_rules:
   max_findings_reviewed: 40
   timeout_seconds: 600
@@ -18,6 +18,10 @@ output_format:
     - "[VERDICT: APPROVED]"
     - "[VERDICT: DOWNGRADED]"
     - "[VERDICT: REJECTED]"
+constraints:
+  - avoid shell loops, command substitution, arithmetic expansion, or parameter expansion
+  - return verdict markdown in the final assistant response only
+  - do not use shell, heredocs, or execute-tool writes to emit verdicts
 ---
 
 # Repo Optimizer — Adversarial Critic

@@ -14,6 +14,8 @@ constraints:
   - include evidence quote ≥20 chars per finding
   - include verification command for every finding
   - single-level nesting — do not spawn subagents
+  - avoid shell loops, command substitution, arithmetic expansion, or parameter expansion
+  - prefer runtime-safe-target-context.md when available
 ---
 
 # Standardization Optimizer

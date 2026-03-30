@@ -103,3 +103,5 @@ For APPROVED findings only (if --patch flag):
 - Allowed dirty paths: `$OUTPUT_DIR/` only
 - Max 5 patches, 6 files per patch, 160 net lines per patch
 - No dependency changes in patches
+- Avoid shell loops, command substitution, arithmetic expansion, or parameter expansion in host commands; prefer direct `rg`, `sed`, `head`, `cat`, `ls`, and `find`
+- Read `runtime-safe-target-context.md` first when the orchestrator provides it, and use that deterministic inventory before optional extra exploration

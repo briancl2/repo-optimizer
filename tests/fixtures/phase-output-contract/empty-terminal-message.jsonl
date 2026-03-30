@@ -1,0 +1,3 @@
+{"type":"assistant.message","data":{"content":"Gathering evidence.","toolRequests":[{"toolCallId":"tooluse_1","name":"view","arguments":{"path":"/tmp/payloads"}}]}}
+{"type":"assistant.message","data":{"content":"","toolRequests":[]}}
+{"type":"assistant.turn_end","data":{"turnId":"0"}}

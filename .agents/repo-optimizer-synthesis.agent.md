@@ -4,7 +4,7 @@ description: >
   Synthesize findings from 4 domain optimizers and critic verdicts into
   a cohesive OPTIMIZATION_PLAN.md with prioritized action items.
 model: claude-opus-4.6
-tools: [read, search, execute]
+tools: [read, search]
 stop_rules:
   timeout_seconds: 600
 constraints:
@@ -12,6 +12,9 @@ constraints:
   - only include APPROVED or DOWNGRADED findings
   - cite findings by rank + domain
   - single-level nesting — do not spawn subagents
+  - avoid shell loops, command substitution, arithmetic expansion, or parameter expansion
+  - return the full plan markdown in the final assistant response only
+  - do not use shell, heredocs, or execute-tool writes to create the plan
 ---
 
 # Optimizer Synthesis Agent

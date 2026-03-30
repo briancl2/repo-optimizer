@@ -84,6 +84,36 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+# Check runtime receipts
+if [ -s "$OUTPUT_DIR/RUNTIME_RECEIPTS.json" ]; then
+    if python3 -c "import json; json.load(open('$OUTPUT_DIR/RUNTIME_RECEIPTS.json'))" 2>/dev/null; then
+        echo "  ✓ RUNTIME_RECEIPTS.json — valid JSON"
+        PASS=$((PASS + 1))
+    else
+        echo "  ✗ RUNTIME_RECEIPTS.json — invalid JSON"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    echo "  ✗ RUNTIME_RECEIPTS.json — missing or empty"
+    FAIL=$((FAIL + 1))
+fi
+
+# Check critic/synthesis phase receipts
+for receipt in critic-phase-receipt.json synthesis-phase-receipt.json; do
+    if [ -s "$OUTPUT_DIR/$receipt" ]; then
+        if python3 -c "import json; json.load(open('$OUTPUT_DIR/$receipt'))" 2>/dev/null; then
+            echo "  ✓ $receipt — valid JSON"
+            PASS=$((PASS + 1))
+        else
+            echo "  ✗ $receipt — invalid JSON"
+            FAIL=$((FAIL + 1))
+        fi
+    else
+        echo "  ✗ $receipt — missing or empty"
+        FAIL=$((FAIL + 1))
+    fi
+done
+
 # Clean up
 rm -rf "$OUTPUT_DIR"
 rm -rf "$OPT_DIR/tests/test-audit-t10" 2>/dev/null || true
