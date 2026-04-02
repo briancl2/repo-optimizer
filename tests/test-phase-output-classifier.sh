@@ -66,7 +66,9 @@ run_case() {
 }
 
 run_case "success-terminal-message.jsonl" "completed" "terminal_markdown_captured" "yes" "success"
+run_case "v308-tool-result-empty-final.jsonl" "completed" "terminal_tool_result_content_captured" "yes" "v308_tool_result"
 run_case "tool-only-nonterminal.jsonl" "failed_artifact_contract" "missing_terminal_non_tool_message" "no" "tool_only"
+run_case "tool-result-nonterminal.jsonl" "failed_artifact_contract" "missing_terminal_non_tool_message" "no" "tool_result_nonterminal"
 run_case "empty-terminal-message.jsonl" "failed_artifact_contract" "empty_terminal_non_tool_message" "no" "empty_terminal"
 
 if [ -s "$TMP_DIR/success.md" ] && grep -q '\[VERDICT: APPROVED\]' "$TMP_DIR/success.md"; then
@@ -74,6 +76,14 @@ if [ -s "$TMP_DIR/success.md" ] && grep -q '\[VERDICT: APPROVED\]' "$TMP_DIR/suc
     PASS=$((PASS + 1))
 else
     echo "  ✗ success artifact missing expected verdict content"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$TMP_DIR/v308_tool_result.md" ] && grep -q '| Rank | Severity | Finding | File | Token Impact | Evidence Quote | Verification |' "$TMP_DIR/v308_tool_result.md"; then
+    echo "  ✓ v308_tool_result artifact preserved terminal tool-result markdown"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ v308_tool_result artifact missing expected findings table"
     FAIL=$((FAIL + 1))
 fi
 

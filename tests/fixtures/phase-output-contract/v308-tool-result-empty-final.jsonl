@@ -1,0 +1,8 @@
+{"type":"assistant.message","data":{"content":"Reading retained runtime context before the final output.","toolRequests":[{"toolCallId":"tooluse_1","name":"view","arguments":{"path":"/tmp/runtime-safe-target-context.md"}}]}}
+{"type":"tool.execution_complete","data":{"toolCallId":"tooluse_1","success":true,"result":{"content":"1. # Runtime-Safe Target Context\n2. \n3. | path | lines |\n4. |---|---:|\n5. | AGENTS.md | 83 |\n"}}}
+{"type":"assistant.turn_end","data":{"turnId":"0"}}
+{"type":"assistant.message","data":{"content":"","toolRequests":[{"toolCallId":"tooluse_2","name":"bash","arguments":{"command":"printf findings-table"}}]}}
+{"type":"tool.execution_complete","data":{"toolCallId":"tooluse_2","success":true,"result":{"content":"| Rank | Severity | Finding | File | Token Impact | Evidence Quote | Verification |\n|---:|---|---|---|---|---|---|\n| 1 | HIGH | Artifact capture fallback is missing for final tool results. | scripts/classify-phase-output.py | 150 tokens | \"tool.execution_complete.result.content\" | `python3 scripts/classify-phase-output.py --help` |\n"}}}
+{"type":"assistant.turn_end","data":{"turnId":"1"}}
+{"type":"abort","data":{"reason":"user initiated"}}
+{"type":"result","exitCode":0}

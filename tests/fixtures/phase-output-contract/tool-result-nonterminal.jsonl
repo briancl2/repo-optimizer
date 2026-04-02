@@ -1,0 +1,4 @@
+{"type":"assistant.message","data":{"content":"","toolRequests":[{"toolCallId":"tooluse_1","name":"bash","arguments":{"command":"printf %s 'Intent logged'"}}]}}
+{"type":"tool.execution_complete","data":{"toolCallId":"tooluse_1","success":true,"result":{"content":"Intent logged"}}}
+{"type":"assistant.turn_end","data":{"turnId":"0"}}
+{"type":"result","exitCode":0}
