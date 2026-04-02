@@ -67,6 +67,7 @@ run_case() {
 
 run_case "success-terminal-message.jsonl" "completed" "terminal_markdown_captured" "yes" "success"
 run_case "v308-tool-result-empty-final.jsonl" "completed" "terminal_tool_result_content_captured" "yes" "v308_tool_result"
+run_case "critic-delta-with-tool-dump.jsonl" "completed" "critic_delta_markdown_captured" "yes" "critic_delta"
 run_case "tool-only-nonterminal.jsonl" "failed_artifact_contract" "missing_terminal_non_tool_message" "no" "tool_only"
 run_case "tool-result-nonterminal.jsonl" "failed_artifact_contract" "missing_terminal_non_tool_message" "no" "tool_result_nonterminal"
 run_case "empty-terminal-message.jsonl" "failed_artifact_contract" "empty_terminal_non_tool_message" "no" "empty_terminal"
@@ -84,6 +85,17 @@ if [ -s "$TMP_DIR/v308_tool_result.md" ] && grep -q '| Rank | Severity | Finding
     PASS=$((PASS + 1))
 else
     echo "  ✗ v308_tool_result artifact missing expected findings table"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$TMP_DIR/critic_delta.md" ] \
+    && grep -Fq '# Adversarial Critic — Verdict Report' "$TMP_DIR/critic_delta.md" \
+    && grep -Fq '[VERDICT: APPROVED]' "$TMP_DIR/critic_delta.md" \
+    && ! grep -Fq 'payloads/standardization.md.jsonl' "$TMP_DIR/critic_delta.md"; then
+    echo "  ✓ critic_delta artifact preferred reconstructed verdict markdown"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ critic_delta artifact did not preserve authoritative verdict markdown"
     FAIL=$((FAIL + 1))
 fi
 

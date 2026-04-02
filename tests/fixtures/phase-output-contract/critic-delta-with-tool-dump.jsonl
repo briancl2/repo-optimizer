@@ -1,0 +1,4 @@
+{"type":"assistant.message","data":{"content":"","toolRequests":[{"toolCallId":"tooluse_1","name":"bash","arguments":{"command":"rg -n \"VERDICT\" payloads/standardization.md.jsonl"}}]}}
+{"type":"tool.execution_complete","data":{"toolCallId":"tooluse_1","success":true,"result":{"content":"payloads/standardization.md.jsonl:243:{\"type\":\"assistant.message\",\"data\":{\"content\":\"# Standardization Optimizer Findings\"}}\n"}}}
+{"type":"assistant.message_delta","data":{"messageId":"critic-1","deltaContent":"Now I have all four domain payloads. Let me compile the verdicts.\n\n---\n\n# Adversarial Critic — Verdict Report\n\n| Finding | Verdict | Rationale |\n|---|---|---|\n| DEC-01 | [VERDICT: APPROVED] | Evidence is literal. |\n| DEC-02 | [VERDICT: DOWNGRADED] | Evidence is partial. |\n"}}
+{"type":"assistant.turn_end","data":{"turnId":"0"}}

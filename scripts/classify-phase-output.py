@@ -74,6 +74,49 @@ def looks_like_terminal_markdown_artifact(text: str) -> bool:
     return False
 
 
+def trim_to_markdown_start(text: str) -> str:
+    normalized = strip_numbered_prefixes(text).strip()
+    if not normalized:
+        return ""
+
+    lines = normalized.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("#") or stripped.startswith("|"):
+            candidate = "\n".join(lines[index:]).strip()
+            if candidate:
+                return candidate
+    return normalized
+
+
+def reconstruct_critic_delta_artifact(
+    delta_chunks: dict[str, list[str]],
+) -> str | None:
+    best_candidate: str | None = None
+
+    for parts in delta_chunks.values():
+        candidate = trim_to_markdown_start("".join(parts))
+        if len(candidate) < 120:
+            continue
+
+        lines = [line.strip() for line in candidate.splitlines() if line.strip()]
+        if not lines:
+            continue
+
+        pipe_lines = sum(1 for line in lines if line.count("|") >= 2)
+        if not lines[0].startswith("#"):
+            continue
+        if "[VERDICT:" not in candidate:
+            continue
+        if pipe_lines < 2:
+            continue
+
+        if best_candidate is None or len(candidate) > len(best_candidate):
+            best_candidate = candidate
+
+    return best_candidate
+
+
 def main() -> int:
     args = parse_args()
 
@@ -92,6 +135,7 @@ def main() -> int:
     non_tool_assistant_message_count = 0
     assistant_message_delta_count = 0
     tool_execution_complete_count = 0
+    assistant_message_delta_chunks: dict[str, list[str]] = {}
 
     last_event_type = ""
     last_assistant_message_content_length = 0
@@ -115,6 +159,12 @@ def main() -> int:
 
         if event_type == "assistant.message_delta":
             assistant_message_delta_count += 1
+            data = payload.get("data") or {}
+            message_id = str(data.get("messageId", ""))
+            delta_content = data.get("deltaContent", "")
+            if not isinstance(delta_content, str):
+                delta_content = str(delta_content)
+            assistant_message_delta_chunks.setdefault(message_id, []).append(delta_content)
             continue
 
         if event_type == "tool.execution_complete":
@@ -162,6 +212,7 @@ def main() -> int:
     artifact_written = False
     notes: list[str] = []
     artifact_source = "none"
+    reconstructed_delta_artifact: str | None = None
 
     terminal_tool_result: dict[str, str | bool] | None = None
     if last_assistant_message_had_tool_requests:
@@ -175,6 +226,11 @@ def main() -> int:
                 terminal_tool_result = candidate
                 break
 
+    if args.phase == "critic":
+        reconstructed_delta_artifact = reconstruct_critic_delta_artifact(
+            assistant_message_delta_chunks
+        )
+
     if last_non_tool_content is not None and last_non_tool_content.strip():
         status = "completed"
         receipt_class = "terminal_markdown_captured"
@@ -187,6 +243,21 @@ def main() -> int:
         artifact_path.write_text(artifact_body, encoding="utf-8")
         artifact_written = True
         artifact_source = "assistant.message"
+    elif reconstructed_delta_artifact is not None:
+        status = "completed"
+        receipt_class = "critic_delta_markdown_captured"
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_body = (
+            reconstructed_delta_artifact
+            if reconstructed_delta_artifact.endswith("\n")
+            else reconstructed_delta_artifact + "\n"
+        )
+        artifact_path.write_text(artifact_body, encoding="utf-8")
+        artifact_written = True
+        artifact_source = "assistant.message_delta"
+        notes.append(
+            "Reconstructed critic markdown artifact from assistant.message_delta events."
+        )
     elif terminal_tool_result is not None:
         status = "completed"
         receipt_class = "terminal_tool_result_content_captured"
