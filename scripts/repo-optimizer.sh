@@ -109,7 +109,9 @@ append_runtime_note() {
     RUNTIME_NOTES="${RUNTIME_NOTES}${note}"
 }
 
-run_copilot_capture_final_message() {
+# Discovery phases must preserve the latest findings-style markdown artifact,
+# not whichever assistant summary happens to be emitted last.
+run_copilot_capture_discovery_payload() {
     local model="$1"
     local prompt_text="$2"
     local output_file="$3"
@@ -136,14 +138,93 @@ run_copilot_capture_final_message() {
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
+HEADER_KEYWORDS = (
+    "finding",
+    "severity",
+    "file",
+    "verification",
+    "evidence",
+    "recommendation",
+    "rank",
+    "type",
+    "line/section",
+    "token impact",
+)
+
+
+def strip_numbered_prefixes(text: str) -> str:
+    lines = text.splitlines()
+    numbered = sum(1 for line in lines if re.match(r"^\d+\.\s", line))
+    if numbered >= 2:
+        return "\n".join(re.sub(r"^\d+\.\s?", "", line) for line in lines)
+    return text
+
+
+def normalize_artifact_text(text: str) -> str:
+    normalized = strip_numbered_prefixes(text).strip()
+    if not normalized:
+        return ""
+
+    lines = normalized.splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if lines and re.fullmatch(r"<exited with exit code \d+>", lines[-1].strip()):
+        lines.pop()
+    while lines and not lines[-1].strip():
+        lines.pop()
+
+    return "\n".join(lines).strip()
+
+
+def trim_to_findings_table(text: str) -> str:
+    normalized = normalize_artifact_text(text)
+    if not normalized:
+        return ""
+
+    lines = normalized.splitlines()
+    for start, line in enumerate(lines):
+        if not line.strip().startswith("|"):
+            continue
+
+        table_lines: list[str] = []
+        for candidate in lines[start:]:
+            stripped = candidate.strip()
+            if stripped.startswith("|"):
+                table_lines.append(candidate.rstrip())
+                continue
+            if table_lines:
+                break
+
+        if len(table_lines) < 3:
+            continue
+
+        header = table_lines[0].lower()
+        if sum(keyword in header for keyword in HEADER_KEYWORDS) < 2:
+            continue
+
+        if "---" not in table_lines[1]:
+            continue
+
+        data_rows = [row for row in table_lines[2:] if row.count("|") >= 2]
+        if not data_rows:
+            continue
+
+        return "\n".join(table_lines).strip()
+
+    return ""
+
+
 raw_path = Path(sys.argv[1])
 out_path = Path(sys.argv[2])
-content = None
+candidates: list[tuple[int, str]] = []
+delta_chunks: dict[str, list[str]] = {}
+delta_positions: dict[str, int] = {}
 
-for line in raw_path.read_text(encoding="utf-8", errors="replace").splitlines():
+for index, line in enumerate(raw_path.read_text(encoding="utf-8", errors="replace").splitlines()):
     line = line.strip()
     if not line:
         continue
@@ -151,14 +232,49 @@ for line in raw_path.read_text(encoding="utf-8", errors="replace").splitlines():
         payload = json.loads(line)
     except json.JSONDecodeError:
         continue
-    if payload.get("type") != "assistant.message":
+
+    event_type = payload.get("type")
+    if event_type == "assistant.message_delta":
+        data = payload.get("data", {})
+        message_id = str(data.get("messageId", ""))
+        delta_content = data.get("deltaContent", "")
+        if not isinstance(delta_content, str):
+            delta_content = str(delta_content)
+        delta_chunks.setdefault(message_id, []).append(delta_content)
+        delta_positions[message_id] = index
         continue
+
+    if event_type == "tool.execution_complete":
+        data = payload.get("data", {})
+        result = data.get("result", {})
+        content = result.get("content", "")
+        if not isinstance(content, str):
+            content = str(content)
+        candidate = trim_to_findings_table(content)
+        if candidate:
+            candidates.append((index, candidate))
+        continue
+
+    if event_type != "assistant.message":
+        continue
+
     data = payload.get("data", {})
     content = data.get("content", "")
+    if not isinstance(content, str):
+        content = str(content)
+    candidate = trim_to_findings_table(content)
+    if candidate:
+        candidates.append((index, candidate))
 
-if content is None:
+for message_id, parts in delta_chunks.items():
+    candidate = trim_to_findings_table("".join(parts))
+    if candidate:
+        candidates.append((delta_positions.get(message_id, -1), candidate))
+
+if not candidates:
     raise SystemExit(1)
 
+_, content = max(candidates, key=lambda item: item[0])
 out_path.write_text(content if content.endswith("\n") else content + "\n", encoding="utf-8")
 PY
 }
@@ -620,7 +736,7 @@ elif command -v copilot >/dev/null 2>&1; then
         echo "    [$domain] dispatching..."
         prompt_text="Read .agents/${domain}-optimizer.agent.md for instructions. Analyze target repo at $REPO using SCORECARD at $AUDIT_DIR/SCORECARD.json. Read $DISCOVERY_CONTEXT_FILE first and prefer that deterministic inventory before any extra shell work. Avoid shell loops, command substitution, arithmetic expansion, or parameter expansion. If extra reads are needed, use direct rg, sed, head, cat, ls, and find commands only. Write findings as a markdown table to stdout."
         dispatch_ok=false
-        if run_copilot_capture_final_message "$OPT_MODEL" "$prompt_text" "$payload_file" "$OPT_TIMEOUT"; then
+        if run_copilot_capture_discovery_payload "$OPT_MODEL" "$prompt_text" "$payload_file" "$OPT_TIMEOUT"; then
             dispatch_ok=true
         fi
         if [ "$dispatch_ok" = true ] && [ -s "$payload_file" ]; then

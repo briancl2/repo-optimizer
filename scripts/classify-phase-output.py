@@ -117,6 +117,10 @@ def reconstruct_critic_delta_artifact(
     return best_candidate
 
 
+def critic_phase_requires_authoritative_assistant_surface(phase: str) -> bool:
+    return phase == "critic"
+
+
 def main() -> int:
     args = parse_args()
 
@@ -215,7 +219,10 @@ def main() -> int:
     reconstructed_delta_artifact: str | None = None
 
     terminal_tool_result: dict[str, str | bool] | None = None
-    if last_assistant_message_had_tool_requests:
+    if (
+        last_assistant_message_had_tool_requests
+        and not critic_phase_requires_authoritative_assistant_surface(args.phase)
+    ):
         for candidate in reversed(final_turn_tool_results):
             content = candidate.get("content")
             if (
@@ -230,6 +237,11 @@ def main() -> int:
         reconstructed_delta_artifact = reconstruct_critic_delta_artifact(
             assistant_message_delta_chunks
         )
+        if final_turn_tool_results:
+            notes.append(
+                "Critic phase requires authoritative assistant-surface verdict markdown; "
+                "tool.execution_complete fallback disabled."
+            )
 
     if last_non_tool_content is not None and last_non_tool_content.strip():
         status = "completed"
