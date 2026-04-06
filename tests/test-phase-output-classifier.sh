@@ -21,13 +21,14 @@ run_case() {
     local expected_class="$3"
     local expect_artifact="$4"
     local case_name="$5"
+    local phase="${6:-critic}"
 
     local raw_file="$FIXTURE_DIR/$fixture_name"
     local artifact_file="$TMP_DIR/$case_name.md"
     local receipt_file="$TMP_DIR/$case_name.json"
 
     python3 "$OPT_DIR/scripts/classify-phase-output.py" \
-        --phase critic \
+        --phase "$phase" \
         --raw "$raw_file" \
         --artifact "$artifact_file" \
         --copilot-exit-code 0 > "$receipt_file"
@@ -66,7 +67,9 @@ run_case() {
 }
 
 run_case "success-terminal-message.jsonl" "completed" "terminal_markdown_captured" "yes" "success"
-run_case "v308-tool-result-empty-final.jsonl" "completed" "terminal_tool_result_content_captured" "yes" "v308_tool_result"
+run_case "v308-tool-result-empty-final.jsonl" "failed_artifact_contract" "missing_terminal_non_tool_message" "no" "critic_tool_result_only"
+run_case "critic-tool-result-verdict-instructions.jsonl" "failed_artifact_contract" "missing_terminal_non_tool_message" "no" "critic_tool_result_verdict_text"
+run_case "v308-tool-result-empty-final.jsonl" "completed" "terminal_tool_result_content_captured" "yes" "noncritic_tool_result" "discovery"
 run_case "critic-delta-with-tool-dump.jsonl" "completed" "critic_delta_markdown_captured" "yes" "critic_delta"
 run_case "tool-only-nonterminal.jsonl" "failed_artifact_contract" "missing_terminal_non_tool_message" "no" "tool_only"
 run_case "tool-result-nonterminal.jsonl" "failed_artifact_contract" "missing_terminal_non_tool_message" "no" "tool_result_nonterminal"
@@ -80,11 +83,11 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if [ -s "$TMP_DIR/v308_tool_result.md" ] && grep -q '| Rank | Severity | Finding | File | Token Impact | Evidence Quote | Verification |' "$TMP_DIR/v308_tool_result.md"; then
-    echo "  ✓ v308_tool_result artifact preserved terminal tool-result markdown"
+if [ -s "$TMP_DIR/noncritic_tool_result.md" ] && grep -q '| Rank | Severity | Finding | File | Token Impact | Evidence Quote | Verification |' "$TMP_DIR/noncritic_tool_result.md"; then
+    echo "  ✓ noncritic_tool_result preserved terminal tool-result markdown"
     PASS=$((PASS + 1))
 else
-    echo "  ✗ v308_tool_result artifact missing expected findings table"
+    echo "  ✗ noncritic_tool_result artifact missing expected findings table"
     FAIL=$((FAIL + 1))
 fi
 
