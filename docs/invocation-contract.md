@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.1 | Spec: 054 | Date: 2026-03-30
+> Version: 1.2 | Spec: 054 | Date: 2026-04-13
 
 ## Purpose
 
@@ -63,6 +63,11 @@ cd ~/repos/repo-optimizer && timeout 600 copilot --model claude-opus-4.6 \
 command via `run_in_terminal`. Do NOT dispatch discovery subagents individually.
 The bash orchestrator manages directory layout and phase sequencing.
 
+Long-running Copilot-backed phases in `repo-optimizer.sh` must emit bounded
+stdout progress while raw JSONL artifacts are being captured, so outer agent
+shell supervision can keep the public Pattern B run alive until terminal
+artifacts materialize.
+
 ## Artifact Path Conventions
 
 All outputs go to `$output_dir/`:
@@ -93,5 +98,6 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.2 | 2026-04-13 | Pattern B contract now requires bounded stdout progress during long Copilot-backed phases so public agent invocations retain terminal artifacts instead of dying in a silent shell wait |
 | 1.1 | 2026-03-30 | Added per-phase artifact-contract receipts and explicit fail-closed terminal artifact rules |
 | 1.0 | 2026-02-24 | Initial contract (spec 054) |

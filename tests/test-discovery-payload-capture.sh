@@ -62,12 +62,18 @@ done
 
 case "\$prompt" in
     *".agents/repo-optimizer-critic.agent.md"*)
+        # Sleep 3s with PROGRESS_INTERVAL=1 so the orchestrator has room to emit a heartbeat.
+        sleep 3
         cat "$FIXTURE_DIR/critic-success.jsonl"
         ;;
     *".agents/repo-optimizer-synthesis.agent.md"*)
+        # Sleep 3s with PROGRESS_INTERVAL=1 so the orchestrator has room to emit a heartbeat.
+        sleep 3
         cat "$FIXTURE_DIR/synthesis-success.jsonl"
         ;;
     *"-optimizer.agent.md"*)
+        # Sleep 3s with PROGRESS_INTERVAL=1 so the orchestrator has room to emit a heartbeat.
+        sleep 3
         cat "$FIXTURE_DIR/discovery-summary-after-tool.jsonl"
         ;;
     *)
@@ -79,7 +85,7 @@ EOF
 chmod +x "$FAKE_BIN/copilot"
 
 OUTPUT_DIR="$TEST_DIR/output"
-if PATH="$FAKE_BIN:$PATH" OPTIMIZER_TIMEOUT=5 bash "$OPT_DIR/scripts/repo-optimizer.sh" "$TARGET_REPO" "$AUDIT_DIR" "$OUTPUT_DIR" > "$TEST_DIR/run.log" 2>&1; then
+if PATH="$FAKE_BIN:$PATH" OPTIMIZER_TIMEOUT=5 OPTIMIZER_PROGRESS_INTERVAL=1 bash "$OPT_DIR/scripts/repo-optimizer.sh" "$TARGET_REPO" "$AUDIT_DIR" "$OUTPUT_DIR" > "$TEST_DIR/run.log" 2>&1; then
     echo "  ✓ repo-optimizer.sh completed with fake copilot"
     PASS=$((PASS + 1))
 else
@@ -106,6 +112,15 @@ if [ -s "$PAYLOAD_FILE" ] && ! grep -Fq '<exited with exit code 0>' "$PAYLOAD_FI
     PASS=$((PASS + 1))
 else
     echo "  ✗ discovery payload kept terminal exit marker"
+    FAIL=$((FAIL + 1))
+fi
+
+if grep -Fq '[decomposition] progress:' "$TEST_DIR/run.log" && grep -Fq '[critic] progress:' "$TEST_DIR/run.log"; then
+    echo "  ✓ slow Copilot-backed phases emitted bounded progress output"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ slow Copilot-backed phases did not emit expected progress output"
+    cat "$TEST_DIR/run.log"
     FAIL=$((FAIL + 1))
 fi
 

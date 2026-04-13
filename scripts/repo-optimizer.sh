@@ -37,10 +37,23 @@ PATCH_MODE="false"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PREFLIGHT_ONLY_RAW="$(printf '%s' "${OPTIMIZER_PREFLIGHT_ONLY:-false}" | tr '[:upper:]' '[:lower:]')"
 PREFLIGHT_ONLY="false"
+PROGRESS_INTERVAL_RAW="${OPTIMIZER_PROGRESS_INTERVAL:-20}"
+PROGRESS_INTERVAL=20
 
 case "$PREFLIGHT_ONLY_RAW" in
     1|true|yes)
         PREFLIGHT_ONLY="true"
+        ;;
+esac
+
+case "$PROGRESS_INTERVAL_RAW" in
+    ''|*[!0-9]*)
+        PROGRESS_INTERVAL=20
+        ;;
+    *)
+        if [ "$PROGRESS_INTERVAL_RAW" -gt 0 ]; then
+            PROGRESS_INTERVAL="$PROGRESS_INTERVAL_RAW"
+        fi
         ;;
 esac
 
@@ -109,29 +122,81 @@ append_runtime_note() {
     RUNTIME_NOTES="${RUNTIME_NOTES}${note}"
 }
 
+emit_phase_progress() {
+    local phase="$1"
+    local elapsed_seconds="$2"
+    local raw_file="$3"
+    local raw_lines="0"
+
+    if [ -f "$raw_file" ]; then
+        raw_lines=$(wc -l < "$raw_file" | tr -d ' ')
+    fi
+
+    echo "      [$phase] progress: ${elapsed_seconds}s elapsed, raw_lines=${raw_lines}"
+}
+
+run_copilot_jsonl_with_progress() {
+    local phase="$1"
+    local model="$2"
+    local prompt_text="$3"
+    local raw_file="$4"
+    local timeout_seconds="$5"
+    local start_epoch
+    local now_epoch
+    local elapsed_seconds
+    local copilot_pid
+    local copilot_exit=0
+
+    if [ "$_has_timeout" = true ]; then
+        (
+            cd "$SCRIPT_DIR/.." &&
+            "$_to" "$timeout_seconds" copilot --model "$model" \
+                -p "$prompt_text" --allow-all --no-ask-user --output-format json \
+                < /dev/null > "$raw_file" 2>/dev/null
+        ) &
+    else
+        (
+            cd "$SCRIPT_DIR/.." &&
+            copilot --model "$model" \
+                -p "$prompt_text" --allow-all --no-ask-user --output-format json \
+                < /dev/null > "$raw_file" 2>/dev/null
+        ) &
+    fi
+    copilot_pid=$!
+    start_epoch=$(date +%s)
+
+    while kill -0 "$copilot_pid" 2>/dev/null; do
+        sleep "$PROGRESS_INTERVAL"
+        # Best-effort heartbeat: skip emission if the phase exited while we were sleeping.
+        kill -0 "$copilot_pid" 2>/dev/null || break
+        now_epoch=$(date +%s)
+        elapsed_seconds=$((now_epoch - start_epoch))
+        emit_phase_progress "$phase" "$elapsed_seconds" "$raw_file"
+    done
+
+    if wait "$copilot_pid"; then
+        copilot_exit=0
+    else
+        copilot_exit=$?
+    fi
+
+    return "$copilot_exit"
+}
+
 # Discovery phases must preserve the latest findings-style markdown artifact,
 # not whichever assistant summary happens to be emitted last.
 run_copilot_capture_discovery_payload() {
-    local model="$1"
-    local prompt_text="$2"
-    local output_file="$3"
-    local timeout_seconds="$4"
+    local phase="$1"
+    local model="$2"
+    local prompt_text="$3"
+    local output_file="$4"
+    local timeout_seconds="$5"
     local raw_file="${output_file}.jsonl"
 
     rm -f "$output_file" "$raw_file"
 
-    if [ "$_has_timeout" = true ]; then
-        if ! (cd "$SCRIPT_DIR/.." && "$_to" "$timeout_seconds" copilot --model "$model" \
-            -p "$prompt_text" --allow-all --no-ask-user --output-format json \
-            < /dev/null > "$raw_file" 2>/dev/null); then
-            return 1
-        fi
-    else
-        if ! (cd "$SCRIPT_DIR/.." && copilot --model "$model" \
-            -p "$prompt_text" --allow-all --no-ask-user --output-format json \
-            < /dev/null > "$raw_file" 2>/dev/null); then
-            return 1
-        fi
+    if ! run_copilot_jsonl_with_progress "$phase" "$model" "$prompt_text" "$raw_file" "$timeout_seconds"; then
+        return 1
     fi
 
     python3 - "$raw_file" "$output_file" <<'PY'
@@ -362,18 +427,10 @@ run_copilot_phase_with_receipt() {
 
     rm -f "$output_file" "$raw_file" "$receipt_file"
 
-    if [ "$_has_timeout" = true ]; then
-        if ! (cd "$SCRIPT_DIR/.." && "$_to" "$timeout_seconds" copilot --model "$model" \
-            -p "$prompt_text" --allow-all --no-ask-user --output-format json \
-            < /dev/null > "$raw_file" 2>/dev/null); then
-            copilot_exit=$?
-        fi
+    if run_copilot_jsonl_with_progress "$phase" "$model" "$prompt_text" "$raw_file" "$timeout_seconds"; then
+        copilot_exit=0
     else
-        if ! (cd "$SCRIPT_DIR/.." && copilot --model "$model" \
-            -p "$prompt_text" --allow-all --no-ask-user --output-format json \
-            < /dev/null > "$raw_file" 2>/dev/null); then
-            copilot_exit=$?
-        fi
+        copilot_exit=$?
     fi
 
     python3 "$SCRIPT_DIR/classify-phase-output.py" \
@@ -736,7 +793,7 @@ elif command -v copilot >/dev/null 2>&1; then
         echo "    [$domain] dispatching..."
         prompt_text="Read .agents/${domain}-optimizer.agent.md for instructions. Analyze target repo at $REPO using SCORECARD at $AUDIT_DIR/SCORECARD.json. Read $DISCOVERY_CONTEXT_FILE first and prefer that deterministic inventory before any extra shell work. Avoid shell loops, command substitution, arithmetic expansion, or parameter expansion. If extra reads are needed, use direct rg, sed, head, cat, ls, and find commands only. Write findings as a markdown table to stdout."
         dispatch_ok=false
-        if run_copilot_capture_discovery_payload "$OPT_MODEL" "$prompt_text" "$payload_file" "$OPT_TIMEOUT"; then
+        if run_copilot_capture_discovery_payload "$domain" "$OPT_MODEL" "$prompt_text" "$payload_file" "$OPT_TIMEOUT"; then
             dispatch_ok=true
         fi
         if [ "$dispatch_ok" = true ] && [ -s "$payload_file" ]; then
