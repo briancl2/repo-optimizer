@@ -155,7 +155,7 @@ def main() -> int:
     )
     generated_at = datetime.now(timezone.utc)
     generated_at_iso = generated_at.isoformat()
-    receipt_suffix = generated_at.strftime("%Y%m%dT%H%M%SZ")
+    receipt_suffix = generated_at.strftime("%Y%m%dT%H%M%S") + f".{generated_at.microsecond:06d}Z"
 
     receipt = {
         "generated_at": generated_at_iso,

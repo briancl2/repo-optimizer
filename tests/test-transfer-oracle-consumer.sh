@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # test-transfer-oracle-consumer.sh — verify bounded advisory transfer evaluation.
+# Requires a sibling repo-agent-core checkout for shared schema validation.
 
 set -euo pipefail
 
