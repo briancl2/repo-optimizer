@@ -30,6 +30,20 @@ agent (copilot CLI). All consumers must follow this contract.
 | `RUNTIME_RECEIPTS.json` | YES | Phase-by-phase runtime status and fail-closed receipts |
 | `PATCH_PACK/*.patch` | Only with --patch | Unified diff patches |
 
+## Additive Bounded Consumer
+
+`repo-optimizer` also supports a bounded advisory-consumer path for retained
+`ADVISORY_DECISIONS.json` artifacts:
+
+```bash
+make transfer-oracle DECISIONS=<path> [OUTPUT_DIR=<dir>] [CAPABILITY_FAMILY=<family>] [HOTSPOT_ID=<hotspot>]
+```
+
+This emits `TRANSFER_ORACLE_RECEIPT.json`, a shared-core receipt that says
+whether the selected advisory decisions are `ready`, `partial`, or `blocked`
+for a repo-optimizer follow-on. It is an optimizer-readiness surface only; it
+does not claim that an optimizer patch or plan has already been generated.
+
 ## Error Codes
 
 | Code | Meaning |

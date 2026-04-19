@@ -1,9 +1,12 @@
-.PHONY: review optimize patch-check test validate help install-hooks check work work-close health spec-init
+.PHONY: review optimize transfer-oracle patch-check test validate help install-hooks check work work-close health spec-init
 
 TARGET ?= .
 AUDIT ?= audit_output
 OUTPUT_DIR ?= optimizer_output
 PATCH ?= false
+DECISIONS ?=
+CAPABILITY_FAMILY ?=
+HOTSPOT_ID ?=
 
 help:
 	@echo "repo-optimizer -- Concrete optimization patches for any repository"
@@ -11,6 +14,7 @@ help:
 	@echo "Targets:"
 	@echo "  make optimize TARGET=<path> AUDIT=<dir>  Run optimizer (report-only)"
 	@echo "  make optimize TARGET=<path> AUDIT=<dir> PATCH=true  With patches"
+	@echo "  make transfer-oracle DECISIONS=<path>    Evaluate bounded advisory decisions (optional: OUTPUT_DIR, CAPABILITY_FAMILY, HOTSPOT_ID)"
 	@echo "  make patch-check                         Validate existing patches"
 	@echo "  make test                                Run all tests"
 	@echo "  make validate                            Validate bundle integrity"
@@ -34,6 +38,17 @@ optimize:
 	fi
 	@echo "=== Optimization complete. Artifacts in $(OUTPUT_DIR)/ ==="
 
+transfer-oracle:
+	@echo "=== repo-optimizer: Advisory Transfer Oracle ==="
+	@test -n "$(DECISIONS)" || { echo "ERROR: DECISIONS=<path> required"; exit 1; }
+	@mkdir -p "$(OUTPUT_DIR)"
+	@python3 scripts/evaluate-advisory-transfer.py \
+		--decisions "$(DECISIONS)" \
+		--output "$(OUTPUT_DIR)/TRANSFER_ORACLE_RECEIPT.json" \
+		--capability-family "$(CAPABILITY_FAMILY)" \
+		--hotspot-id "$(HOTSPOT_ID)"
+	@echo "=== Transfer oracle receipt written to $(OUTPUT_DIR)/TRANSFER_ORACLE_RECEIPT.json ==="
+
 patch-check:
 	@bash scripts/validate-patches.sh "$(TARGET)" "$(OUTPUT_DIR)/PATCH_PACK"
 
@@ -42,6 +57,7 @@ test:
 	@bash tests/test-critic-rejects.sh
 	@bash tests/test-discovery-payload-capture.sh
 	@bash tests/test-phase-output-classifier.sh
+	@bash tests/test-transfer-oracle-consumer.sh
 	@bash tests/test-patches-apply.sh
 	@bash tests/test-preflight-tiers.sh
 	@bash tests/test-self-management.sh
