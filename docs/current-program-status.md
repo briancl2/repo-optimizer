@@ -22,9 +22,10 @@ optimizer-ready or publication-ready downstream proof.
 
 The shared publication ladder, blocker ordering, and proving-ground admission
 policy are owned in BMA. This repo follows that authority rather than carrying
-its own long-range planner. Only the bounded pre-Gate-1 manifest is actually
-admitted now; the blocker order behind it stays provisional until BMA records
-the blocker-order decision artifact (`critique_blocker_decision.json`).
+its own long-range planner. The bounded pre-Gate-1 manifest is the current
+candidate continuation, not an admitted follow-on yet; the blocker order behind
+it stays provisional until BMA records the blocker-order decision artifact
+(`critique_blocker_decision.json`).
 
 ## Current Blocker
 
@@ -37,15 +38,15 @@ The transfer-oracle family is still fail-closed on current evidence:
   case family
 - no publication or downstream remediation claim is admitted
 
-## Next Admitted Move
+## Next Candidate Move
 
 No new optimizer-surface widening is admitted from this pointer batch.
 
-The next admitted move is to keep the consumer boundary stable while the BMA
-publication ladder resolves the bounded pre-Gate-1 manifest, records its
-blocker-order decision artifact, and then admits any later Gate 1 or Gate 2
-work. This repo should not be used to imply that a downstream patch path is
-ready before that shared ladder clears.
+The next candidate move is to keep the consumer boundary stable while the BMA
+publication ladder waits on the bounded pre-Gate-1 manifest (pending explicit
+operator authorization). No later Gate 1 or Gate 2 work proceeds until the
+manifest admits it. This repo should not be used to imply that a downstream
+patch path is ready before that shared ladder clears.
 
 ## Validation Expectations
 
