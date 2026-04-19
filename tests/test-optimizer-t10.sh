@@ -13,6 +13,33 @@ OUTPUT_DIR="$OPT_DIR/tests/test-output-t10"
 
 echo "=== Optimizer Functional Test: T10 ==="
 
+json_field() {
+    python3 - "$1" "$2" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+value = payload
+for part in sys.argv[2].split("."):
+    if isinstance(value, dict):
+        value = value.get(part)
+    else:
+        value = None
+        break
+
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif value is None:
+    print("")
+else:
+    print(value)
+PY
+}
+
 # If no audit dir provided, try to run auditor first
 if [ -z "$AUDIT_DIR" ]; then
     # Check if repo-auditor is available
@@ -98,6 +125,15 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+if [ "$(json_field "$OUTPUT_DIR/RUNTIME_RECEIPTS.json" "proof_boundary.receipt_depth")" = "runtime" ] \
+    && [ "$(json_field "$OUTPUT_DIR/RUNTIME_RECEIPTS.json" "proof_boundary.heartbeat_status")" = "not_applicable" ]; then
+    echo "  ✓ runtime receipt keeps proof-boundary status explicit in pre-flight-only mode"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ runtime receipt proof-boundary metadata is incorrect in pre-flight-only mode"
+    FAIL=$((FAIL + 1))
+fi
+
 # Check critic/synthesis phase receipts
 for receipt in critic-phase-receipt.json synthesis-phase-receipt.json; do
     if [ -s "$OUTPUT_DIR/$receipt" ]; then
@@ -113,6 +149,16 @@ for receipt in critic-phase-receipt.json synthesis-phase-receipt.json; do
         FAIL=$((FAIL + 1))
     fi
 done
+
+if [ "$(json_field "$OUTPUT_DIR/critic-phase-receipt.json" "proof_boundary.artifact_depth")" = "none" ] \
+    && [ "$(json_field "$OUTPUT_DIR/critic-phase-receipt.json" "proof_boundary.phase_classification_evidence.artifact_exists")" = "false" ] \
+    && [ "$(json_field "$OUTPUT_DIR/synthesis-phase-receipt.json" "proof_boundary.phase_classification_evidence.phase_completed")" = "false" ]; then
+    echo "  ✓ pre-flight receipts keep artifact existence separate from completion"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ pre-flight receipts blurred artifact existence and completion"
+    FAIL=$((FAIL + 1))
+fi
 
 # Clean up
 rm -rf "$OUTPUT_DIR"

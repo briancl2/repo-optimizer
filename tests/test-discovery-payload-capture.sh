@@ -14,6 +14,33 @@ FAIL=0
 
 echo "=== Discovery Payload Capture Test ==="
 
+json_field() {
+    python3 - "$1" "$2" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+value = payload
+for part in sys.argv[2].split("."):
+    if isinstance(value, dict):
+        value = value.get(part)
+    else:
+        value = None
+        break
+
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif value is None:
+    print("")
+else:
+    print(value)
+PY
+}
+
 TARGET_REPO="$TEST_DIR/target-repo"
 mkdir -p "$TARGET_REPO"
 printf '# Target Repo\n' > "$TARGET_REPO/AGENTS.md"
@@ -137,6 +164,52 @@ if [ -s "$OUTPUT_DIR/OPTIMIZATION_PLAN.md" ] && grep -Fq '# Optimization Plan' "
     PASS=$((PASS + 1))
 else
     echo "  ✗ synthesis phase did not materialize its plan artifact"
+    FAIL=$((FAIL + 1))
+fi
+
+CRITIC_RECEIPT="$OUTPUT_DIR/critic-phase-receipt.json"
+SYNTH_RECEIPT="$OUTPUT_DIR/synthesis-phase-receipt.json"
+RUNTIME_RECEIPT="$OUTPUT_DIR/RUNTIME_RECEIPTS.json"
+
+if [ -s "$CRITIC_RECEIPT" ] \
+    && [ "$(json_field "$CRITIC_RECEIPT" "proof_boundary.artifact_depth")" = "completed" ] \
+    && [ "$(json_field "$CRITIC_RECEIPT" "proof_boundary.heartbeat_status")" = "observed" ] \
+    && [ "$(json_field "$CRITIC_RECEIPT" "proof_boundary.phase_classification_evidence.phase_completed")" = "true" ] \
+    && [ "$(json_field "$CRITIC_RECEIPT" "proof_boundary.phase_classification_evidence.artifact_exists")" = "true" ] \
+    && [ -n "$(json_field "$CRITIC_RECEIPT" "proof_boundary.authority_fingerprint")" ]; then
+    echo "  ✓ critic receipt carries proof-boundary metadata"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ critic receipt missing proof-boundary metadata"
+    [ -f "$CRITIC_RECEIPT" ] && cat "$CRITIC_RECEIPT"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$SYNTH_RECEIPT" ] \
+    && [ "$(json_field "$SYNTH_RECEIPT" "proof_boundary.artifact_depth")" = "completed" ] \
+    && [ "$(json_field "$SYNTH_RECEIPT" "proof_boundary.phase_classification_evidence.phase_completed")" = "true" ] \
+    && [ "$(json_field "$SYNTH_RECEIPT" "proof_boundary.phase_classification_evidence.artifact_startable")" = "true" ]; then
+    echo "  ✓ synthesis receipt preserves completion vs startability boundary"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ synthesis receipt did not preserve completion vs startability boundary"
+    [ -f "$SYNTH_RECEIPT" ] && cat "$SYNTH_RECEIPT"
+    FAIL=$((FAIL + 1))
+fi
+
+# phases.critic and phases.synthesis each embed the full child phase receipt,
+# so the proof_boundary path intentionally resolves through
+# phases.*.proof_boundary rather than only the runtime summary.
+if [ -s "$RUNTIME_RECEIPT" ] \
+    && [ "$(json_field "$RUNTIME_RECEIPT" "proof_boundary.receipt_depth")" = "runtime" ] \
+    && [ "$(json_field "$RUNTIME_RECEIPT" "proof_boundary.heartbeat_status")" = "observed" ] \
+    && [ "$(json_field "$RUNTIME_RECEIPT" "phases.critic.proof_boundary.phase_classification_evidence.phase_completed")" = "true" ] \
+    && [ "$(json_field "$RUNTIME_RECEIPT" "phases.synthesis.proof_boundary.phase_classification_evidence.phase_completed")" = "true" ]; then
+    echo "  ✓ runtime receipt aggregates proof boundaries from both phases"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ runtime receipt did not aggregate proof boundaries"
+    [ -f "$RUNTIME_RECEIPT" ] && cat "$RUNTIME_RECEIPT"
     FAIL=$((FAIL + 1))
 fi
 

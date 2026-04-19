@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -36,6 +37,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="Exit code from the copilot invocation",
+    )
+    parser.add_argument(
+        "--heartbeat-count",
+        type=int,
+        default=0,
+        help="Count of bounded progress heartbeats emitted while capturing the phase",
     )
     return parser.parse_args()
 
@@ -119,6 +126,76 @@ def reconstruct_critic_delta_artifact(
 
 def critic_phase_requires_authoritative_assistant_surface(phase: str) -> bool:
     return phase == "critic"
+
+
+def stable_fingerprint(payload: dict[str, object]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"
+
+
+def phase_artifact_depth(
+    *,
+    artifact_written: bool,
+    status: str,
+) -> str:
+    if artifact_written and status == "completed":
+        return "completed"
+    if artifact_written:
+        return "accepted"
+    return "none"
+
+
+def heartbeat_status(heartbeat_count: int, status: str) -> str:
+    if heartbeat_count > 0:
+        return "observed"
+    if status.startswith("skipped_") or status == "not_run":
+        return "not_applicable"
+    return "absent"
+
+
+def phase_classification_evidence(
+    *,
+    status: str,
+    receipt_class: str,
+    artifact_written: bool,
+    artifact_source: str,
+    copilot_exit_code: int,
+    command_blocked_detected: bool,
+    assistant_message_count: int,
+    assistant_message_nonempty_count: int,
+    assistant_messages_with_tool_requests: int,
+    non_tool_assistant_message_count: int,
+    assistant_message_delta_count: int,
+    tool_execution_complete_count: int,
+    last_event_type: str,
+    last_assistant_message_content_length: int,
+    last_assistant_message_tool_request_count: int,
+    notes: list[str],
+) -> dict[str, object]:
+    artifact_exists = artifact_written
+    artifact_startable = artifact_written and status == "completed"
+    phase_completed = status == "completed"
+    return {
+        "status": status,
+        "receipt_class": receipt_class,
+        "artifact_exists": artifact_exists,
+        "artifact_startable": artifact_startable,
+        "phase_completed": phase_completed,
+        "artifact_source": artifact_source,
+        "copilot_exit_code": copilot_exit_code,
+        "command_blocked_detected": command_blocked_detected,
+        "assistant_message_count": assistant_message_count,
+        "assistant_message_nonempty_count": assistant_message_nonempty_count,
+        "assistant_messages_with_tool_requests": assistant_messages_with_tool_requests,
+        "non_tool_assistant_message_count": non_tool_assistant_message_count,
+        "assistant_message_delta_count": assistant_message_delta_count,
+        "tool_execution_complete_count": tool_execution_complete_count,
+        "last_event_type": last_event_type,
+        "last_assistant_message_content_length": last_assistant_message_content_length,
+        "last_assistant_message_tool_request_count": last_assistant_message_tool_request_count,
+        "note_count": len(notes),
+    }
 
 
 def main() -> int:
@@ -324,6 +401,52 @@ def main() -> int:
             "assistant.message_delta events were present without a captured terminal artifact."
         )
 
+    proof_boundary = {
+        "artifact_depth": phase_artifact_depth(
+            artifact_written=artifact_written,
+            status=status,
+        ),
+        "receipt_depth": "phase",
+        "heartbeat_status": heartbeat_status(args.heartbeat_count, status),
+        "authority_fingerprint": stable_fingerprint(
+            {
+                "phase": args.phase,
+                "status": status,
+                "receipt_class": receipt_class,
+                "artifact_written": artifact_written,
+                "artifact_source": artifact_source,
+                "copilot_exit_code": args.copilot_exit_code,
+                "heartbeat_count": args.heartbeat_count,
+                "command_blocked_detected": command_blocked_detected,
+                "assistant_message_count": assistant_message_count,
+                "assistant_message_nonempty_count": assistant_message_nonempty_count,
+                "assistant_messages_with_tool_requests": assistant_messages_with_tool_requests,
+                "non_tool_assistant_message_count": non_tool_assistant_message_count,
+                "assistant_message_delta_count": assistant_message_delta_count,
+                "tool_execution_complete_count": tool_execution_complete_count,
+                "last_event_type": last_event_type,
+            }
+        ),
+        "phase_classification_evidence": phase_classification_evidence(
+            status=status,
+            receipt_class=receipt_class,
+            artifact_written=artifact_written,
+            artifact_source=artifact_source,
+            copilot_exit_code=args.copilot_exit_code,
+            command_blocked_detected=command_blocked_detected,
+            assistant_message_count=assistant_message_count,
+            assistant_message_nonempty_count=assistant_message_nonempty_count,
+            assistant_messages_with_tool_requests=assistant_messages_with_tool_requests,
+            non_tool_assistant_message_count=non_tool_assistant_message_count,
+            assistant_message_delta_count=assistant_message_delta_count,
+            tool_execution_complete_count=tool_execution_complete_count,
+            last_event_type=last_event_type,
+            last_assistant_message_content_length=last_assistant_message_content_length,
+            last_assistant_message_tool_request_count=last_assistant_message_tool_request_count,
+            notes=notes,
+        ),
+    }
+
     payload = {
         "phase": args.phase,
         "status": status,
@@ -346,6 +469,7 @@ def main() -> int:
         "last_assistant_message_content_length": last_assistant_message_content_length,
         "last_assistant_message_tool_request_count": last_assistant_message_tool_request_count,
         "notes": notes,
+        "proof_boundary": proof_boundary,
     }
     print(json.dumps(payload, indent=2))
     return 0

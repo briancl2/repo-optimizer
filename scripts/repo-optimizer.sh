@@ -132,6 +132,7 @@ emit_phase_progress() {
         raw_lines=$(wc -l < "$raw_file" | tr -d ' ')
     fi
 
+    HEARTBEAT_EMISSIONS=$((HEARTBEAT_EMISSIONS + 1))
     echo "      [$phase] progress: ${elapsed_seconds}s elapsed, raw_lines=${raw_lines}"
 }
 
@@ -146,6 +147,7 @@ run_copilot_jsonl_with_progress() {
     local elapsed_seconds
     local copilot_pid
     local copilot_exit=0
+    HEARTBEAT_EMISSIONS=0
 
     if [ "$_has_timeout" = true ]; then
         (
@@ -380,17 +382,30 @@ write_phase_receipt_stub() {
     local receipt_class="$4"
     local artifact_file="$5"
     local raw_file="$6"
-    local note="${7:-}"
+    local heartbeat_count="$7"
+    local note="${8:-}"
 
-    python3 - "$receipt_file" "$phase" "$status" "$receipt_class" "$artifact_file" "$raw_file" "$note" <<'PY'
+    python3 - "$receipt_file" "$phase" "$status" "$receipt_class" "$artifact_file" "$raw_file" "$heartbeat_count" "$note" <<'PY'
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 from pathlib import Path
 
-receipt_file, phase, status, receipt_class, artifact_file, raw_file, note = sys.argv[1:8]
+receipt_file, phase, status, receipt_class, artifact_file, raw_file, heartbeat_count, note = sys.argv[1:9]
 notes = [note] if note else []
+
+def stable_fingerprint(payload: dict[str, object]) -> str:
+    # Keep this logic identical to the classifier-side fingerprinting so the
+    # shell fallback receipts stay structurally comparable without importing a
+    # repo-local helper module into the inline Python block. Stub fingerprints
+    # are surface-local identifiers; they do not need to byte-match full
+    # classifier receipts because the stub payload omits live-run counters.
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"
+
 payload = {
     "phase": phase,
     "status": status,
@@ -410,6 +425,47 @@ payload = {
     "last_assistant_message_content_length": 0,
     "last_assistant_message_tool_request_count": 0,
     "notes": notes,
+    "proof_boundary": {
+        "artifact_depth": "none",
+        "receipt_depth": "phase",
+        "heartbeat_status": "not_applicable"
+        if status.startswith("skipped_") or status == "not_run"
+        else ("observed" if int(heartbeat_count) > 0 else "absent"),
+        "authority_fingerprint": stable_fingerprint(
+            {
+                "phase": phase,
+                "status": status,
+                "receipt_class": receipt_class,
+                "artifact_file": artifact_file,
+                "raw_file": raw_file,
+                "heartbeat_count": int(heartbeat_count),
+                "notes": notes,
+            }
+        ),
+        "phase_classification_evidence": {
+            # Stub receipts are only written for not-run or skipped phases, so
+            # phase_completed intentionally remains false on this surface. The
+            # equality check below is defensive if this helper is ever reused.
+            "status": status,
+            "receipt_class": receipt_class,
+            "artifact_exists": False,
+            "artifact_startable": False,
+            "phase_completed": status == "completed",
+            "artifact_source": "none",
+            "copilot_exit_code": 0,
+            "command_blocked_detected": False,
+            "assistant_message_count": 0,
+            "assistant_message_nonempty_count": 0,
+            "assistant_messages_with_tool_requests": 0,
+            "non_tool_assistant_message_count": 0,
+            "assistant_message_delta_count": 0,
+            "tool_execution_complete_count": 0,
+            "last_event_type": "",
+            "last_assistant_message_content_length": 0,
+            "last_assistant_message_tool_request_count": 0,
+            "note_count": len(notes),
+        },
+    },
 }
 Path(receipt_file).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
@@ -432,12 +488,14 @@ run_copilot_phase_with_receipt() {
     else
         copilot_exit=$?
     fi
+    local heartbeat_count="${HEARTBEAT_EMISSIONS:-0}"
 
     python3 "$SCRIPT_DIR/classify-phase-output.py" \
         --phase "$phase" \
         --raw "$raw_file" \
         --artifact "$output_file" \
-        --copilot-exit-code "$copilot_exit" > "$receipt_file"
+        --copilot-exit-code "$copilot_exit" \
+        --heartbeat-count "$heartbeat_count" > "$receipt_file"
 
     [ "$(phase_receipt_field "$receipt_file" "status")" = "completed" ]
 }
@@ -519,6 +577,7 @@ write_runtime_receipts() {
         "$CRITIC_PHASE_RECEIPT" "$SYNTH_PHASE_RECEIPT" <<'PY'
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
@@ -555,6 +614,31 @@ def load_receipt(path_str: str, phase: str) -> dict:
 
 critic_receipt = load_receipt(critic_receipt_file, "critic")
 synth_receipt = load_receipt(synth_receipt_file, "synthesis")
+
+
+def stable_fingerprint(payload: dict[str, object]) -> str:
+    # Keep this logic identical to the classifier-side fingerprinting so the
+    # runtime summary can hash the same proof inputs without depending on an
+    # external import from inside the shell heredoc.
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"
+
+
+critic_boundary = critic_receipt.get("proof_boundary", {})
+synth_boundary = synth_receipt.get("proof_boundary", {})
+heartbeat_status = "not_applicable"
+if critic_boundary.get("heartbeat_status") == "observed" or synth_boundary.get("heartbeat_status") == "observed":
+    heartbeat_status = "observed"
+elif critic_receipt.get("status") != "not_run" or synth_receipt.get("status") != "not_run":
+    heartbeat_status = "absent"
+
+runtime_artifact_depth = "completed"
+if preflight_only == "true" and critic_receipt.get("status") == "not_run" and synth_receipt.get("status") == "not_run":
+    runtime_artifact_depth = "accepted"
+elif critic_boundary.get("artifact_depth") == "none" and synth_boundary.get("artifact_depth") == "none":
+    runtime_artifact_depth = "accepted"
+
 payload = {
     "schema_version": "1.0.0",
     "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -575,6 +659,49 @@ payload = {
         },
     },
     "notes": notes,
+    "proof_boundary": {
+        "artifact_depth": runtime_artifact_depth,
+        "receipt_depth": "runtime",
+        "heartbeat_status": heartbeat_status,
+        "authority_fingerprint": stable_fingerprint(
+            {
+                "patch_mode": patch_mode == "true",
+                "preflight_only": preflight_only == "true",
+                "command_blocked_detected": command_blocked == "true",
+                "patch_status": patch_status,
+                "critic": critic_boundary,
+                "synthesis": synth_boundary,
+            }
+        ),
+        "phase_classification_evidence": {
+            "critic": {
+                "status": critic_receipt.get("status"),
+                "receipt_class": critic_receipt.get("receipt_class"),
+                "artifact_depth": critic_boundary.get("artifact_depth"),
+                "heartbeat_status": critic_boundary.get("heartbeat_status"),
+                "phase_completed": critic_boundary.get("phase_classification_evidence", {}).get("phase_completed"),
+                "artifact_exists": critic_boundary.get("phase_classification_evidence", {}).get("artifact_exists"),
+                "artifact_startable": critic_boundary.get("phase_classification_evidence", {}).get("artifact_startable"),
+            },
+            "synthesis": {
+                "status": synth_receipt.get("status"),
+                "receipt_class": synth_receipt.get("receipt_class"),
+                "artifact_depth": synth_boundary.get("artifact_depth"),
+                "heartbeat_status": synth_boundary.get("heartbeat_status"),
+                "phase_completed": synth_boundary.get("phase_classification_evidence", {}).get("phase_completed"),
+                "artifact_exists": synth_boundary.get("phase_classification_evidence", {}).get("artifact_exists"),
+                "artifact_startable": synth_boundary.get("phase_classification_evidence", {}).get("artifact_startable"),
+            },
+            "discovery": {
+                "ok_count": int(discovery_ok),
+                "fail_count": int(discovery_fail),
+            },
+            "patch_generation": {
+                "status": patch_status,
+                "patches_valid": int(patches_valid),
+            },
+        },
+    },
 }
 Path(out_path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
@@ -752,6 +879,7 @@ if [ "$PREFLIGHT_ONLY" = "true" ]; then
         "$CRITIC_RECEIPT_CLASS" \
         "$OUTPUT_DIR/critic-verdicts.md" \
         "$OUTPUT_DIR/critic-verdicts.md.jsonl" \
+        "0" \
         "Pre-flight-only mode skipped Copilot-backed critic phase."
     write_phase_receipt_stub \
         "$SYNTH_PHASE_RECEIPT" \
@@ -760,6 +888,7 @@ if [ "$PREFLIGHT_ONLY" = "true" ]; then
         "$SYNTH_RECEIPT_CLASS" \
         "$OUTPUT_DIR/OPTIMIZATION_PLAN.md" \
         "$OUTPUT_DIR/OPTIMIZATION_PLAN.md.jsonl" \
+        "0" \
         "Pre-flight-only mode skipped Copilot-backed synthesis phase."
     if [ "$PATCH_MODE" = "true" ]; then
         PATCH_STATUS="fail_closed_preflight_only"
@@ -849,6 +978,7 @@ elif command -v copilot >/dev/null 2>&1; then
             "$CRITIC_RECEIPT_CLASS" \
             "$OUTPUT_DIR/critic-verdicts.md" \
             "$OUTPUT_DIR/critic-verdicts.md.jsonl" \
+            "0" \
             "Critic agent definition was missing."
     else
         CRITIC_STATUS="skipped_no_discovery_payloads"
@@ -860,6 +990,7 @@ elif command -v copilot >/dev/null 2>&1; then
             "$CRITIC_RECEIPT_CLASS" \
             "$OUTPUT_DIR/critic-verdicts.md" \
             "$OUTPUT_DIR/critic-verdicts.md.jsonl" \
+            "0" \
             "No discovery payloads were available for critic review."
     fi
 
@@ -900,6 +1031,7 @@ elif command -v copilot >/dev/null 2>&1; then
             "$SYNTH_RECEIPT_CLASS" \
             "$OUTPUT_DIR/OPTIMIZATION_PLAN.md" \
             "$OUTPUT_DIR/OPTIMIZATION_PLAN.md.jsonl" \
+            "0" \
             "Synthesis skipped because critic did not materialize its authoritative artifact."
         append_runtime_note "synthesis skipped after critic $CRITIC_STATUS / $CRITIC_RECEIPT_CLASS"
     elif [ "$OPT_OK" -gt 0 ]; then
@@ -912,6 +1044,7 @@ elif command -v copilot >/dev/null 2>&1; then
             "$SYNTH_RECEIPT_CLASS" \
             "$OUTPUT_DIR/OPTIMIZATION_PLAN.md" \
             "$OUTPUT_DIR/OPTIMIZATION_PLAN.md.jsonl" \
+            "0" \
             "Synthesis agent definition was missing."
     else
         SYNTH_STATUS="skipped_no_discovery_payloads"
@@ -923,6 +1056,7 @@ elif command -v copilot >/dev/null 2>&1; then
             "$SYNTH_RECEIPT_CLASS" \
             "$OUTPUT_DIR/OPTIMIZATION_PLAN.md" \
             "$OUTPUT_DIR/OPTIMIZATION_PLAN.md.jsonl" \
+            "0" \
             "No discovery payloads were available for synthesis."
     fi
 else
@@ -944,6 +1078,7 @@ else
         "$CRITIC_RECEIPT_CLASS" \
         "$OUTPUT_DIR/critic-verdicts.md" \
         "$OUTPUT_DIR/critic-verdicts.md.jsonl" \
+        "0" \
         "Copilot CLI was unavailable."
     write_phase_receipt_stub \
         "$SYNTH_PHASE_RECEIPT" \
@@ -952,6 +1087,7 @@ else
         "$SYNTH_RECEIPT_CLASS" \
         "$OUTPUT_DIR/OPTIMIZATION_PLAN.md" \
         "$OUTPUT_DIR/OPTIMIZATION_PLAN.md.jsonl" \
+        "0" \
         "Copilot CLI was unavailable."
     if [ "$PATCH_MODE" = "true" ]; then
         PATCH_STATUS="fail_closed_no_copilot"

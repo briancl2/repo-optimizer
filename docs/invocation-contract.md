@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.2 | Spec: 054 | Date: 2026-04-13
+> Version: 1.3 | Spec: 054 | Date: 2026-04-19
 
 ## Purpose
 
@@ -93,11 +93,18 @@ artifact contract:
 - downstream rule: synthesis consumes `critic-verdicts.md` only when the critic
   receipt status is `completed`; otherwise the runtime skips synthesis with an
   explicit upstream failure receipt instead of attempting a missing-path read
+- receipt metadata: phase and runtime receipts include proof-boundary fields
+  that keep artifact existence, acceptance/startability, and phase completion
+  separate via `proof_boundary.authority_fingerprint`,
+  `proof_boundary.heartbeat_status`, `proof_boundary.artifact_depth`,
+  `proof_boundary.receipt_depth`, and
+  `proof_boundary.phase_classification_evidence`
 
 ## Version History
 
 | Version | Date | Change |
 |---|---|---|
+| 1.3 | 2026-04-19 | Added proof-boundary metadata to phase and runtime receipts so artifact existence, startability, and phase completion remain distinct |
 | 1.2 | 2026-04-13 | Pattern B contract now requires bounded stdout progress during long Copilot-backed phases so public agent invocations retain terminal artifacts instead of dying in a silent shell wait |
 | 1.1 | 2026-03-30 | Added per-phase artifact-contract receipts and explicit fail-closed terminal artifact rules |
 | 1.0 | 2026-02-24 | Initial contract (spec 054) |
