@@ -159,6 +159,71 @@ check_cmd "external-critique receipt validates against shared schema" \
 check_cmd "external-critique receipt stays blocked" test "$(json_field "$CRITIQUE_OUTPUT" "transfer_state")" = "blocked"
 check_cmd "external-critique receipt notes helper-only boundary" grep -q "helper-only transfer" "$CRITIQUE_OUTPUT"
 
+CRITIQUE_MIXED_DECISIONS="$TEST_TMPDIR/critique-mixed-decisions.json"
+write_decisions "$CRITIQUE_MIXED_DECISIONS" '[
+  {
+    "hotspot_id": "prompt_family:external_critique",
+    "verdict": "insufficient_evidence",
+    "rationale": "Helper-only critique evidence should not be upgraded into direct optimizer action.",
+    "confidence": "low",
+    "brief_type": "root_cause_hypothesis_check",
+    "user_facing_outcome": "agentic_root_cause_analysis_required",
+    "decision_basis": "brief_constrained",
+    "capability_family": "external_critique",
+    "oracle_ref": "EC-02",
+    "evidence_class": "helper_only",
+    "transfer_status": "helper_only",
+    "bounded_non_claim": "Helper-only critique transfer stays bounded and cannot authorize optimizer mutation."
+  },
+  {
+    "hotspot_id": "prompt_family:external_critique_health",
+    "verdict": "protect",
+    "rationale": "The bounded hardening anchor is informative, but it still must stay non-remediating and below clearance.",
+    "confidence": "medium",
+    "brief_type": "root_cause_hypothesis_check",
+    "user_facing_outcome": "agentic_root_cause_analysis_required",
+    "decision_basis": "brief_constrained",
+    "capability_family": "external_critique",
+    "oracle_ref": "EC-04",
+    "evidence_class": "bounded_current_anchor",
+    "transfer_status": "partial",
+    "bounded_non_claim": "The bounded hardening anchor is not a clearance or optimizer-ready remediation proof."
+  }
+]'
+
+CRITIQUE_MIXED_OUTPUT="$TEST_TMPDIR/critique-mixed-transfer-receipt.json"
+python3 "$OPT_DIR/scripts/evaluate-advisory-transfer.py" \
+    --decisions "$CRITIQUE_MIXED_DECISIONS" \
+    --capability-family external_critique \
+    --output "$CRITIQUE_MIXED_OUTPUT"
+
+check_cmd "mixed external-critique receipt validates against shared schema" \
+    bash "$CORE_DIR/scripts/validate-artifacts.sh" "$CRITIQUE_MIXED_OUTPUT" TRANSFER_ORACLE_RECEIPT
+check_cmd "mixed external-critique receipt stays partial" test "$(json_field "$CRITIQUE_MIXED_OUTPUT" "transfer_state")" = "partial"
+check_cmd "mixed external-critique receipt stays fail-closed" test "$(json_field "$CRITIQUE_MIXED_OUTPUT" "verdict")" = "fail"
+check_cmd "mixed external-critique receipt carries both guidance rows" python3 - "$CRITIQUE_MIXED_OUTPUT" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+
+rows = payload["consumer_guidance"]
+assert len(rows) == 2, f"expected 2 guidance rows, got {len(rows)}"
+states = {row["hotspot_id"]: row["consumer_state"] for row in rows}
+assert states["prompt_family:external_critique"] == "blocked", (
+    "helper-only critique row must stay blocked in the mixed-case calibration receipt"
+)
+assert states["prompt_family:external_critique_health"] == "partial", (
+    "bounded non-helper critique row must stay partial in the mixed-case calibration receipt"
+)
+assert all(row["consumer_state"] != "ready" for row in rows), (
+    "mixed external-critique calibration must not produce a ready consumer state"
+)
+PY
+
 READY_DECISIONS="$TEST_TMPDIR/ready-decisions.json"
 write_decisions "$READY_DECISIONS" '[
   {
