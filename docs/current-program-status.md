@@ -2,8 +2,8 @@
 
 > Date: 2026-04-20
 > Repo role: owner-side receipt-consumer pointer for the repo-star completion program
-> Canonical cross-repo authority (local sibling-repo path): [repo-star-gate1-critique-representativeness-and-freshness-2026-04-19.md](../../build-meta-analysis/research/reports/repo-star-gate1-critique-representativeness-and-freshness-2026-04-19.md)
-> Local-path note: these links assume the shared `~/repos` workspace layout, and the linked report keeps its original 2026-04-19 batch-open date.
+> Canonical cross-repo authority (local sibling-repo path): [repo-star-gate2-success-recovery-and-sync-2026-04-20.md](../../build-meta-analysis/research/reports/repo-star-gate2-success-recovery-and-sync-2026-04-20.md)
+> Local-path note: these links assume the shared `~/repos` workspace layout, and the linked report keeps its original 2026-04-20 recovery date.
 
 ## Current Local State
 
@@ -20,17 +20,19 @@ optimizer-ready or publication-ready downstream proof.
 
 ## Upstream Dependency
 
-The shared publication path is owned in BMA. The Gate 1 execution attempt has
-now run on the widened current surface and refreshed the current-code
-transfer-oracle truth, but it did not establish a decision-usable shared
-advance. The shared publication path is therefore stopped fail-closed on
-current evidence rather than promoted to Gate 2.
+The shared publication path is owned in BMA. The 2026-04-20 recovery program
+directly resolved the old seam, admitted Gate 2, and ran it to completion. The
+resulting shared state is now:
+
+- Gate 2 passed
+- publication remains local-only and pre-publication
+- the next exact shared batch is `Gate 3: publish-or-stop`
 
 ## Current Blocker
 
-The transfer-oracle family is still fail-closed on current evidence:
+The transfer-oracle family is no longer the unresolved shared seam:
 
-- no shared advance is admitted on current evidence
+- Gate 2 now passes on current evidence
 - token-efficiency remains `partial`
 - external critique remains `blocked` or `partial`, depending on the bounded
   case family
@@ -38,11 +40,11 @@ The transfer-oracle family is still fail-closed on current evidence:
 
 ## Next Candidate Move
 
-No new optimizer-surface widening is admitted from this pointer update.
+No new optimizer-surface widening is required by the Gate 2 result.
 
-The consumer boundary should stay stable under the BMA fail-closed stop
-contract. This repo should not be used to imply that a downstream patch path,
-Gate 2, or publication advance is currently admitted.
+The consumer boundary should stay stable while BMA runs `Gate 3:
+publish-or-stop`. This repo should not be used to imply that a downstream
+patch path or publication advance is currently admitted.
 
 ## Validation Expectations
 
