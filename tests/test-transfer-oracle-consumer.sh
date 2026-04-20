@@ -129,6 +129,12 @@ check_cmd "token-efficiency receipt validates against shared schema" \
     bash "$CORE_DIR/scripts/validate-artifacts.sh" "$TOKEN_OUTPUT" TRANSFER_ORACLE_RECEIPT
 check_cmd "token-efficiency receipt stays partial" test "$(json_field "$TOKEN_OUTPUT" "transfer_state")" = "partial"
 check_cmd "token-efficiency receipt stays fail-closed" test "$(json_field "$TOKEN_OUTPUT" "verdict")" = "fail"
+check_cmd "token-efficiency receipt carries bounded capability_state" \
+    test "$(json_field "$TOKEN_OUTPUT" "capability_state")" = "bounded_calibrated"
+check_cmd "token-efficiency receipt carries optimizer provider_scope" \
+    test "$(json_field "$TOKEN_OUTPUT" "provider_scope")" = "repo-optimizer:transfer_oracle_consumer"
+check_cmd "token-efficiency receipt carries bounded downstream admission" \
+    test "$(json_field "$TOKEN_OUTPUT" "downstream_admission")" = "bounded"
 
 CRITIQUE_DECISIONS="$TEST_TMPDIR/critique-decisions.json"
 write_decisions "$CRITIQUE_DECISIONS" '[
@@ -158,6 +164,10 @@ check_cmd "external-critique receipt validates against shared schema" \
     bash "$CORE_DIR/scripts/validate-artifacts.sh" "$CRITIQUE_OUTPUT" TRANSFER_ORACLE_RECEIPT
 check_cmd "external-critique receipt stays blocked" test "$(json_field "$CRITIQUE_OUTPUT" "transfer_state")" = "blocked"
 check_cmd "external-critique receipt notes helper-only boundary" grep -q "helper-only transfer" "$CRITIQUE_OUTPUT"
+check_cmd "external-critique helper-only receipt carries helper_only capability_state" \
+    test "$(json_field "$CRITIQUE_OUTPUT" "capability_state")" = "helper_only"
+check_cmd "external-critique helper-only receipt carries blocked downstream admission" \
+    test "$(json_field "$CRITIQUE_OUTPUT" "downstream_admission")" = "blocked"
 
 CRITIQUE_MIXED_DECISIONS="$TEST_TMPDIR/critique-mixed-decisions.json"
 write_decisions "$CRITIQUE_MIXED_DECISIONS" '[
@@ -201,6 +211,12 @@ check_cmd "mixed external-critique receipt validates against shared schema" \
     bash "$CORE_DIR/scripts/validate-artifacts.sh" "$CRITIQUE_MIXED_OUTPUT" TRANSFER_ORACLE_RECEIPT
 check_cmd "mixed external-critique receipt stays partial" test "$(json_field "$CRITIQUE_MIXED_OUTPUT" "transfer_state")" = "partial"
 check_cmd "mixed external-critique receipt stays fail-closed" test "$(json_field "$CRITIQUE_MIXED_OUTPUT" "verdict")" = "fail"
+check_cmd "mixed external-critique receipt carries bounded_calibrated capability_state" \
+    test "$(json_field "$CRITIQUE_MIXED_OUTPUT" "capability_state")" = "bounded_calibrated"
+check_cmd "mixed external-critique receipt carries mixed gate calibration basis" \
+    test "$(json_field "$CRITIQUE_MIXED_OUTPUT" "calibration_basis")" = "external_critique_mixed_gate_v1"
+check_cmd "mixed external-critique receipt carries bounded downstream admission" \
+    test "$(json_field "$CRITIQUE_MIXED_OUTPUT" "downstream_admission")" = "bounded"
 check_cmd "mixed external-critique receipt carries both guidance rows" python3 - "$CRITIQUE_MIXED_OUTPUT" <<'PY'
 from __future__ import annotations
 
@@ -213,11 +229,25 @@ with open(sys.argv[1], encoding="utf-8") as handle:
 rows = payload["consumer_guidance"]
 assert len(rows) == 2, f"expected 2 guidance rows, got {len(rows)}"
 states = {row["hotspot_id"]: row["consumer_state"] for row in rows}
+capability_states = {row["hotspot_id"]: row["capability_state"] for row in rows}
+admissions = {row["hotspot_id"]: row["downstream_admission"] for row in rows}
 assert states["prompt_family:external_critique"] == "blocked", (
     "helper-only critique row must stay blocked in the mixed-case calibration receipt"
 )
+assert capability_states["prompt_family:external_critique"] == "helper_only", (
+    "helper-only critique row must retain helper_only capability state"
+)
+assert admissions["prompt_family:external_critique"] == "blocked", (
+    "helper-only critique row must keep blocked downstream admission"
+)
 assert states["prompt_family:external_critique_health"] == "partial", (
     "bounded non-helper critique row must stay partial in the mixed-case calibration receipt"
+)
+assert capability_states["prompt_family:external_critique_health"] == "bounded_calibrated", (
+    "bounded non-helper critique row must retain bounded_calibrated state"
+)
+assert admissions["prompt_family:external_critique_health"] == "bounded", (
+    "bounded non-helper critique row must keep bounded downstream admission"
 )
 assert all(row["consumer_state"] != "ready" for row in rows), (
     "mixed external-critique calibration must not produce a ready consumer state"
@@ -252,6 +282,10 @@ check_cmd "ready receipt validates against shared schema" \
     bash "$CORE_DIR/scripts/validate-artifacts.sh" "$READY_OUTPUT" TRANSFER_ORACLE_RECEIPT
 check_cmd "candidate remediation receipt reaches ready state" test "$(json_field "$READY_OUTPUT" "transfer_state")" = "ready"
 check_cmd "candidate remediation receipt passes" test "$(json_field "$READY_OUTPUT" "verdict")" = "pass"
+check_cmd "candidate remediation receipt upgrades capability_state to reusable" \
+    test "$(json_field "$READY_OUTPUT" "capability_state")" = "reusable"
+check_cmd "candidate remediation receipt upgrades downstream admission to ready" \
+    test "$(json_field "$READY_OUTPUT" "downstream_admission")" = "ready"
 
 echo ""
 echo "=== test-transfer-oracle-consumer.sh: $PASS pass, $FAIL fail ==="

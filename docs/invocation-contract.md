@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.3 | Spec: 054 | Date: 2026-04-19
+> Version: 1.4 | Spec: 054 | Date: 2026-04-20
 
 ## Purpose
 
@@ -43,6 +43,15 @@ This emits `TRANSFER_ORACLE_RECEIPT.json`, a shared-core receipt that says
 whether the selected advisory decisions are `ready`, `partial`, or `blocked`
 for a repo-optimizer follow-on. It is an optimizer-readiness surface only; it
 does not claim that an optimizer patch or plan has already been generated.
+
+The receipt also carries normalized calibration metadata:
+`capability_state`, `provider_scope`, `calibration_basis`,
+`evidence_provenance`, and `downstream_admission`. These fields keep the
+mixed external-critique gate explicit without upgrading partial or blocked
+states into remediation claims.
+When a selected batch spans multiple calibration families, the top-level
+`calibration_basis` field preserves that mix as a sorted, comma-separated
+summary instead of collapsing it into one stronger basis claim.
 
 ## Error Codes
 
@@ -118,6 +127,7 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.4 | 2026-04-20 | Added calibration metadata for transfer-oracle receipts and documented mixed-family calibration-basis summarization |
 | 1.3 | 2026-04-19 | Added proof-boundary metadata to phase and runtime receipts so artifact existence, startability, and phase completion remain distinct |
 | 1.2 | 2026-04-13 | Pattern B contract now requires bounded stdout progress during long Copilot-backed phases so public agent invocations retain terminal artifacts instead of dying in a silent shell wait |
 | 1.1 | 2026-03-30 | Added per-phase artifact-contract receipts and explicit fail-closed terminal artifact rules |
