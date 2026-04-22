@@ -1,49 +1,66 @@
 # Current Program Status
 
-> Date: 2026-04-20
-> Repo role: owner-side receipt consumer for the external-critique calibration tranche
-> Canonical cross-repo authority (local sibling-repo path): [exact-shape-hunt-wheel-spinning-and-external-critique-calibration-2026-04-20.md](../../build-meta-analysis/research/reports/exact-shape-hunt-wheel-spinning-and-external-critique-calibration-2026-04-20.md)
+> Date: 2026-04-22
+> Repo role: owner-surface receipt consumer for the shared external-critique path
+> Canonical landed cross-repo authority (local sibling-repo path): [shared-external-critique-owner-surface-critique-refresh-2026-04-20.md](../../build-meta-analysis/research/reports/shared-external-critique-owner-surface-critique-refresh-2026-04-20.md)
 > Local-path note: these links assume the shared `~/repos` workspace layout.
 
 ## Current Local State
 
-Local `main` now carries:
+Local `main` still carries the bounded consumer surfaces already landed for the
+shared external-critique path:
 
 - proof-boundary metadata on runtime and phase receipts
 - a bounded advisory consumer that emits `TRANSFER_ORACLE_RECEIPT.json`
 - normalized calibration metadata on the transfer receipt and guidance rows
 - mixed external-critique tests that keep helper-only cases blocked and bounded
-  non-helper cases partial / non-remediating
+  non-helper cases partial and non-remediating
 
-This repo is a real owner-side capability surface, but it is still not an
-optimizer-ready remediation proof for external critique.
+This repo remains a real owner-surface consumer surface, but it is not the active
+delivery lane in the current truth-restore pass.
 
 ## Shared Batch Truth
 
-The live decomposition result is:
+The truthful current shared state is anchored by the shared refresh report
+[`shared-external-critique-owner-surface-critique-refresh-2026-04-20.md`](../../build-meta-analysis/research/reports/shared-external-critique-owner-surface-critique-refresh-2026-04-20.md)
+and the active BMA truth-restore batch at
+[`work/20260422T173345Z/WORK.md`](../../build-meta-analysis/work/20260422T173345Z/WORK.md).
 
-- publication-authority search is no longer the active delivery lane
-- advisor and optimizer now agree on one external-critique calibration
-  vocabulary
-- helper-only critique evidence still stays blocked
-- bounded non-helper critique evidence stays bounded and non-remediating
-- the newsletter proving ground validates the same mixed gate downstream
+What those artifacts say right now is:
+
+- one separate owner-surface critique receipt already exists for the shared
+  external-critique path on the retained 2026-04-20 heads
+- helper-only critique evidence remains blocked
+- bounded non-helper critique evidence remains bounded and non-remediating
+- broader reuse beyond the newsletter proving ground remains unadmitted
+- the current build-meta-analysis (BMA) follow-on is ecosystem truth
+  restoration of canonical
+  handoff/report/proof-pack/roadmap surfaces plus sibling status pointers, not
+  another same-family consumer or receipt-refresh batch
+
+In plain language: helper-only cases still stay blocked, bounded non-helper
+cases are still calibrated but non-remediating, and broader reuse remains
+unadmitted until later independent or adversarial calibration exists.
 
 ## Current Blocker
 
-The consumer path is no longer blocked on missing contract shape. The remaining
-limit is the bounded gate itself: external critique is calibrated, but it is
-not admitted as a ready optimizer remediation surface.
+This repo is no longer blocked on missing contract shape. The remaining limit
+is the bounded gate itself: the consumer path is calibrated, but it still does
+not admit optimizer-ready remediation, broader reuse, or publication claims on
+its own.
 
 ## Next Candidate Move
 
-Keep this consumer boundary stable unless a later batch needs to widen the same
-mixed calibration gate to another downstream proving ground. Do not turn this
-receipt into a publication or patch-readiness claim by narration.
+Keep the bounded consumer path stable while build-meta-analysis (BMA) completes the ecosystem
+truth-restore pass. Reopen this repo only for a later owner-surface batch on
+fresher heads or for a new broader-reuse question with fresh evidence. Do not
+turn the current consumer receipt into the active next batch by narration.
 
 ## Validation Expectations
 
 - `make review` before commit
 - `make check`
 - `make test` for receipt or consumer-path changes
-- no optimizer-ready or remediation-ready claim from this repo alone
+- no optimizer-ready, broader-reuse, remediation-ready, or publication-ready claim from this repo alone
+- no claim that sibling handoff/report/proof-pack/roadmap pointer updates equal
+  repo-local authority or new owner-surface delivery
