@@ -1,4 +1,4 @@
-.PHONY: review optimize transfer-oracle benchmark-optimization-workloads patch-check test validate help install-hooks check work work-close health spec-init
+.PHONY: review optimize transfer-oracle benchmark-optimization-workloads normalize-agent-run-receipts build-live-paired-corpus collect-live-agent-receipts patch-check test validate help install-hooks check work work-close health spec-init
 
 TARGET ?= .
 AUDIT ?= audit_output
@@ -9,6 +9,12 @@ CAPABILITY_FAMILY ?=
 HOTSPOT_ID ?=
 CORPUS ?=
 MODE ?= retained-replay
+FIXTURES ?=
+RECEIPTS ?=
+ADAPTER ?=
+MODEL ?=
+REPETITIONS ?= 5
+COMMAND_TEMPLATE ?=
 
 help:
 	@echo "repo-optimizer -- Concrete optimization patches for any repository"
@@ -18,6 +24,9 @@ help:
 	@echo "  make optimize TARGET=<path> AUDIT=<dir> PATCH=true  With patches"
 	@echo "  make transfer-oracle DECISIONS=<path>    Evaluate bounded advisory decisions (optional: OUTPUT_DIR, CAPABILITY_FAMILY, HOTSPOT_ID)"
 	@echo "  make benchmark-optimization-workloads CORPUS=<path> OUTPUT_DIR=<dir> MODE=<deterministic|retained-replay|live-paired>"
+	@echo "  make normalize-agent-run-receipts RECEIPTS=<raw> OUTPUT_DIR=<dir>  Normalize Codex/Copilot/VS Code/generic evidence"
+	@echo "  make build-live-paired-corpus FIXTURES=<path> RECEIPTS=<path> OUTPUT_DIR=<dir>  Build provider-neutral live corpus"
+	@echo "  make collect-live-agent-receipts FIXTURES=<path> ADAPTER=<codex|copilot|generic> OUTPUT_DIR=<dir>  Collect live receipts"
 	@echo "  make patch-check                         Validate existing patches"
 	@echo "  make test                                Run all tests"
 	@echo "  make validate                            Validate bundle integrity"
@@ -62,6 +71,39 @@ benchmark-optimization-workloads:
 		--mode "$(MODE)"
 	@echo "=== Benchmark artifacts written to $(OUTPUT_DIR)/ ==="
 
+normalize-agent-run-receipts:
+	@echo "=== repo-optimizer: Normalize Agent Run Receipts ==="
+	@test -n "$(RECEIPTS)" || { echo "ERROR: RECEIPTS=<raw receipt/session path> required"; exit 1; }
+	@mkdir -p "$(OUTPUT_DIR)"
+	@python3 scripts/normalize-agent-run-receipts.py \
+		--input "$(RECEIPTS)" \
+		--output "$(OUTPUT_DIR)/AGENT_RUN_RECEIPTS.json"
+	@echo "=== Normalized receipts written to $(OUTPUT_DIR)/AGENT_RUN_RECEIPTS.json ==="
+
+build-live-paired-corpus:
+	@echo "=== repo-optimizer: Build Provider-Neutral Live-Paired Corpus ==="
+	@test -n "$(FIXTURES)" || { echo "ERROR: FIXTURES=<path> required"; exit 1; }
+	@test -n "$(RECEIPTS)" || { echo "ERROR: RECEIPTS=<AGENT_RUN_RECEIPTS path> required"; exit 1; }
+	@mkdir -p "$(OUTPUT_DIR)"
+	@python3 scripts/build-live-paired-corpus.py \
+		--fixtures "$(FIXTURES)" \
+		--receipts "$(RECEIPTS)" \
+		--output "$(OUTPUT_DIR)/OPTIMIZATION_BENCHMARK_CORPUS.json"
+	@echo "=== Live-paired corpus written to $(OUTPUT_DIR)/OPTIMIZATION_BENCHMARK_CORPUS.json ==="
+
+collect-live-agent-receipts:
+	@echo "=== repo-optimizer: Collect Live Agent Receipts ==="
+	@test -n "$(FIXTURES)" || { echo "ERROR: FIXTURES=<path> required"; exit 1; }
+	@test -n "$(ADAPTER)" || { echo "ERROR: ADAPTER=<codex|copilot|generic> required"; exit 1; }
+	@mkdir -p "$(OUTPUT_DIR)"
+	@python3 scripts/run-live-agent-benchmark.py \
+		--fixtures "$(FIXTURES)" \
+		--output "$(OUTPUT_DIR)/AGENT_RUN_RECEIPTS.json" \
+		--adapter "$(ADAPTER)" \
+		--model "$(MODEL)" \
+		--repetitions "$(REPETITIONS)" $(if $(COMMAND_TEMPLATE),--command-template "$(COMMAND_TEMPLATE)",)
+	@echo "=== Live receipts written to $(OUTPUT_DIR)/AGENT_RUN_RECEIPTS.json ==="
+
 patch-check:
 	@bash scripts/validate-patches.sh "$(TARGET)" "$(OUTPUT_DIR)/PATCH_PACK"
 
@@ -74,6 +116,7 @@ test:
 	@bash tests/test-patches-apply.sh
 	@bash tests/test-preflight-tiers.sh
 	@bash tests/test-optimization-benchmark-harness.sh
+	@bash tests/test-agent-run-receipts.sh
 	@bash tests/test-self-management.sh
 	@bash tests/test-grader-golden.sh
 	@echo ""
