@@ -1,0 +1,115 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Optimization Benchmark Results",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "artifact",
+    "generated_at",
+    "mode",
+    "corpus_id",
+    "target_label",
+    "corpus_sha256",
+    "corpus_readiness",
+    "tactic_rollups",
+    "workload_results",
+    "non_claims"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "artifact": { "const": "OPTIMIZATION_BENCHMARK_RESULTS" },
+    "generated_at": { "type": "string" },
+    "mode": { "enum": ["deterministic", "retained-replay", "live-paired"] },
+    "corpus_id": { "type": "string", "minLength": 1 },
+    "target_label": { "type": "string", "minLength": 1 },
+    "corpus_sha256": { "type": "string", "minLength": 64, "maxLength": 64 },
+    "promotion_claims_allowed": { "type": "boolean" },
+    "corpus_readiness": {
+      "type": "object",
+      "required": ["ready", "admitted_workload_count", "bucket_counts"],
+      "properties": {
+        "ready": { "type": "boolean" },
+        "admitted_workload_count": { "type": "integer", "minimum": 0 },
+        "bucket_counts": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "tactic_rollups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tactic_id", "disposition", "eligible_workload_count", "workload_ids"],
+        "properties": {
+          "tactic_id": { "type": "string" },
+          "disposition": { "enum": ["promoted", "sandbox-only", "rejected", "not-measured"] },
+          "eligible_workload_count": { "type": "integer", "minimum": 0 },
+          "workload_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": true
+      }
+    },
+    "workload_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "workload_id",
+          "source_repo",
+          "bucket",
+          "tactic_id",
+          "disposition",
+          "baseline_input_hash",
+          "candidate_input_hash",
+          "correctness_gate",
+          "variance_gate",
+          "measured_metrics"
+        ],
+        "properties": {
+          "workload_id": { "type": "string" },
+          "source_repo": { "type": "string" },
+          "bucket": { "type": "string" },
+          "tactic_id": { "type": "string" },
+          "disposition": { "enum": ["promoted", "sandbox-only", "rejected", "not-measured"] },
+          "baseline_input_hash": { "type": ["string", "null"] },
+          "candidate_input_hash": { "type": ["string", "null"] },
+          "correctness_gate": {
+            "type": "object",
+            "required": ["correctness_pass", "closeout_truth_pass", "target_repo_mutated"],
+            "properties": {
+              "correctness_pass": { "type": "boolean" },
+              "closeout_truth_pass": { "type": "boolean" },
+              "target_repo_mutated": { "type": "boolean" }
+            },
+            "additionalProperties": true
+          },
+          "variance_gate": {
+            "type": "object",
+            "required": ["evaluated", "passed"],
+            "properties": {
+              "evaluated": { "type": "boolean" },
+              "passed": { "type": ["boolean", "null"] }
+            },
+            "additionalProperties": true
+          },
+          "measured_metrics": {
+            "type": "object",
+            "properties": {
+              "token_delta": { "type": ["number", "null"] },
+              "token_delta_pct": { "type": ["number", "null"] },
+              "output_noise_delta_bytes": { "type": ["number", "null"] },
+              "output_noise_delta_pct": { "type": ["number", "null"] },
+              "wall_time_delta_pct": { "type": ["number", "null"] },
+              "wall_time_regression_pct": { "type": ["number", "null"] },
+              "cache_hit_rate_delta_pct": { "type": ["number", "null"] },
+              "stable_prefix_delta_tokens": { "type": ["number", "null"] }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "non_claims": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

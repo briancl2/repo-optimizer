@@ -1,0 +1,119 @@
+{
+  "schema_version": "1.0.0",
+  "artifact": "OPTIMIZATION_BENCHMARK_CORPUS",
+  "corpus_id": "repo-optimizer-fixture-corpus",
+  "generated_at": "2026-04-25T00:00:00Z",
+  "minimum_corpus": {
+    "total_admitted": 4,
+    "buckets": {
+      "bma": 1,
+      "portfolio_advisor": 1,
+      "git_history": 1,
+      "repo_star_transfer": 1
+    }
+  },
+  "thresholds": {
+    "paired_fixture_count_minimum": 3,
+    "token_or_input_size_delta": {
+      "min_pct": 15,
+      "min_absolute_tokens": 500
+    },
+    "output_noise_delta": {
+      "min_pct": 20
+    },
+    "wall_time_delta": {
+      "max_regression_pct": 10,
+      "speed_claim_min_improvement_pct": 10
+    }
+  },
+  "workloads": [
+    {
+      "workload_id": "fixture-bma-context-pruning-pass",
+      "source_repo": "build-meta-analysis",
+      "bucket": "bma",
+      "tactic_id": "context_pruning",
+      "workload_role": "roi_candidate",
+      "live_tier": "tier1",
+      "allowed_modes": ["deterministic", "retained-replay"],
+      "claim_types": ["token"],
+      "target_repo_mutated": false,
+      "baseline": {
+        "input_tokens": 4000,
+        "correctness_pass": true,
+        "closeout_truth_pass": true
+      },
+      "candidate": {
+        "input_tokens": 3200,
+        "correctness_pass": true,
+        "closeout_truth_pass": true
+      },
+      "evidence_refs": ["fixture://bma/context-pruning"]
+    },
+    {
+      "workload_id": "fixture-pa-context-pruning-pass",
+      "source_repo": "portfolio-advisor",
+      "bucket": "portfolio_advisor",
+      "tactic_id": "context_pruning",
+      "workload_role": "roi_candidate",
+      "live_tier": "tier1",
+      "allowed_modes": ["deterministic", "retained-replay"],
+      "claim_types": ["token"],
+      "target_repo_mutated": false,
+      "baseline": {
+        "input_tokens": 3800,
+        "correctness_pass": true,
+        "closeout_truth_pass": true
+      },
+      "candidate": {
+        "input_tokens": 3000,
+        "correctness_pass": true,
+        "closeout_truth_pass": true
+      },
+      "evidence_refs": ["fixture://portfolio/context-pruning"]
+    },
+    {
+      "workload_id": "fixture-git-history-context-pruning-fail",
+      "source_repo": "portfolio-advisor",
+      "bucket": "git_history",
+      "tactic_id": "context_pruning",
+      "workload_role": "roi_candidate",
+      "live_tier": "tier1",
+      "allowed_modes": ["deterministic", "retained-replay"],
+      "claim_types": ["token"],
+      "target_repo_mutated": false,
+      "baseline": {
+        "input_tokens": 4000,
+        "correctness_pass": true,
+        "closeout_truth_pass": true
+      },
+      "candidate": {
+        "input_tokens": 3900,
+        "correctness_pass": true,
+        "closeout_truth_pass": true
+      },
+      "evidence_refs": ["fixture://git-history/context-pruning"]
+    },
+    {
+      "workload_id": "fixture-cache-proxy-only",
+      "source_repo": "repo-star",
+      "bucket": "repo_star_transfer",
+      "tactic_id": "prompt_cache_stability",
+      "workload_role": "roi_candidate",
+      "live_tier": "tier1",
+      "allowed_modes": ["deterministic", "retained-replay"],
+      "claim_types": ["cache"],
+      "target_repo_mutated": false,
+      "baseline": {
+        "stable_prefix_tokens": 1200,
+        "correctness_pass": true,
+        "closeout_truth_pass": true
+      },
+      "candidate": {
+        "stable_prefix_tokens": 2400,
+        "correctness_pass": true,
+        "closeout_truth_pass": true
+      },
+      "evidence_refs": ["fixture://repo-star/cache-proxy"]
+    }
+  ]
+}
