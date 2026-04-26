@@ -1,4 +1,4 @@
-.PHONY: review optimize transfer-oracle patch-check test validate help install-hooks check work work-close health spec-init
+.PHONY: review optimize transfer-oracle benchmark-optimization-workloads patch-check test validate help install-hooks check work work-close health spec-init
 
 TARGET ?= .
 AUDIT ?= audit_output
@@ -7,6 +7,8 @@ PATCH ?= false
 DECISIONS ?=
 CAPABILITY_FAMILY ?=
 HOTSPOT_ID ?=
+CORPUS ?=
+MODE ?= retained-replay
 
 help:
 	@echo "repo-optimizer -- Concrete optimization patches for any repository"
@@ -15,6 +17,7 @@ help:
 	@echo "  make optimize TARGET=<path> AUDIT=<dir>  Run optimizer (report-only)"
 	@echo "  make optimize TARGET=<path> AUDIT=<dir> PATCH=true  With patches"
 	@echo "  make transfer-oracle DECISIONS=<path>    Evaluate bounded advisory decisions (optional: OUTPUT_DIR, CAPABILITY_FAMILY, HOTSPOT_ID)"
+	@echo "  make benchmark-optimization-workloads CORPUS=<path> OUTPUT_DIR=<dir> MODE=<deterministic|retained-replay|live-paired>"
 	@echo "  make patch-check                         Validate existing patches"
 	@echo "  make test                                Run all tests"
 	@echo "  make validate                            Validate bundle integrity"
@@ -49,6 +52,16 @@ transfer-oracle:
 		--hotspot-id "$(HOTSPOT_ID)"
 	@echo "=== Transfer oracle receipt written to $(OUTPUT_DIR)/TRANSFER_ORACLE_RECEIPT.json ==="
 
+benchmark-optimization-workloads:
+	@echo "=== repo-optimizer: Prompt/Context Benchmark Harness ==="
+	@test -n "$(CORPUS)" || { echo "ERROR: CORPUS=<path> required"; exit 1; }
+	@mkdir -p "$(OUTPUT_DIR)"
+	@python3 scripts/benchmark-optimization-workloads.py \
+		--corpus "$(CORPUS)" \
+		--output-dir "$(OUTPUT_DIR)" \
+		--mode "$(MODE)"
+	@echo "=== Benchmark artifacts written to $(OUTPUT_DIR)/ ==="
+
 patch-check:
 	@bash scripts/validate-patches.sh "$(TARGET)" "$(OUTPUT_DIR)/PATCH_PACK"
 
@@ -60,6 +73,7 @@ test:
 	@bash tests/test-transfer-oracle-consumer.sh
 	@bash tests/test-patches-apply.sh
 	@bash tests/test-preflight-tiers.sh
+	@bash tests/test-optimization-benchmark-harness.sh
 	@bash tests/test-self-management.sh
 	@bash tests/test-grader-golden.sh
 	@echo ""
