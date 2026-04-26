@@ -1,0 +1,17 @@
+================================================================
+Pre-Scan Complete: briancl2-customer-newsletter
+================================================================
+Total files:        675
+Auditorignore:      no
+AI surfaces:        31 (4a, 18s, 1i, 8p)
+Co-Evolution Ratio: 4.50
+Large files (>200L): 50
+Tier:               large → multi session, budget 400
+AI dump size:       4548 lines, 209379 bytes
+
+Outputs:
+  /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/pre-scan/PRE_SCAN.md            (repo structure)
+  /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/pre-scan/AI_SURFACES_FULL.md    (full AI surface text)
+  /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/pre-scan/LARGE_FILES.md         (files >200L)
+  /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/pre-scan/GITIGNORE_ANALYSIS.md  (.gitignore analysis)
+================================================================

@@ -1,0 +1,97 @@
+=== repo-auditor: Standard Mode (deterministic) ===
+GUARD: Pre-operation checks
+  [PASS] Target directory -- /tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter
+  [PASS] Target git state -- clean
+  [PASS] Concurrent lock -- no lock
+  [PASS] Required tools
+GUARD: PASS (4 checks passed)
+================================================================
+Repo Auditor: briancl2-customer-newsletter
+================================================================
+
+Target:  /tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter
+Output:  /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output
+Mode:    standard
+Context: standard
+
+--- Writing context-score manifest ---
+
+  [context] ✅ manifest written
+
+--- Running core audit tools + DS-34+ signature sweep ---
+
+  [pre-scan] running...
+  [pre-scan] ✅ done (89 lines)
+  [maturity] running...
+  [maturity] ✅ done (32 lines)
+  [stall-risk] running...
+  [stall-risk] ✅ done (20 lines)
+  [dna] running...
+  [dna] ✅ done (26 lines)
+  [drift] running...
+  [drift] ⚠️  exit 1 (output saved)
+  [drift] (non-zero exit expected when drift > threshold)
+  [ds-34-plus] running...
+  [ds-34-plus] ✅ done (415 lines)
+
+--- Scoring 5 audit dimensions ---
+
+================================================================
+Audit Dimension Scorecard
+================================================================
+
+  D1 Governance:       20/20
+  D2 Surface Health:   12/20
+  D3 Skill Maturity:   13/20
+  D4 Measurement:      13/20
+  D5 Self-Improvement: 8/20
+  ─────────────────────────
+  COMPOSITE:           66/100
+
+  Tier 1 (blocking):   5/5 passed
+  Tier 2 (warnings):   0
+
+  Written: /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/SCORECARD.json
+  Receipts: /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/SCORECARD_RECEIPTS.json
+================================================================
+  [scorecard] ✅ SCORECARD.json + SCORECARD_RECEIPTS.json written (valid JSON)
+
+--- Generating AUDIT_REPORT.md ---
+
+  ✅ AUDIT_REPORT.md written
+
+================================================================
+Audit Complete: briancl2-customer-newsletter
+================================================================
+  Phase:          5 — Self-Improving
+  Maturity:       68/100
+  Stall Risk:     7/100
+  Drift:          30%
+  Co-Evo Ratio:   4.50
+  Tool failures:  0
+
+Outputs:
+  /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/AUDIT_REPORT.md
+  /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/SCORECARD.json
+  /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/SCORECARD_RECEIPTS.json
+  /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/CONTEXT_SCORE_MANIFEST.json
+================================================================
+
+OPERATION EVAL: Audit Quality Assessment
+  Audit dir: /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output
+
+  +3pt: SCORECARD.json exists and valid JSON
+  +3pt: All 5 dimensions scored (5/5)
+  +2pt: AUDIT_REPORT.md exists (102 lines)
+  +3pt: All 5 tool outputs present
+  +2pt: Detection signatures ran (1 results from 31 scripts)
+  +1pt: Fallback/timeout indicators detected (1 signals)
+  +2pt: Composite score valid (66/100)
+  +3pt: Phase classification present (PHASE:       5)
+  +2pt: Command output summarized instead of copied as raw dumps
+
+Issues detected (session grader would miss these):
+  - Fallback or timeout detected in audit artifacts
+
+OPERATION EVAL: 21/22 (PASS)
+=== Audit complete. Artifacts in /Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-audit-output/ ===

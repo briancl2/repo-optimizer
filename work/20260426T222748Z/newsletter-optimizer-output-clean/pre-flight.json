@@ -1,0 +1,44 @@
+{
+  "target": "briancl2-customer-newsletter",
+  "composite": 66,
+  "bottom_2": [
+    "D5_self_improvement",
+    "D2_surface_health"
+  ],
+  "bottom_dimensions": [
+    "D5_self_improvement",
+    "D2_surface_health"
+  ],
+  "all_dimensions": {
+    "D5_self_improvement": {
+      "score": 8,
+      "max": 20
+    },
+    "D2_surface_health": {
+      "score": 12,
+      "max": 20
+    },
+    "D3_skill_maturity": {
+      "score": 13,
+      "max": 20
+    },
+    "D4_measurement": {
+      "score": 13,
+      "max": 20
+    },
+    "D1_governance": {
+      "score": 20,
+      "max": 20
+    }
+  },
+  "patch_mode": false,
+  "budget_tier": "focused",
+  "file_count": 675,
+  "discovery_scope": {
+    "tier": "focused",
+    "eligible_files": 41,
+    "total_files": 675,
+    "coverage_pct": 6.1,
+    "scope_description": "AI surfaces + governance files"
+  }
+}

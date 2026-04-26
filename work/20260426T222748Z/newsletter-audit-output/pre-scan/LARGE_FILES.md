@@ -1,0 +1,55 @@
+# Large Files (>200 lines)
+
+| file | lines | type |
+|---|---|---|
+| kb/SOURCES.yaml | 1672 | yaml |
+| tools/validate_pipeline_strict.sh | 1647 | sh |
+| reference/deep-research-report.md | 1595 | md |
+| archive/2026/February_pre-fresh-run/workspace-archived/archived/newsletter_phase1b_interim_github_2025-10-06_to_2025-12-02.md | 1283 | md |
+| .github/skills/content-retrieval/examples/newsletter_phase1b_interim_github_2025-10-06_to_2025-12-02.md | 1283 | md |
+| release_bundle/2026-02_newsletter_launch/TIMELINE_VERBATIM_UNCLIPPED.md | 1204 | md |
+| tools/build_phase3_working_set.py | 744 | py |
+| tools/run_build.sh | 728 | sh |
+| tools/collect_product_run_audit.py | 693 | py |
+| planning/PRODUCT_RUN_PLAYBOOK.md | 682 | md |
+| .github/prompts/phase_1b_content_retrieval.prompt.md | 678 | md |
+| tools/newsletter_experiment_common.py | 634 | py |
+| runs/product_runs/20260423T194746Z_historical_anchor_readiness_repair/session/events.jsonl | 611 | jsonl |
+| runs/product_runs/20260416T155723Z_production_proof/session/events.jsonl | 592 | jsonl |
+| runs/product_runs/20260416T155723Z_production_proof/copilot.log | 584 | log |
+| tools/run_newsletter_orchestrated.sh | 581 | sh |
+| runs/product_runs/20260423T194746Z_historical_anchor_readiness_repair/copilot.log | 578 | log |
+| runs/product_runs/20260416T175225Z_production_proof/session/events.jsonl | 539 | jsonl |
+| tools/score-v2-rubric.sh | 522 | sh |
+| planning/BUILD_PLAN.md | 512 | md |
+| runs/product_runs/20260416T175225Z_production_proof/copilot.log | 508 | log |
+| .github/skills/building-skill/SKILL.md | 494 | md |
+| config/benchmark_lanes/newsletter_recovery_v1.json | 461 | json |
+| config/experiment_fixture_packs/production-anchor-2026-02-14_2026-04-16.json | 437 | json |
+| config/experiment_fixture_packs/benchmark-anchor-2025-12-05_2026-02-13.json | 437 | json |
+| reference/agent_configuration_reference.md | 429 | md |
+| archive/2026/February_pre-fresh-run/workspace-archived/archived/newsletter_phase1a_discoveries_2025-10-06_to_2025-12-03-chatgpt.md | 428 | md |
+| reference/claude_prompting_reference.md | 420 | md |
+| tools/generate_scope_contract.py | 416 | py |
+| runs/product_runs/20260423T194746Z_historical_anchor_readiness_repair/audit/RUN_AUDIT.json | 415 | json |
+| reference/polishing-intelligence.md | 405 | md |
+| archive/2026/February_pre-fresh-run/workspace-archived/archived/old-newsletter_phase1a_discoveries_2025-10-06_to_2025-12-03.md | 402 | md |
+| runs/product_runs/20260416T175225Z_production_proof/audit/RUN_AUDIT.json | 399 | json |
+| runs/product_runs/20260416T155723Z_production_proof/audit/RUN_AUDIT.json | 395 | json |
+| .github/prompts/phase_1c_consolidation.prompt.md | 371 | md |
+| reference/autonomous_loops_guide.md | 359 | md |
+| tools/test_experiment_surfaces.sh | 351 | sh |
+| tools/materialize_lane_a_phase2_events.py | 348 | py |
+| archive/2026/February_pre-fresh-run/workspace-archived/archived/newsletter_phase1a_url_manifest_2025-10-06_to_2025-12-02.md | 343 | md |
+| .github/skills/url-manifest/examples/newsletter_phase1a_url_manifest_2025-10-06_to_2025-12-02.md | 343 | md |
+| tools/extract_event_sources.py | 338 | py |
+| planning/HANDOFF.md | 331 | md |
+| workspace/archived/preflight/2026-02-14_to_2026-04-16_20260416T005600Z/foreign_range_workspace/newsletter_phase2_event_sources_2026-02-13.json | 327 | json |
+| workspace/archived/preflight/2026-02-14_to_2026-04-16_20260414T015010Z/foreign_range_workspace/newsletter_phase2_event_sources_2026-02-13.json | 327 | json |
+| workspace/archived/preflight/2025-12-05_to_2026-02-13_20260328T130312Z/newsletter_phase2_event_sources_2026-02-13.json | 327 | json |
+| workspace/archived/preflight/2025-12-05_to_2026-02-13_20260326T212902Z/newsletter_phase2_event_sources_2026-02-13.json | 327 | json |
+| tools/restore_lane_a_frozen_inputs.sh | 325 | sh |
+| release_bundle/2026-02_newsletter_launch/SOURCE_NOTES/log_prompt_exports/2026-02-10T04-36-57Z_cli_migration_execution_mode.txt | 323 | txt |
+| workspace/archived/preflight/2026-02-14_to_2026-04-16_20260414T015010Z/2026-04_april_newsletter_preflight_prev.md | 317 | md |
+| planning/research/INTEGRATION_PLAN.md | 317 | md |
+

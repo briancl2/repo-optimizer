@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0.0",
+  "audit_context_id": "standard",
+  "target_repo_path": "/private/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter",
+  "compare_oracle_version": "1.0.0",
+  "auditorignore": {
+    "active": false,
+    "entries": []
+  },
+  "git": {
+    "present": true,
+    "toplevel": "/private/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter",
+    "head": "f8a8ba92f3fb30e15c6fb0b44c663f1e4bb6ac28",
+    "status_short": [],
+    "root_matches_target": true,
+    "borrowed_parent_git_root": false
+  },
+  "local_artifact_counts": {
+    "work": {
+      "files": 0,
+      "ignored_by_auditor": false,
+      "counted_in_score_surface": false,
+      "tracked_files": 0,
+      "local_only_files": 0
+    },
+    "runs": {
+      "files": 111,
+      "ignored_by_auditor": false,
+      "counted_in_score_surface": true,
+      "tracked_files": 111,
+      "local_only_files": 0
+    },
+    "counted_files_total": 111,
+    "counted_local_only_files_total": 0
+  },
+  "portable_authority": {
+    "ready": true,
+    "risks": []
+  },
+  "representativeness": {
+    "enabled": false,
+    "authority_repo_path": "",
+    "ready": false,
+    "risks": [],
+    "notes": []
+  },
+  "preflight_checks": [
+    {
+      "id": "git-root-belongs-to-target",
+      "status": "pass",
+      "detail": "git rev-parse --show-toplevel resolves to the audited repo"
+    },
+    {
+      "id": "local-artifact-volume-emitted",
+      "status": "pass",
+      "detail": "work/ and runs/ file counts are retained in the manifest."
+    },
+    {
+      "id": "portable-authority-readiness",
+      "status": "pass",
+      "detail": "Context is portable for widening authority."
+    }
+  ]
+}

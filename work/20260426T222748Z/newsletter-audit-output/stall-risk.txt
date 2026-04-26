@@ -1,0 +1,20 @@
+================================================================
+Stall Risk Score: briancl2-customer-newsletter
+================================================================
+
+  SCORE: 7 / 100   🟢 LOW
+
+--- Signal Breakdown ---
+
+  S1 Refactor Ratio:        1/25  (ratio=0.03 , 1/38 commits)
+  S2 Add/Delete Ratio:      0/20  (adr=12.73, +41579/-3266 lines)
+  S3 Skill Velocity:        0/20  (rate=18.00 skills/mo, 18 skills, 1.0 months)
+  S4 Commit Freq Decay:     0/15  (slope=2.7  , weeks: 0→5→24→8)
+  S5 Plan Infrastructure:   6/10  (infra=4/10)
+  S6 Surface Diversity:     0/10  (types=5/5)
+
+--- Thresholds ---
+  0-20  🟢 Low       21-40 🟡 Watch
+  41-60 🟠 Warning   61-80 🔴 High
+  81-100 🚨 Critical
+================================================================

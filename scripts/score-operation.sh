@@ -380,7 +380,7 @@ fi
 
 FALLBACK_SIGNALS=0
 for f in "$OPT_DIR"/*.md "$OPT_DIR"/*.txt "$OPT_DIR"/*.json; do
-    if [ -f "$f" ] && grep -qi 'timeout\|timed out\|TIMEOUT\|error.*fatal' "$f" 2>/dev/null; then
+    if [ -f "$f" ] && grep -Eq '([Tt]imed out|[Tt]imeout:|[Tt]imeout reached|[Cc]ommand timed out|TIMEOUT\b|[Ff]atal error|ERROR:[[:space:]]+.*fatal|failed_[a-z_]+|skipped_upstream_critic_failure)' "$f" 2>/dev/null; then
         FALLBACK_SIGNALS=$((FALLBACK_SIGNALS + 1))
     fi
 done
@@ -435,7 +435,8 @@ fi
 if [ -f "$PLAN" ]; then
     # Look for positive approval indicators: "(APPROVED)", "## Approved", "Status: Approved"
     # Exclude negative phrases like "No findings approved" or "0 approved"
-    APPROVED_COUNT=$(grep -ciE '(\(APPROVED\)|## Approved|Status:\s*Approved|findings?.*approved.*[1-9])' "$PLAN" 2>/dev/null || echo "0")
+    APPROVED_COUNT=$(grep -ciE '(\(APPROVED\)|##[[:space:]]*([0-9]+[.)][[:space:]]*)?Approved|Status:[[:space:]]*Approved|findings?.*approved.*[1-9]|\|[[:space:]]*\*\*Approved\*\*[[:space:]]*\|[[:space:]]*\*\*[1-9][0-9]*\*\*)' "$PLAN" 2>/dev/null || true)
+    APPROVED_COUNT="${APPROVED_COUNT:-0}"
     if [ "$APPROVED_COUNT" -ge 1 ]; then
         add_score 2 "Plan contains approved findings ($APPROVED_COUNT)"
     else
@@ -446,7 +447,8 @@ fi
 # ── Check 10: Target files referenced in plan (2pt) ──────────────────
 if [ -f "$PLAN" ]; then
     # Look for file path patterns: paths with extensions or directory separators
-    FILE_REFS=$(grep -cE '(\./|/[a-zA-Z_-]+\.(sh|py|md|json|yml|yaml|js|ts|toml)|[a-zA-Z_-]+/[a-zA-Z_-]+\.[a-z]+)' "$PLAN" 2>/dev/null || echo "0")
+    FILE_REFS=$(grep -cE '(\./|/[a-zA-Z_-]+\.(sh|py|md|json|yml|yaml|js|ts|toml)|[a-zA-Z_-]+/[a-zA-Z_-]+\.[a-z]+)' "$PLAN" 2>/dev/null || true)
+    FILE_REFS="${FILE_REFS:-0}"
     if [ "$FILE_REFS" -ge 1 ]; then
         add_score 2 "Plan references target files ($FILE_REFS references)"
     else

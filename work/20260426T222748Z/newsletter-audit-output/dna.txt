@@ -1,0 +1,26 @@
+================================================================
+Repo DNA Fingerprint: briancl2-customer-newsletter
+================================================================
+
+  DNA = [1, 26, 1.0, 4, 0.0, 5, 1, 1, 3, 2]
+
+--- Features ---
+  S  Surface Count:        1    (instruction files)
+  K  Skill Density:       26    (18 skills / 675 files × 1000)
+  Ao Agent Organicity:    1.0   (organic / total agents)
+  Sc Scoring Layers:       4    (distinct scoring mechanisms)
+  Kv Skill Velocity:      0.0   (recent / total skills)
+  G  Governance:           5/5  (AGENTS.md, LEARNINGS, HYPOTHESES, CI, protocol)
+  Pi Plan Infrastructure:  1/4  (0=none, 1=adhoc, 2=template, 3=skill-gen, 4=PR+quantified)
+  Cp Cross-Platform:       1    (platform directories)
+  Ad Self-Audit Depth:     3/6  (0=none → 6=CI-scheduled)
+  Ab Abstraction Depth:    2/4  (0=flat → 4=optimizer-uses-audit)
+
+--- Derived Metrics ---
+  Maturity Score:      68/100
+  Trajectory:          10     (>40 growing, 10-40 stable, <10 stalled)
+  Co-Evolution Ratio: 4.50
+
+--- Counts ---
+  Agents: 4  Skills: 18  Files: 675
+================================================================

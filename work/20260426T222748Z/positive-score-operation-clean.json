@@ -1,0 +1,66 @@
+{
+  "score": 25,
+  "max": 26,
+  "verdict": "PASS",
+  "output_dir": "/Users/briancl/repos/repo-optimizer/work/20260426T222748Z/newsletter-optimizer-output-clean",
+  "issues": [],
+  "command_output_roi_receipt": {
+    "generated_at": "2026-04-26T22:57:56Z",
+    "schema_version": "1.0.0",
+    "artifact": "COMMAND_OUTPUT_ROI_RECEIPT",
+    "receipt_id": "repo-optimizer-command-output-roi",
+    "source_benchmark": {
+      "tactic_id": "command_output_roi",
+      "promotion_scope": "fleet-portable",
+      "evidence_ref": "build-meta-analysis:research/reports/provider-neutral-tier3-live-paired-benchmark-2026-04-26.md"
+    },
+    "owner_surface": {
+      "repo": "repo-optimizer",
+      "runtime_surface": "scripts/score-operation.sh",
+      "mode": "optimization output evaluation"
+    },
+    "governed_artifacts": [
+      {
+        "path": "OPTIMIZATION_PLAN.md",
+        "artifact_class": "runtime_plan",
+        "scanned": true
+      },
+      {
+        "path": "OPTIMIZATION_SCORECARD.json",
+        "artifact_class": "machine_summary",
+        "scanned": true
+      },
+      {
+        "path": "critic-verdicts.md",
+        "artifact_class": "critic_output",
+        "scanned": true
+      }
+    ],
+    "allowed_raw_receipt_artifacts": [
+      "optimizer-stdout.txt",
+      "*.jsonl",
+      "RUNTIME_RECEIPTS.json",
+      "critic-phase-receipt.json",
+      "synthesis-phase-receipt.json"
+    ],
+    "verdict": "pass",
+    "raw_transcript_detected": false,
+    "violations": [],
+    "policy": {
+      "summary_required": true,
+      "raw_logs_allowed_in": [
+        "receipt artifacts",
+        "stdout/stderr logs",
+        "raw jsonl transcripts"
+      ],
+      "direct_metric_claim": false,
+      "cache_claim": false
+    },
+    "bounded_non_claims": [
+      "This receipt does not prove cache savings.",
+      "This receipt does not promote provider-scoped prompt/context tactics.",
+      "This receipt does not authorize target-repo mutation."
+    ]
+  },
+  "timestamp": "2026-04-26T22:57:56Z"
+}

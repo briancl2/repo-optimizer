@@ -1,0 +1,41 @@
+=== Capability Drift Report ===
+
+Repo:           briancl2-customer-newsletter
+Tools on disk:  95
+Tools tracked:  66
+Undocumented:   29 (30%)
+Threshold:      20%
+Tracking files: AGENTS.md Makefile README.md makefile
+
+--- Undocumented tools ---
+  ✗ scripts/pre-commit-hook.sh
+  ✗ scripts/pre-push-hook.sh
+  ✗ tools/analyze-newsletters.sh
+  ✗ tools/build_experiment_fixture_manifest.py
+  ✗ tools/build_phase3_working_set.py
+  ✗ tools/build_run_experiment_scorecard.py
+  ✗ tools/collect_product_run_audit.py
+  ✗ tools/extract_discussion_edits.py
+  ✗ tools/extract_event_sources.py
+  ✗ tools/generate_scope_contract.py
+  ✗ tools/init_phase3_curated_sections.py
+  ✗ tools/materialize_committed_product_fixture.sh
+  ✗ tools/materialize_lane_a_phase2_events.py
+  ✗ tools/newsletter_experiment_common.py
+  ✗ tools/product_run_common.py
+  ✗ tools/publish_public_snapshot.sh
+  ✗ tools/record_phase_receipt.sh
+  ✗ tools/render_orchestrated_phase_prompts.sh
+  ✗ tools/render_stage16_fast_newsletter.py
+  ✗ tools/restore_lane_a_frozen_inputs.sh
+  ✗ tools/run_copilot_phase.py
+  ✗ tools/score-automation.sh
+  ✗ tools/score-sprint.sh
+  ✗ tools/score-sync.sh
+  ✗ tools/snapshot_product_run_artifacts.py
+  ✗ tools/test_control_surface_drift.sh
+  ✗ tools/test_experiment_surfaces.sh
+  ✗ tools/test_external_critique_proving_ground.sh
+  ✗ tools/validate_phase3_curated.py
+
+RESULT: FAIL (drift 30% > threshold 20%)

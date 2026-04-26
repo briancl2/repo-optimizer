@@ -1,0 +1,391 @@
+{
+  "repo": "briancl2-customer-newsletter",
+  "repo_path": "/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter",
+  "total_ds": 22,
+  "fired_count": 10,
+  "detection_rate_pct": 45.5,
+  "results": [
+    {
+      "ds_id": "DS-34",
+      "name": "Stale TODO/FIXME",
+      "severity": "LOW",
+      "prevention_tier": "T3",
+      "fired": true,
+      "count": 55,
+      "threshold": 10,
+      "evidence": "/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter/tools/validate_fleet_output.sh:106|/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter/tools/validate_fleet_output.sh:107|/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter/tools/validate_fleet_output.sh:108|/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter/tools/build_phase3_working_set."
+    },
+    {
+      "ds_id": "DS-35",
+      "name": "Unused dependencies",
+      "severity": "MEDIUM",
+      "prevention_tier": "T2",
+      "fired": true,
+      "total_deps": 1,
+      "unused_count": 1,
+      "manifest_type": "requirements.txt",
+      "evidence": "pyyaml not imported; "
+    },
+    {
+      "ds_id": "DS-36",
+      "name": "Green-only CI",
+      "severity": "MEDIUM",
+      "prevention_tier": "T3",
+      "fired": true,
+      "has_ci": true,
+      "ci_type": "github-actions",
+      "failure_handling": 0,
+      "test_commands": 6,
+      "evidence": "CI (github-actions) has test commands but 0 failure handlers"
+    },
+    {
+      "ds_id": "DS-37",
+      "name": "README capability drift",
+      "severity": "MEDIUM",
+      "prevention_tier": "T3",
+      "fired": false,
+      "total_claims": 13,
+      "broken_claims": 0,
+      "evidence": ""
+    },
+    {
+      "ds_id": "DS-38",
+      "name": "Config format proliferation",
+      "severity": "LOW",
+      "prevention_tier": "T3",
+      "fired": false,
+      "formats_found": 2,
+      "threshold": 2,
+      "evidence": "formats: json(82), yaml(3)"
+    },
+    {
+      "ds_id": "DS-39",
+      "name": "Silent error handling",
+      "severity": "MEDIUM",
+      "prevention_tier": "T3",
+      "fired": true,
+      "count": 74,
+      "threshold": 5,
+      "evidence": "/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter/tools/score-sy|/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter/tools/score-au|/tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter/tools/score-au|"
+    },
+    {
+      "ds_id": "DS-40",
+      "name": "Commit message entropy",
+      "severity": "LOW",
+      "prevention_tier": "T3",
+      "fired": false,
+      "has_git": true,
+      "conventional_pct": 14,
+      "trailer_pct": 36,
+      "issue_ref_pct": 0,
+      "evidence": ""
+    },
+    {
+      "ds_id": "DS-41",
+      "name": "Test theater",
+      "severity": "HIGH",
+      "prevention_tier": "T2",
+      "fired": false,
+      "has_tests": false,
+      "test_file_count": 0,
+      "has_runner_ci": true,
+      "has_runner_make": true,
+      "evidence": ""
+    },
+    {
+      "ds_id": "DS-42",
+      "name": "Broken internal links",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": true,
+      "total_links": 12,
+      "broken_count": 6,
+      "evidence": "archive/2026/February_pre-fresh-run/workspace/report_part1.md -> URL; archive/2026/February_pre-fresh-run/workspace/newsletter_system_report_2026-02.md -> URL; archive/2026/February_pre-fresh-run/workspace/report_part3.md -> URL; archive/2026/February_pre-fresh-run/workspace-archived/archived/newsletter_template.md -> URL; archive/2026/February_pre-fresh-run/workspace-archived/archived/newsletter_template.md -> URL1; "
+    },
+    {
+      "ds_id": "DS-43",
+      "name": "Autonomous velocity bypass",
+      "severity": "HIGH",
+      "prevention_tier": "T2",
+      "fired": false,
+      "bypass_count": 0,
+      "total_work_contracts": 0,
+      "evidence": "No work/ directory found - DS not applicable"
+    },
+    {
+      "ds_id": "DS-44",
+      "name": "Closeout control drift",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": false,
+      "work_dirs_scanned": 0,
+      "disposition_gap_count": 0,
+      "helper_drift_count": 0,
+      "telemetry_anomaly_count": 0,
+      "evidence": "No work/ directory found - DS not applicable"
+    },
+    {
+      "ds_id": "DS-45",
+      "name": "Workflow contract drift",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": false,
+      "helper_files_scanned": 35,
+      "surface_files_scanned": 31,
+      "helper_signal_count": 4,
+      "missing_surface_signal_count": 0,
+      "missing_surface_signals": "",
+      "evidence": "helper signals: edit_in_place=>tools/validate_phase3_instruction_contract.py,tools/run_newsletter_orchestrated.sh; scaffold_init=>tools/init_phase3_curated_sections.py,tools/build_phase3_working_set.py,tools/validate_phase3_instruction_contract.py,tools/test_phase3_contracts.sh,tools/run_newsletter_orchestrated.sh,tools/test_phase3_instruction_contract.sh; todo_replacement=>tools/validate_phase3_instruction_contract.py,tools/validate_phase3_curated.py,tools/run_newsletter_orchestrated.sh; workin"
+    },
+    {
+      "ds_id": "DS-46",
+      "name": "LLM-path validation gap",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": true,
+      "workflow_surfaces_count": 38,
+      "validation_files_count": 19,
+      "llm_execution_reference_count": 4,
+      "validator_reference_count": 6,
+      "explicit_gap_text": true,
+      "evidence": "workflow surfaces: .github/agents/editorial-analyst.agent.md,.github/agents/skill-builder.agent.md,.github/agents/customer_newsletter.agent.md,.github/agents/upgrade-advisor.agent.md,.github/prompts/phase_1c_consolidation.prompt.md,.github/prompts/phase_2_events_extraction.prompt.md | validation files: .github/workflows/ci.yml,tools/test_external_critique_proving_ground.sh,tools/test_validator.sh,tools/test_product_run_validation.sh,tools/test_product_run_audit.sh,tools/test_phase3_contracts.sh "
+    },
+    {
+      "ds_id": "DS-47",
+      "name": "Summary-source parity gap",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": false,
+      "files_scanned": 72,
+      "in_scope_file_count": 0,
+      "gap_count": 0,
+      "out_of_scope_count": 0,
+      "evidence": "no summary-source parity surfaces found"
+    },
+    {
+      "ds_id": "AS-01",
+      "family": "AS",
+      "name": "Instruction root drift",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-as-instruction-root-drift.sh",
+      "fired": true,
+      "signals": {
+        "claim_file_count": 8,
+        "distinct_root_count": 12,
+        "claimed_roots": [
+          ".github/prompts/*.prompt.md",
+          ".github/prompts/phase_*.prompt.md",
+          ".github/prompts/phase_1a_url_manifest.prompt.md",
+          ".github/prompts/phase_1b_content_retrieval.prompt.md",
+          ".github/prompts/phase_1c_consolidation.prompt.md",
+          ".github/prompts/phase_2_events_extraction.prompt.md",
+          ".github/prompts/phase_3_content_curation.prompt.md",
+          ".github/prompts/phase_4_final_assembly.prompt.md",
+          ".github/prompts/run_pipeline.prompt.md",
+          "AGENTS.md",
+          "LEARNINGS.md",
+          "README.md"
+        ]
+      },
+      "evidence": ".github/agents/customer_newsletter.agent.md=>.github/prompts/phase_1a_url_manifest.prompt.md,.github/prompts/phase_1b_content_retrieval.prompt.md,.github/prompts/phase_1c_consolidation.prompt.md,.github/prompts/phase_2_events_extraction.prompt.md,.github/prompts/phase_3_content_curation.prompt.md,.github/prompts/phase_4_final_assembly.prompt.md,LEARNINGS.md | .github/prompts/run_pipeline.prompt.md=>LEARNINGS.md | .github/skills/building-skill/SKILL.md=>README.md | .github/skills/editorial-review/SKILL.md=>LEARNINGS.md | .github/skills/testing-prompt-changes/SKILL.md=>.github/prompts/phase_*.prompt.md | AGENTS.md=>AGENTS.md,LEARNINGS.md ...",
+      "reason": "instruction-root claims disagree across surfaces",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-02",
+      "family": "AS",
+      "name": "Docs-vs-observed host drift",
+      "severity": "MEDIUM",
+      "prevention_tier": "T2",
+      "script": "detect-as-docs-vs-observed-host-drift.sh",
+      "fired": true,
+      "signals": {
+        "distinct_host_count": 2,
+        "hosts": [
+          "copilot cli",
+          "vs code"
+        ]
+      },
+      "evidence": "copilot cli=>.github/prompts/research_system_report.prompt.md,.github/skills/content-consolidation/examples/newsletter_phase1a_discoveries_2025-10-06_to_2025-12-02.md,.github/skills/content-curation/SKILL.md | vs code=>.github/prompts/README.md,.github/prompts/phase_1a_url_manifest.prompt.md,.github/prompts/phase_1b_content_retrieval.prompt.md",
+      "reason": "docs disagree about the active host",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-03",
+      "family": "AS",
+      "name": "Missing runtime heartbeat",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-as-missing-runtime-heartbeat.sh",
+      "fired": false,
+      "signals": {
+        "runtime_file_count": 139,
+        "heartbeat_file_count": 5
+      },
+      "evidence": "runtime=>.github/agents/customer_newsletter.agent.md,.github/agents/editorial-analyst.agent.md,.github/prompts/README.md,.github/prompts/phase_1a_url_manifest.prompt.md | heartbeat=>.github/skills/kb-maintenance/SKILL.md,.github/skills/session-log-manager/SKILL.md,.github/skills/session-log-manager/scripts/session-health-check.sh,README.md",
+      "reason": "runtime heartbeat is present or runtime surfaces are absent",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-04",
+      "family": "AS",
+      "name": "Validator live path gap",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-as-validator-live-path-gap.sh",
+      "fired": false,
+      "signals": {
+        "validation_file_count": 138,
+        "live_path_file_count": 111
+      },
+      "evidence": "validation=>.github/agents/customer_newsletter.agent.md,.github/agents/upgrade-advisor.agent.md,.github/prompts/README.md,.github/prompts/phase_1a_url_manifest.prompt.md | live_path=>.github/agents/customer_newsletter.agent.md,.github/agents/skill-builder.agent.md,.github/agents/upgrade-advisor.agent.md,.github/prompts/README.md",
+      "reason": "live path coverage exists or validation surfaces are absent",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-05",
+      "family": "AS",
+      "name": "Memory authority confusion",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-as-memory-authority-confusion.sh",
+      "fired": true,
+      "signals": {
+        "canonical": 17,
+        "memory": 1,
+        "conflicting_memory_claims": 1
+      },
+      "evidence": "canonical=>.github/agents/customer_newsletter.agent.md,.github/prompts/phase_2_events_extraction.prompt.md,.github/prompts/phase_3_content_curation.prompt.md,.github/prompts/run_pipeline.prompt.md | memory=>LEARNINGS.md | memory_authority=>LEARNINGS.md",
+      "reason": "memory-only surfaces also claim authority",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-06",
+      "family": "AS",
+      "name": "Prompt-only optimization surface",
+      "severity": "MEDIUM",
+      "prevention_tier": "T2",
+      "script": "detect-as-prompt-only-optimization-surface.sh",
+      "fired": false,
+      "signals": {
+        "prompt_surface_count": 3,
+        "executed_surface_count": 3
+      },
+      "evidence": "prompt=>.github/prompts/phase_1b_content_retrieval.prompt.md,.github/prompts/phase_1c_consolidation.prompt.md,.github/prompts/research_system_report.prompt.md | exec=>.github/skills/building-skill/scripts/validate_skill.py,.github/skills/kb-maintenance/scripts/check_link_health.py,.github/skills/kb-maintenance/scripts/poll_sources.py",
+      "reason": "optimization language also appears on executable surfaces",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-07",
+      "family": "AS",
+      "name": "Unused platform surface",
+      "severity": "MEDIUM",
+      "prevention_tier": "T2",
+      "script": "detect-as-unused-platform-surface.sh",
+      "fired": true,
+      "signals": {
+        "unreferenced_platform_surface_count": 1,
+        "unreferenced_platform_surfaces": [
+          ".github/workflows"
+        ]
+      },
+      "evidence": ".github/workflows=>unreferenced",
+      "reason": "platform surface exists without registry or invocation documentation",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-08",
+      "family": "AS",
+      "name": "External critique health",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-external-critique-health.sh",
+      "fired": false,
+      "signals": {
+        "responder_truth_file_count": 0,
+        "receipt_output_file_count": 3,
+        "helper_only_file_count": 0,
+        "bounded_calibration_file_count": 0,
+        "validation_file_count": 87
+      },
+      "evidence": "responder_truth=>none | receipt_output=>HYPOTHESES.md,LEARNINGS.md,config/benchmark_lanes/newsletter_recovery_v1.json | helper_only=>none | bounded_calibration=>none | validation=>.github/agents/customer_newsletter.agent.md,.github/prompts/README.md,.github/prompts/phase_1a_url_manifest.prompt.md,.github/prompts/phase_4_final_assembly.prompt.md",
+      "reason": "critique-health mismatch is absent or explicitly grounded",
+      "scanned_files": 200
+    }
+  ],
+  "capability_metadata": {
+    "family_totals": {
+      "DS": {
+        "total": 14,
+        "fired": 6,
+        "signatures": [
+          "DS-34",
+          "DS-35",
+          "DS-36",
+          "DS-37",
+          "DS-38",
+          "DS-39",
+          "DS-40",
+          "DS-41",
+          "DS-42",
+          "DS-43",
+          "DS-44",
+          "DS-45",
+          "DS-46",
+          "DS-47"
+        ]
+      },
+      "AS": {
+        "total": 8,
+        "fired": 4,
+        "signatures": [
+          "AS-01",
+          "AS-02",
+          "AS-03",
+          "AS-04",
+          "AS-05",
+          "AS-06",
+          "AS-07",
+          "AS-08"
+        ]
+      }
+    },
+    "fired_signatures": [
+      "DS-34",
+      "DS-35",
+      "DS-36",
+      "DS-39",
+      "DS-42",
+      "DS-46",
+      "AS-01",
+      "AS-02",
+      "AS-05",
+      "AS-07"
+    ],
+    "signature_order": [
+      "DS-34",
+      "DS-35",
+      "DS-36",
+      "DS-37",
+      "DS-38",
+      "DS-39",
+      "DS-40",
+      "DS-41",
+      "DS-42",
+      "DS-43",
+      "DS-44",
+      "DS-45",
+      "DS-46",
+      "DS-47",
+      "AS-01",
+      "AS-02",
+      "AS-03",
+      "AS-04",
+      "AS-05",
+      "AS-06",
+      "AS-07",
+      "AS-08"
+    ]
+  }
+}

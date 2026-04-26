@@ -1,0 +1,32 @@
+================================================================
+AI Maturity Classification
+================================================================
+Repo:        briancl2-customer-newsletter
+Path:        /tmp/repo-star-roi-newsletter.OTJBiV/briancl2-customer-newsletter
+Files:       675
+
+PHASE:       5 — Self-Improving
+Evidence:    4a, 18s, 13 scorers, self-audit=1, dual-platform=0
+
+--- Surface Inventory ---
+Agents:          4
+Skills:          18
+Scoring tools:   13 (scripts=10, CI=1, Makefile=2, pytest=0)
+Prompts:         8
+Instructions:    0
+
+--- Governance ---
+AGENTS.md:       YES
+CLAUDE.md:       no
+copilot-inst:    no
+HYPOTHESES.md:   YES
+LEARNINGS.md:    YES
+CI pipeline:     YES
+
+--- Maturity Signals ---
+Intelligence:    YES
+Dual platform:   no
+Self-audit:      YES
+DS-8 imported:   no
+Co-Evo Ratio:    4.50 (skills/agents — healthy ≥1.0, stalled <0.2)
+================================================================

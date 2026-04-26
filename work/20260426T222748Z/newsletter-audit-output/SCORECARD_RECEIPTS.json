@@ -1,0 +1,119 @@
+{
+  "meta": {
+    "receipt_version": "1.0.0",
+    "audit_context_id": "standard",
+    "context_manifest": "CONTEXT_SCORE_MANIFEST.json",
+    "compare_oracle_version": "1.0.0",
+    "timestamp": "2026-04-26T22:30:07Z"
+  },
+  "count_reconciliation": {
+    "status": "aligned",
+    "authoritative_total_files": 675,
+    "pre_scan_total_files": 675,
+    "maturity_total_files": 675,
+    "dna_total_files": 675,
+    "note": "maturity.txt, dna.txt, and pre-scan-log.txt agree on the counted file surface used for scorer receipts."
+  },
+  "dimensions": {
+    "D3_skill_maturity": {
+      "score": 13,
+      "fields": {
+        "skill_count": {
+          "raw": 18,
+          "points": 4,
+          "bands": ">=20 => 5, >=10 => 4, >=5 => 3, >=1 => 1"
+        },
+        "density": {
+          "raw": 26,
+          "inputs": {
+            "skill_count": 18,
+            "total_files": 675
+          },
+          "points": 4,
+          "bands": ">=50 => 5, >=20 => 4, >=10 => 3, >=1 => 1"
+        },
+        "velocity": {
+          "raw": 0.00,
+          "points": 0,
+          "bands": ">=1.0 => 5, >=0.5 => 3, >=0.1 => 1"
+        },
+        "organicity": {
+          "raw": 1.00,
+          "points": 5,
+          "bands": ">=0.8 => 5, >=0.5 => 3, >=0.1 => 1"
+        }
+      }
+    },
+    "D4_measurement": {
+      "score": 13,
+      "fields": {
+        "scoring_tools": {
+          "raw": 13,
+          "points": 4,
+          "bands": ">=20 => 5, >=10 => 4, >=5 => 3, >=1 => 1"
+        },
+        "scoring_layers": {
+          "raw": 4,
+          "points": 4,
+          "bands": "direct value capped at 5"
+        },
+        "audit_depth": {
+          "raw": 3,
+          "points": 3,
+          "bands": "direct value capped at 5"
+        },
+        "abstraction": {
+          "raw": 2,
+          "points": 2,
+          "bands": "direct value capped at 5"
+        }
+      }
+    },
+    "D5_self_improvement": {
+      "score": 8,
+      "fields": {
+        "stall_risk": {
+          "raw": 7,
+          "points": 7,
+          "formula": "floor((100 - stall_risk) * 8 / 100)"
+        },
+        "trajectory": {
+          "raw": 10,
+          "points": 0,
+          "formula": "floor(trajectory * 6 / 100)"
+        },
+        "plan_infra": {
+          "raw": 1,
+          "points": 1,
+          "formula": "floor(plan_infra * 3 / 2)"
+        },
+        "spec_bonus": {
+          "raw": 0,
+          "inputs": {
+            "spec_md_count": 0
+          },
+          "points": 0,
+          "bands": ">=5 spec.md => 3, >=3 => 2, >=1 => 1"
+        }
+      }
+    }
+  },
+  "receipt_integrity": {
+    "status": "pass",
+    "required_terms_present": [
+      "D3.skill_count",
+      "D3.density",
+      "D3.velocity",
+      "D3.organicity",
+      "D4.scoring_tools",
+      "D4.scoring_layers",
+      "D4.audit_depth",
+      "D4.abstraction",
+      "D5.stall_risk",
+      "D5.trajectory",
+      "D5.plan_infra",
+      "D5.spec_bonus"
+    ],
+    "missing_terms": []
+  }
+}

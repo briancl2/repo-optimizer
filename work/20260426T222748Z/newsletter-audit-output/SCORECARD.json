@@ -1,0 +1,37 @@
+{
+  "dimensions": {
+    "D1_governance": { "score": 20, "max": 20, "components": { "gov_count": 5, "dna_G": 5 } },
+    "D2_surface_health": { "score": 12, "max": 20, "components": { "surfaces": 31, "total_files": 675, "co_evo": 4.50, "drift_pct": 30 } },
+    "D3_skill_maturity": { "score": 13, "max": 20, "components": { "skill_count": 18, "density": 26, "velocity": 0.00, "organicity": 1.00 } },
+    "D4_measurement": { "score": 13, "max": 20, "components": { "scoring_tools": 13, "scoring_layers": 4, "audit_depth": 3, "abstraction": 2 } },
+    "D5_self_improvement": { "score": 8, "max": 20, "components": { "stall_risk": 7, "trajectory": 10, "plan_infra": 1, "spec_bonus": 0, "spec_md_count": 0 } }
+  },
+  "composite": 66,
+  "max_composite": 100,
+  "receipts": {
+    "file": "SCORECARD_RECEIPTS.json",
+    "version": "1.0.0",
+    "count_reconciliation_status": "aligned"
+  },
+  "tier1_checks": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "failures": []
+  },
+  "tier2_warnings": {
+    "count": 0,
+    "warnings": []
+  },
+  "meta": {
+    "phase": "5 — Self-Improving",
+    "maturity_score": 68,
+    "agents": 4,
+    "skills": 18,
+    "context_id": "standard",
+    "context_manifest": "CONTEXT_SCORE_MANIFEST.json",
+    "compare_oracle_version": "1.0.0",
+    "auditor_version": "2.2",
+    "timestamp": "2026-04-26T22:30:07Z"
+  }
+}

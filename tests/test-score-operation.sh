@@ -34,6 +34,10 @@ STUB_VERDICT=$(echo "$STUB_OUT" | python3 -c "import json,sys; print(json.load(s
 STUB_SCORE=$(echo "$STUB_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['score'])")
 check "Stub verdict != PASS" "true" "$([ "$STUB_VERDICT" != "PASS" ] && echo true || echo false)"
 echo "  (stub scored $STUB_SCORE, verdict=$STUB_VERDICT)"
+STUB_ERR_FILE="$(mktemp "${TMPDIR:-/tmp}/repo-optimizer-scoreop-stderr.XXXXXX")"
+bash "$SCORER" "$SCRIPT_DIR/tests/fixtures/stub-operation" --json >/dev/null 2>"$STUB_ERR_FILE"
+check "Stub scoring has no integer-expression stderr" "false" "$(grep -qi 'integer expression expected' "$STUB_ERR_FILE" && echo true || echo false)"
+rm -f "$STUB_ERR_FILE"
 
 # Test 2: Good fixture should score PASS
 echo ""
@@ -160,6 +164,28 @@ RECEIPT_LOG_VERDICT=$(echo "$RECEIPT_LOG_OUT" | python3 -c "import json,sys; pri
 RECEIPT_LOG_RECEIPT=$(echo "$RECEIPT_LOG_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['command_output_roi_receipt']['verdict'])")
 check "Raw receipt/log fixture verdict = PASS" "PASS" "$RECEIPT_LOG_VERDICT"
 check "Raw receipt/log fixture emits passing ROI receipt" "pass" "$RECEIPT_LOG_RECEIPT"
+
+echo ""
+echo "--- Test 10: Numbered approved headings and domain timeout text stay valid ---"
+NUMBERED_APPROVED="$TMP_ROOT/numbered-approved"
+cp -R "$SCRIPT_DIR/tests/fixtures/good-operation" "$NUMBERED_APPROVED"
+python3 - "$NUMBERED_APPROVED/OPTIMIZATION_PLAN.md" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+text = text.replace("## Approved Findings", "## 2. Approved Findings")
+text = text.replace(" (APPROVED)", "")
+text += "\n\nThis target contains timeout/retry orchestration and error handling recommendations as domain content, not runtime failure evidence.\n"
+path.write_text(text, encoding="utf-8")
+PY
+NUMBERED_APPROVED_OUT=$(bash "$SCORER" "$NUMBERED_APPROVED" --json 2>/dev/null)
+NUMBERED_APPROVED_VERDICT=$(echo "$NUMBERED_APPROVED_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['verdict'])")
+NUMBERED_APPROVED_ISSUES=$(echo "$NUMBERED_APPROVED_OUT" | python3 -c "import json,sys; print('\\n'.join(json.load(sys.stdin)['issues']))")
+check "Numbered approved heading verdict = PASS" "PASS" "$NUMBERED_APPROVED_VERDICT"
+check "Domain timeout text is not runtime timeout" "false" "$(echo "$NUMBERED_APPROVED_ISSUES" | grep -qi 'Timeout or error detected' && echo true || echo false)"
+check "Numbered approved heading counts approved findings" "false" "$(echo "$NUMBERED_APPROVED_ISSUES" | grep -qi '0 approved findings' && echo true || echo false)"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
