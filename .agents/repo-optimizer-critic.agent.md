@@ -22,6 +22,7 @@ constraints:
   - avoid shell loops, command substitution, arithmetic expansion, or parameter expansion
   - return verdict markdown in the final assistant response only
   - do not use shell, heredocs, or execute-tool writes to emit verdicts
+  - summarize command evidence; keep raw stdout/stderr transcripts in receipts or raw logs
 ---
 
 # Repo Optimizer — Adversarial Critic
@@ -43,6 +44,10 @@ For each finding, assess:
 3. **Impact** — Does fixing this genuinely improve the repo, or is it metric-chasing?
 4. **Feasibility** — Can this be addressed in ≤160 net lines per patch?
 5. **Safety** — Does this change risk breaking existing functionality?
+
+Summarize command evidence by naming the command, exit status or outcome, and
+relevant artifact path. Do not paste raw stdout/stderr transcript blocks into
+the critic verdict markdown.
 
 ## Verdict Format
 

@@ -49,6 +49,12 @@ bash scripts/repo-optimizer.sh "$REPO" "$AUDIT_DIR" "$OUTPUT_DIR"
 Do NOT dispatch discovery subagents individually. The bash orchestrator
 manages directory layout and phase sequencing that downstream tools depend on.
 
+Governed optimizer artifacts must summarize command evidence instead of copying
+raw stdout/stderr transcripts. Keep raw logs in `.jsonl`, stdout, or runtime
+receipt artifacts; in `OPTIMIZATION_PLAN.md`, `OPTIMIZATION_SCORECARD.json`,
+and critic/synthesis human outputs, cite only the relevant command, outcome,
+and artifact path.
+
 ## Pipeline (4 phases, ≤45K tokens)
 
 ### Phase 1: Pre-flight

@@ -945,7 +945,7 @@ elif command -v copilot >/dev/null 2>&1; then
     if [ "$OPT_OK" -gt 0 ] && [ -f "$AGENTS_DIR/repo-optimizer-critic.agent.md" ]; then
         echo ""
         echo "  Phase 3: Critic review..."
-        critic_prompt="Read .agents/repo-optimizer-critic.agent.md for instructions. Review all domain findings in $OUTPUT_DIR/payloads/. Use direct read-only commands only; do not use shell loops or command substitution. For each finding, assign verdict: APPROVED, DOWNGRADED, or REJECTED. Must reject at least 1. Return the verdict markdown in your final assistant response only. Do not use shell, heredocs, or execute-tool writes to emit the verdicts; stdout is captured automatically."
+        critic_prompt="Read .agents/repo-optimizer-critic.agent.md for instructions. Review all domain findings in $OUTPUT_DIR/payloads/. Use direct read-only commands only; do not use shell loops or command substitution. For each finding, assign verdict: APPROVED, DOWNGRADED, or REJECTED. Must reject at least 1. Summarize command evidence; keep raw stdout/stderr transcripts in receipts or raw logs. Return the verdict markdown in your final assistant response only. Do not use shell, heredocs, or execute-tool writes to emit the verdicts; stdout is captured automatically."
         critic_ok=false
         if run_copilot_phase_with_receipt \
             "critic" \
@@ -998,7 +998,7 @@ elif command -v copilot >/dev/null 2>&1; then
     if [ "$OPT_OK" -gt 0 ] && [ -f "$AGENTS_DIR/repo-optimizer-synthesis.agent.md" ] && [ "$CRITIC_STATUS" = "completed" ]; then
         echo ""
         echo "  Phase 4: Synthesis..."
-        synth_prompt="Read .agents/repo-optimizer-synthesis.agent.md for instructions. Synthesize all domain findings from $OUTPUT_DIR/payloads/ and critic verdicts from $OUTPUT_DIR/critic-verdicts.md into OPTIMIZATION_PLAN.md. Use direct read-only commands only; avoid shell loops and command substitution. Return the full OPTIMIZATION_PLAN.md markdown in your final assistant response only. Do not use shell, heredocs, or execute-tool writes to create the plan; stdout is captured automatically."
+        synth_prompt="Read .agents/repo-optimizer-synthesis.agent.md for instructions. Synthesize all domain findings from $OUTPUT_DIR/payloads/ and critic verdicts from $OUTPUT_DIR/critic-verdicts.md into OPTIMIZATION_PLAN.md. Use direct read-only commands only; avoid shell loops and command substitution. Summarize command evidence; do not paste raw command transcripts into OPTIMIZATION_PLAN.md. Return the full OPTIMIZATION_PLAN.md markdown in your final assistant response only. Do not use shell, heredocs, or execute-tool writes to create the plan; stdout is captured automatically."
         synth_ok=false
         if run_copilot_phase_with_receipt \
             "synthesis" \

@@ -91,6 +91,12 @@ stdout progress while raw JSONL artifacts are being captured, so outer agent
 shell supervision can keep the public Pattern B run alive until terminal
 artifacts materialize.
 
+Governed optimizer artifacts summarize command evidence instead of copying raw
+stdout/stderr transcripts. `OPTIMIZATION_PLAN.md`,
+`OPTIMIZATION_SCORECARD.json`, and critic/synthesis human outputs should cite
+the relevant command, outcome, and artifact path; raw logs remain in `.jsonl`,
+`optimizer-stdout.txt`, phase receipts, or `RUNTIME_RECEIPTS.json`.
+
 ## Artifact Path Conventions
 
 All outputs go to `$output_dir/`:
