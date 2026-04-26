@@ -43,6 +43,9 @@
           "tactic_id": { "type": "string" },
           "disposition": { "enum": ["promoted", "sandbox-only", "rejected", "not-measured"] },
           "eligible_workload_count": { "type": "integer", "minimum": 0 },
+          "promotion_scope": { "enum": ["none", "provider-scoped", "fleet-portable"] },
+          "fleet_portable": { "type": "boolean" },
+          "provider_strata": { "type": "array" },
           "workload_ids": { "type": "array", "items": { "type": "string" } }
         },
         "additionalProperties": true
@@ -70,6 +73,10 @@
           "bucket": { "type": "string" },
           "tactic_id": { "type": "string" },
           "disposition": { "enum": ["promoted", "sandbox-only", "rejected", "not-measured"] },
+          "provider": { "type": "string" },
+          "harness": { "type": "string" },
+          "model": { "type": "string" },
+          "model_version": { "type": "string" },
           "baseline_input_hash": { "type": ["string", "null"] },
           "candidate_input_hash": { "type": ["string", "null"] },
           "correctness_gate": {

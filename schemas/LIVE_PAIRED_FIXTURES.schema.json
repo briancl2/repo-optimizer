@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Live Paired Fixtures",
+  "type": "object",
+  "required": ["schema_version", "artifact", "fixtures"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "artifact": { "const": "LIVE_PAIRED_FIXTURES" },
+    "corpus_id": { "type": "string" },
+    "target_label": { "type": "string" },
+    "thresholds": { "type": "object" },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "fixture_id",
+          "source_repo",
+          "bucket",
+          "tactic_id",
+          "claim_types",
+          "baseline_prompt",
+          "candidate_prompt"
+        ],
+        "properties": {
+          "fixture_id": { "type": "string", "minLength": 1 },
+          "source_repo": { "type": "string", "minLength": 1 },
+          "bucket": { "type": "string", "minLength": 1 },
+          "tactic_id": { "type": "string", "minLength": 1 },
+          "workload_role": { "type": "string" },
+          "claim_types": {
+            "type": "array",
+            "items": { "enum": ["token", "output_noise", "wall_time"] }
+          },
+          "counts_toward_promotion": { "type": "boolean" },
+          "baseline_prompt": { "type": "string" },
+          "candidate_prompt": { "type": "string" },
+          "required_output_contains": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "forbidden_output_contains": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

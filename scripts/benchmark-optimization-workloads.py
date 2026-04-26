@@ -128,6 +128,16 @@ def bool_field(mapping: dict[str, Any], field: str, default: bool = True) -> boo
 
 
 def claim_token_result(baseline: dict[str, Any], candidate: dict[str, Any], thresholds: dict[str, Any]) -> dict[str, Any]:
+    if baseline.get("input_tokens_source") == "proxy" or candidate.get("input_tokens_source") == "proxy":
+        return {
+            "claim": "token_or_input_size",
+            "measured": False,
+            "passed": False,
+            "delta_tokens": None,
+            "delta_pct": None,
+            "threshold": thresholds["token_or_input_size_delta"],
+            "blocked_reason": "proxy token metrics cannot satisfy direct-token claims",
+        }
     base = as_number(baseline.get("input_tokens"))
     cand = as_number(candidate.get("input_tokens"))
     delta = None if base is None or cand is None else base - cand
@@ -206,6 +216,24 @@ def claim_cache_result(baseline: dict[str, Any], candidate: dict[str, Any]) -> d
     }
 
 
+def provider_stratum(workload: dict[str, Any]) -> dict[str, str]:
+    return {
+        "provider": str(workload.get("provider") or ""),
+        "harness": str(workload.get("harness") or ""),
+        "model": str(workload.get("model") or ""),
+        "model_version": str(workload.get("model_version") or ""),
+    }
+
+
+def provider_stratum_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        str(row.get("provider") or ""),
+        str(row.get("harness") or ""),
+        str(row.get("model") or ""),
+        str(row.get("model_version") or ""),
+    )
+
+
 def paired_variance_ok(workload: dict[str, Any], thresholds: dict[str, Any]) -> bool | None:
     deltas = workload.get("paired_delta_samples")
     observed = as_number(workload.get("observed_mean_delta"))
@@ -255,6 +283,7 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
     reasons: list[str] = []
     claims: list[dict[str, Any]] = []
     variance_ok = None
+    stratum = provider_stratum(workload)
 
     if str(workload.get("admission_status") or "admitted") != "admitted":
         return {
@@ -277,6 +306,7 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
             "variance_gate": {"evaluated": False, "passed": None},
             "measured_metrics": {},
             "claims": [],
+            **stratum,
         }
 
     if target_mutated:
@@ -293,6 +323,9 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
     if live_tier == "tier3" and mode != "live-paired":
         reasons.append("fresh live paired workload requires MODE=live-paired")
     if mode == "live-paired":
+        missing_metadata = [key for key in ("provider", "harness", "model") if not stratum[key].strip()]
+        if missing_metadata:
+            reasons.append(f"live-paired measurement lacks provider metadata: {', '.join(missing_metadata)}")
         run_count = as_number(candidate.get("run_count"))
         if run_count is None or run_count < float(thresholds["llm_backed_run_count"]):
             reasons.append("live-paired measurement lacks the required paired repetition count")
@@ -325,6 +358,7 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
             "variance_gate": {"evaluated": variance_ok is not None, "passed": variance_ok},
             "measured_metrics": {},
             "claims": [],
+            **stratum,
         }
 
     if "token" in claim_types:
@@ -384,6 +418,7 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
         "measured_metrics": compact_claim_metrics(claims),
         "claims": claims,
         "evidence_refs": workload.get("evidence_refs", []),
+        **stratum,
     }
 
 
@@ -413,6 +448,62 @@ def corpus_readiness(corpus: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def rollup_group(tactic: str, tactic_results: list[dict[str, Any]], thresholds: dict[str, Any]) -> dict[str, Any]:
+    min_fixtures = int(thresholds["paired_fixture_count_minimum"])
+    eligible = [
+        result for result in tactic_results
+        if result.get("counts_toward_promotion")
+        and result.get("disposition") in {"promoted", "sandbox-only", "rejected"}
+    ]
+    hard_regressions = [result for result in eligible if result.get("hard_regression")]
+    promoted = [result for result in eligible if result.get("disposition") == "promoted"]
+    sandbox = [result for result in eligible if result.get("disposition") == "sandbox-only"]
+    rejected = [result for result in eligible if result.get("disposition") == "rejected"]
+    not_measured = [
+        result for result in tactic_results
+        if result.get("counts_toward_promotion") and result.get("disposition") == "not-measured"
+    ]
+    proxy_only = [
+        result for result in eligible
+        for claim in result.get("claims", [])
+        if claim.get("proxy_only")
+    ]
+
+    if len(eligible) < min_fixtures:
+        disposition = "not-measured"
+        reason = f"only {len(eligible)} eligible paired fixture(s); requires {min_fixtures}"
+    elif hard_regressions:
+        disposition = "rejected"
+        reason = "one or more eligible workloads violated correctness, closeout truth, target mutation, or wall-time regression gates"
+    elif tactic == "prompt_cache_stability" and proxy_only and not promoted:
+        disposition = "sandbox-only"
+        reason = "cache-readiness improved by proxy, but direct cache telemetry is absent"
+    elif len(promoted) >= 2:
+        disposition = "promoted"
+        reason = "at least two eligible paired workloads cleared material ROI thresholds with no hard regression"
+    elif promoted or sandbox:
+        disposition = "sandbox-only"
+        reason = "some evidence improved, but the tactic did not clear the paired-workload promotion rule"
+    elif rejected:
+        disposition = "rejected"
+        reason = "eligible measured workloads did not clear ROI thresholds"
+    else:
+        disposition = "not-measured"
+        reason = "eligible workloads lacked measurable ROI fields"
+
+    return {
+        "tactic_id": tactic,
+        "disposition": disposition,
+        "reason": reason,
+        "eligible_workload_count": len(eligible),
+        "promoted_workload_count": len(promoted),
+        "sandbox_workload_count": len(sandbox),
+        "rejected_workload_count": len(rejected),
+        "not_measured_workload_count": len(not_measured),
+        "workload_ids": [str(result.get("workload_id")) for result in tactic_results],
+    }
+
+
 def roll_up_tactics(results: list[dict[str, Any]], thresholds: dict[str, Any]) -> list[dict[str, Any]]:
     by_tactic: dict[str, list[dict[str, Any]]] = {}
     for result in results:
@@ -420,62 +511,56 @@ def roll_up_tactics(results: list[dict[str, Any]], thresholds: dict[str, Any]) -
         by_tactic.setdefault(tactic, []).append(result)
 
     rollups: list[dict[str, Any]] = []
-    min_fixtures = int(thresholds["paired_fixture_count_minimum"])
     for tactic, tactic_results in sorted(by_tactic.items()):
-        eligible = [
-            result for result in tactic_results
-            if result.get("counts_toward_promotion")
-            and result.get("disposition") in {"promoted", "sandbox-only", "rejected"}
-        ]
-        hard_regressions = [result for result in eligible if result.get("hard_regression")]
-        promoted = [result for result in eligible if result.get("disposition") == "promoted"]
-        sandbox = [result for result in eligible if result.get("disposition") == "sandbox-only"]
-        rejected = [result for result in eligible if result.get("disposition") == "rejected"]
-        not_measured = [
-            result for result in tactic_results
-            if result.get("counts_toward_promotion") and result.get("disposition") == "not-measured"
-        ]
-        proxy_only = [
-            result for result in eligible
-            for claim in result.get("claims", [])
-            if claim.get("proxy_only")
-        ]
-
-        if len(eligible) < min_fixtures:
-            disposition = "not-measured"
-            reason = f"only {len(eligible)} eligible paired fixture(s); requires {min_fixtures}"
-        elif hard_regressions:
-            disposition = "rejected"
-            reason = "one or more eligible workloads violated correctness, closeout truth, target mutation, or wall-time regression gates"
-        elif tactic == "prompt_cache_stability" and proxy_only and not promoted:
-            disposition = "sandbox-only"
-            reason = "cache-readiness improved by proxy, but direct cache telemetry is absent"
-        elif len(promoted) >= 2:
-            disposition = "promoted"
-            reason = "at least two eligible paired workloads cleared material ROI thresholds with no hard regression"
-        elif promoted or sandbox:
-            disposition = "sandbox-only"
-            reason = "some evidence improved, but the tactic did not clear the paired-workload promotion rule"
-        elif rejected:
-            disposition = "rejected"
-            reason = "eligible measured workloads did not clear ROI thresholds"
-        else:
-            disposition = "not-measured"
-            reason = "eligible workloads lacked measurable ROI fields"
-
-        rollups.append(
-            {
-                "tactic_id": tactic,
-                "disposition": disposition,
-                "reason": reason,
-                "eligible_workload_count": len(eligible),
-                "promoted_workload_count": len(promoted),
-                "sandbox_workload_count": len(sandbox),
-                "rejected_workload_count": len(rejected),
-                "not_measured_workload_count": len(not_measured),
-                "workload_ids": [str(result.get("workload_id")) for result in tactic_results],
-            }
+        rollup = rollup_group(tactic, tactic_results, thresholds)
+        has_provider_strata = any(
+            result.get("provider") or result.get("harness") or result.get("model")
+            for result in tactic_results
         )
+        rollup["promotion_scope"] = "none"
+        rollup["fleet_portable"] = False
+        rollup["provider_strata"] = []
+        if has_provider_strata:
+            by_stratum: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+            for result in tactic_results:
+                by_stratum.setdefault(provider_stratum_key(result), []).append(result)
+            strata = []
+            for key, stratum_results in sorted(by_stratum.items()):
+                stratum_rollup = rollup_group(tactic, stratum_results, thresholds)
+                provider, harness, model, model_version = key
+                stratum_rollup.update(
+                    {
+                        "provider": provider,
+                        "harness": harness,
+                        "model": model,
+                        "model_version": model_version,
+                    }
+                )
+                strata.append(stratum_rollup)
+            promoted_strata = [item for item in strata if item["disposition"] == "promoted"]
+            blocking_strata = [item for item in strata if item["disposition"] in {"rejected", "sandbox-only"}]
+            independent_provider_harness = {
+                (item.get("provider"), item.get("harness"))
+                for item in promoted_strata
+                if item.get("provider") and item.get("harness")
+            }
+            rollup["provider_strata"] = strata
+            if len(independent_provider_harness) >= 2 and not blocking_strata:
+                rollup["disposition"] = "promoted"
+                rollup["promotion_scope"] = "fleet-portable"
+                rollup["fleet_portable"] = True
+                rollup["reason"] = "at least two independent provider/harness strata cleared promotion thresholds without contradictory strata"
+            elif promoted_strata:
+                rollup["disposition"] = "promoted"
+                rollup["promotion_scope"] = "provider-scoped"
+                rollup["fleet_portable"] = False
+                if blocking_strata:
+                    rollup["reason"] = "one or more provider/harness strata promoted, but failed or noisy strata block fleet portability"
+                else:
+                    rollup["reason"] = "one provider/harness/model stratum cleared promotion thresholds; fleet portability requires two independent passing strata"
+            else:
+                rollup["promotion_scope"] = "none"
+        rollups.append(rollup)
     return rollups
 
 
@@ -490,12 +575,12 @@ def markdown_readout(results: dict[str, Any]) -> str:
         "",
         "## Tactic Dispositions",
         "",
-        "| Tactic | Disposition | Eligible | Reason |",
-        "|---|---|---:|---|",
+        "| Tactic | Disposition | Scope | Eligible | Reason |",
+        "|---|---|---|---:|---|",
     ]
     for rollup in results["tactic_rollups"]:
         lines.append(
-            f"| `{rollup['tactic_id']}` | `{rollup['disposition']}` | "
+            f"| `{rollup['tactic_id']}` | `{rollup['disposition']}` | `{rollup.get('promotion_scope', 'none')}` | "
             f"{rollup['eligible_workload_count']} | {rollup['reason']} |"
         )
     lines.extend(["", "## Workload Dispositions", "", "| Workload | Source | Bucket | Disposition | Reason |", "|---|---|---|---|---|"])
@@ -547,6 +632,7 @@ def optimization_plan_markdown(results: dict[str, Any]) -> str:
                     f"- Issue: {rollup['reason']}",
                     "- Fix: Keep the tactic eligible for downstream owner-side consumption after repo-native gates.",
                     f"- Expected impact: {rollup['promoted_workload_count']} retained workload(s) cleared material ROI thresholds",
+                    f"- Promotion scope: {rollup.get('promotion_scope', 'none')}",
                     "",
                 ]
             )
@@ -592,6 +678,8 @@ def optimization_scorecard(results: dict[str, Any]) -> dict[str, Any]:
     rejected = [item for item in rollups if item["disposition"] == "rejected"]
     sandbox = [item for item in rollups if item["disposition"] == "sandbox-only"]
     not_measured = [item for item in rollups if item["disposition"] == "not-measured"]
+    fleet_portable = [item for item in promoted if item.get("fleet_portable")]
+    provider_scoped = [item for item in promoted if item.get("promotion_scope") == "provider-scoped"]
     target_label = str(results.get("target_label") or results["corpus_id"])
     return {
         "findings_total": len(rollups),
@@ -617,6 +705,8 @@ def optimization_scorecard(results: dict[str, Any]) -> dict[str, Any]:
             "sandbox_only_count": len(sandbox),
             "not_measured_count": len(not_measured),
             "blocked_promoted_count": len(blocked_promoted),
+            "fleet_portable_promoted_count": len(fleet_portable),
+            "provider_scoped_promoted_count": len(provider_scoped),
         },
     }
 
@@ -670,6 +760,9 @@ def main() -> int:
         "non_claims": [
             "No target repository mutation is performed by this harness.",
             "Frontier or social evidence is hypothesis fuel only until local paired workload evidence clears thresholds.",
+            "Provider-neutral receipts are the benchmark input contract; Codex, Copilot, VS Code, and future harnesses are adapters.",
+            "Provider-scoped promotion is not fleet portability; fleet-portable promotion requires at least two independent passing provider/harness strata.",
+            "Proxy token metrics are retained for diagnostics only and cannot satisfy direct-token or direct-cost claims.",
             "Stable-prefix metrics are cache-readiness proxies only; direct provider cache telemetry is required for cache-hit savings claims.",
             "Correctness-control workloads protect regressions but do not count as prompt/context ROI proof.",
         ],

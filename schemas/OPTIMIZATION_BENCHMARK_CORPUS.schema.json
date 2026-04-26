@@ -35,7 +35,10 @@
           "target_repo_mutated": { "type": "boolean" },
           "counts_toward_promotion": { "type": "boolean" },
           "provider": { "type": "string" },
+          "harness": { "type": "string" },
           "model": { "type": "string" },
+          "model_version": { "type": "string" },
+          "model_family": { "type": "string" },
           "observed_at": { "type": "string" },
           "prompt_hash": { "type": "string" },
           "fixture_hash": { "type": "string" },
@@ -53,6 +56,7 @@
             "properties": {
               "input_hash": { "type": "string" },
               "input_tokens": { "type": "number" },
+              "input_tokens_source": { "enum": ["direct", "proxy"] },
               "irrelevant_output_bytes": { "type": "number" },
               "wall_time_ms": { "type": "number" },
               "cache_hit_rate_pct": { "type": "number" },
@@ -68,6 +72,7 @@
             "properties": {
               "input_hash": { "type": "string" },
               "input_tokens": { "type": "number" },
+              "input_tokens_source": { "enum": ["direct", "proxy"] },
               "irrelevant_output_bytes": { "type": "number" },
               "wall_time_ms": { "type": "number" },
               "cache_hit_rate_pct": { "type": "number" },

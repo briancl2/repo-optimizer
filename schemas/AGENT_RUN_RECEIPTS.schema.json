@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Run Receipts",
+  "type": "object",
+  "required": ["schema_version", "artifact", "generated_at", "receipts"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "artifact": { "const": "AGENT_RUN_RECEIPTS" },
+    "generated_at": { "type": "string" },
+    "receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "harness",
+          "provider",
+          "model",
+          "model_version",
+          "model_family",
+          "invocation_surface",
+          "fixture_id",
+          "variant",
+          "run_index",
+          "started_at",
+          "completed_at",
+          "wall_time_ms",
+          "prompt_hash",
+          "fixture_hash",
+          "raw_receipt_path",
+          "exit_status",
+          "target_repo_mutated",
+          "correctness_pass",
+          "closeout_truth_pass"
+        ],
+        "properties": {
+          "harness": { "type": "string" },
+          "provider": { "type": "string" },
+          "model": { "type": "string" },
+          "model_version": { "type": "string" },
+          "model_family": { "type": "string" },
+          "invocation_surface": { "type": "string" },
+          "fixture_id": { "type": "string" },
+          "variant": { "enum": ["baseline", "candidate"] },
+          "run_index": { "type": "integer", "minimum": 1 },
+          "started_at": { "type": "string" },
+          "completed_at": { "type": "string" },
+          "wall_time_ms": { "type": "number" },
+          "prompt_hash": { "type": "string" },
+          "fixture_hash": { "type": "string" },
+          "raw_receipt_path": { "type": "string" },
+          "exit_status": { "type": "string" },
+          "target_repo_mutated": { "type": "boolean" },
+          "correctness_pass": { "type": "boolean" },
+          "closeout_truth_pass": { "type": "boolean" },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["value", "source"],
+              "properties": {
+                "value": { "type": "number" },
+                "source": { "enum": ["direct", "proxy"] }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
