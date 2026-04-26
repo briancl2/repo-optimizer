@@ -43,3 +43,7 @@ Write OPTIMIZATION_PLAN.md with:
 5. **Patch Manifest** (if --patch mode) — Files affected, net lines, expected delta
 6. **Expected Impact** — Predicted composite score improvement
 7. **Metadata** — Timestamp, optimizer version, SCORECARD input
+
+Summarize command evidence instead of copying raw stdout/stderr transcripts into
+`OPTIMIZATION_PLAN.md`. Raw logs belong in `.jsonl`, stdout, or runtime receipt
+artifacts; cite only the relevant command, outcome, and artifact path.

@@ -19,6 +19,9 @@ generates unified diff patches validated with `git apply --check`.
 - AGENTS.md is the canonical instruction surface (L104)
 - Target repos are NEVER modified directly — only patches produced
 - Deterministic tests must stay pre-flight-only; use `OPTIMIZER_PREFLIGHT_ONLY=true` when exercising `repo-optimizer.sh` inside the local test suite
+- Governed optimizer artifacts summarize command evidence instead of copying raw
+  command transcripts; raw stdout/stderr stays in `.jsonl`, stdout, and runtime
+  receipt artifacts.
 
 ## Agents (8)
 
