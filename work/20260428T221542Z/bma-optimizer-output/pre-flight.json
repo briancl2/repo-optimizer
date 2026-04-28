@@ -1,0 +1,44 @@
+{
+  "target": "build-meta-analysis",
+  "composite": 72,
+  "bottom_2": [
+    "D2_surface_health",
+    "D3_skill_maturity"
+  ],
+  "bottom_dimensions": [
+    "D2_surface_health",
+    "D3_skill_maturity"
+  ],
+  "all_dimensions": {
+    "D2_surface_health": {
+      "score": 6,
+      "max": 20
+    },
+    "D3_skill_maturity": {
+      "score": 10,
+      "max": 20
+    },
+    "D1_governance": {
+      "score": 18,
+      "max": 20
+    },
+    "D4_measurement": {
+      "score": 19,
+      "max": 20
+    },
+    "D5_self_improvement": {
+      "score": 19,
+      "max": 20
+    }
+  },
+  "patch_mode": false,
+  "budget_tier": "minimal",
+  "file_count": 144885,
+  "discovery_scope": {
+    "tier": "minimal",
+    "eligible_files": 2946,
+    "total_files": 144885,
+    "coverage_pct": 2.0,
+    "scope_description": "Scored-dimension files (bottom-2 focus)"
+  }
+}

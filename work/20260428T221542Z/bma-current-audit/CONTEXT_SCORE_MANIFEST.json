@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0.0",
+  "audit_context_id": "standard",
+  "target_repo_path": "/Users/briancl/repos/build-meta-analysis",
+  "compare_oracle_version": "1.0.0",
+  "auditorignore": {
+    "active": true,
+    "entries": [
+      "data",
+      "docs/archive",
+      "github/agents/archive",
+      "research/archive",
+      "runs",
+      "scripts/archive",
+      "specs/archive",
+      "static",
+      "targets",
+      "work"
+    ]
+  },
+  "git": {
+    "present": true,
+    "toplevel": "/Users/briancl/repos/build-meta-analysis",
+    "head": "990dc5047667efe3a11e4718fee3add4bda40a02",
+    "status_short": [],
+    "root_matches_target": true,
+    "borrowed_parent_git_root": false
+  },
+  "local_artifact_counts": {
+    "work": {
+      "files": 106607,
+      "ignored_by_auditor": true,
+      "counted_in_score_surface": false,
+      "tracked_files": 6505,
+      "local_only_files": 100102
+    },
+    "runs": {
+      "files": 9439,
+      "ignored_by_auditor": true,
+      "counted_in_score_surface": false,
+      "tracked_files": 9397,
+      "local_only_files": 42
+    },
+    "counted_files_total": 0,
+    "counted_local_only_files_total": 0
+  },
+  "portable_authority": {
+    "ready": true,
+    "risks": []
+  },
+  "representativeness": {
+    "enabled": false,
+    "authority_repo_path": "",
+    "ready": false,
+    "risks": [],
+    "notes": []
+  },
+  "preflight_checks": [
+    {
+      "id": "git-root-belongs-to-target",
+      "status": "pass",
+      "detail": "git rev-parse --show-toplevel resolves to the audited repo"
+    },
+    {
+      "id": "local-artifact-volume-emitted",
+      "status": "pass",
+      "detail": "work/ and runs/ file counts are retained in the manifest."
+    },
+    {
+      "id": "portable-authority-readiness",
+      "status": "pass",
+      "detail": "Context is portable for widening authority."
+    }
+  ]
+}

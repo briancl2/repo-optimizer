@@ -1,0 +1,390 @@
+{
+  "repo": "build-meta-analysis",
+  "repo_path": "/Users/briancl/repos/build-meta-analysis",
+  "total_ds": 22,
+  "fired_count": 9,
+  "detection_rate_pct": 40.9,
+  "results": [
+    {
+      "ds_id": "unknown",
+      "fired": false,
+      "error": "script failed"
+    },
+    {
+      "ds_id": "DS-35",
+      "name": "Unused dependencies",
+      "severity": "MEDIUM",
+      "prevention_tier": "T2",
+      "fired": false,
+      "total_deps": 0,
+      "unused_count": 0,
+      "manifest_type": "none",
+      "evidence": ""
+    },
+    {
+      "ds_id": "DS-36",
+      "name": "Green-only CI",
+      "severity": "MEDIUM",
+      "prevention_tier": "T3",
+      "fired": false,
+      "has_ci": true,
+      "ci_type": "github-actions",
+      "failure_handling": 10,
+      "test_commands": 8,
+      "evidence": ""
+    },
+    {
+      "ds_id": "DS-37",
+      "name": "README capability drift",
+      "severity": "MEDIUM",
+      "prevention_tier": "T3",
+      "fired": false,
+      "total_claims": 5,
+      "broken_claims": 1,
+      "evidence": "make health missing; "
+    },
+    {
+      "ds_id": "DS-38",
+      "name": "Config format proliferation",
+      "severity": "LOW",
+      "prevention_tier": "T3",
+      "fired": true,
+      "formats_found": 6,
+      "threshold": 2,
+      "evidence": "formats: json(19653), yaml(196), toml(1), env(3), ini(1), cfg(3)"
+    },
+    {
+      "ds_id": "DS-39",
+      "name": "Silent error handling",
+      "severity": "MEDIUM",
+      "prevention_tier": "T3",
+      "fired": true,
+      "count": 2601,
+      "threshold": 5,
+      "evidence": ""
+    },
+    {
+      "ds_id": "DS-40",
+      "name": "Commit message entropy",
+      "severity": "LOW",
+      "prevention_tier": "T3",
+      "fired": false,
+      "has_git": true,
+      "conventional_pct": 0,
+      "trailer_pct": 92,
+      "issue_ref_pct": 12,
+      "evidence": ""
+    },
+    {
+      "ds_id": "DS-41",
+      "name": "Test theater",
+      "severity": "HIGH",
+      "prevention_tier": "T2",
+      "fired": false,
+      "has_tests": true,
+      "test_file_count": 3371,
+      "has_runner_ci": true,
+      "has_runner_make": true,
+      "evidence": ""
+    },
+    {
+      "ds_id": "DS-42",
+      "name": "Broken internal links",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": false,
+      "total_links": 21,
+      "broken_count": 0,
+      "evidence": ""
+    },
+    {
+      "ds_id": "DS-43",
+      "name": "Autonomous velocity bypass",
+      "severity": "HIGH",
+      "prevention_tier": "T2",
+      "fired": true,
+      "bypass_count": 133,
+      "total_work_contracts": 547,
+      "evidence": "133/547 code-change contracts with velocity bypass: 20260221T230407Z: review=false critique=false hypothesis=true; 20260222T130740Z: review=false critique=false hypothesis=true; 20260222T171841Z: review=false critique=false hypothesis=true; 20260222T190011Z: review=false critique=false hypothesis=true; 20260222T191250Z: review=false critique=false hypothesis=true; 20260223T023147Z: review=false critique=false hypothesis=true; 20260223T124743Z: review=false critique=false hypothesis=true; 2026022"
+    },
+    {
+      "ds_id": "DS-44",
+      "name": "Closeout control drift",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": true,
+      "work_dirs_scanned": 452,
+      "disposition_gap_count": 242,
+      "helper_drift_count": 122,
+      "telemetry_anomaly_count": 0,
+      "evidence": "20260221T213408Z: review/critique receipt present but closeout-disposition.json missing; 20260301T165354Z: review/critique receipt present but closeout-disposition.json missing; 20260301T213509Z: review/critique receipt present but closeout-disposition.json missing; 20260301T213509Z: measurement-summary.json present without closeout-reconciliation.json; 20260301T213509Z: ser-effectivity.json present without closeout-reconciliation.json; 20260302T000450Z: review/critique receipt present but close"
+    },
+    {
+      "ds_id": "DS-45",
+      "name": "Workflow contract drift",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": false,
+      "helper_files_scanned": 5,
+      "surface_files_scanned": 48,
+      "helper_signal_count": 0,
+      "missing_surface_signal_count": 0,
+      "missing_surface_signals": "",
+      "evidence": "no compact phase workflow helper signals found"
+    },
+    {
+      "ds_id": "DS-46",
+      "name": "LLM-path validation gap",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": false,
+      "workflow_surfaces_count": 26,
+      "validation_files_count": 88,
+      "llm_execution_reference_count": 1,
+      "validator_reference_count": 1,
+      "explicit_gap_text": false,
+      "evidence": "workflow surfaces: .github/agents/retro-orchestrator.agent.md,.github/agents/speckit.taskstoissues.agent.md,.github/agents/speckit.tasks.agent.md,.github/agents/plan-agent-opus.agent.md,.github/agents/speckit.checklist.agent.md,.github/agents/speckit.clarify.agent.md | validation files: .github/workflows/audit-experiment.lock.yml,.github/workflows/copilot-setup-steps.yml,.github/workflows/ci.yml,tests/test-128-living-roadmap.sh,tests/test-137-session-usage-cost-foundation.sh,tests/test-132-token"
+    },
+    {
+      "ds_id": "DS-47",
+      "name": "Summary-source parity gap",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "fired": true,
+      "files_scanned": 5207,
+      "in_scope_file_count": 4,
+      "gap_count": 1,
+      "out_of_scope_count": 0,
+      "evidence": "non_hit=>LEARNINGS.md:fields=tool_calls:parity=complete | non_hit=>research/evidence/repo-star-d004-row-authority-confirmation-2026-04-18/repo-auditor-starter-contract.md:fields=total_events,tool_calls,tool_distribution:parity=complete | non_hit=>research/reports/repo-star-d004-row-authority-confirmation-2026-04-18.md:fields=total_events,tool_calls,tool_distribution:parity=complete | gap=>research/reports/april-corpus-detector-input-prerequisite-2026-04-17.md:fields=total_events,tool_calls,tool_"
+    },
+    {
+      "ds_id": "AS-01",
+      "family": "AS",
+      "name": "Instruction root drift",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-as-instruction-root-drift.sh",
+      "fired": true,
+      "signals": {
+        "claim_file_count": 15,
+        "distinct_root_count": 10,
+        "claimed_roots": [
+          ".agents/skills/checking-alignment/SKILL.md",
+          ".agents/skills/retro-orchestrator/SKILL.md",
+          ".agents/skills/reviewing-code-locally/SKILL.md",
+          ".agents/skills/seeking-external-critique/SKILL.md",
+          ".agents/skills/session-end-review/SKILL.md",
+          ".agents/skills/session-log-analysis/SKILL.md",
+          ".specify/memory/constitution.md",
+          "AGENTS.md",
+          "LEARNINGS.md",
+          "README.md"
+        ]
+      },
+      "evidence": ".agents/skills/building-skill/SKILL.md=>AGENTS.md,README.md | .agents/skills/checking-alignment/SKILL.md=>.specify/memory/constitution.md | .agents/skills/parallel-lane-dispatch/SKILL.md=>AGENTS.md,LEARNINGS.md | .agents/skills/parallel-lane-dispatch/examples/parallel-lane-block.md=>AGENTS.md,LEARNINGS.md | .agents/skills/parallel-lane-dispatch/references/shared-surface-hotspots.md=>AGENTS.md,LEARNINGS.md | .agents/skills/retro-orchestrator/SKILL.md=>.agents/skills/session-log-analysis/SKILL.md,LEARNINGS.md ...",
+      "reason": "instruction-root claims disagree across surfaces",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-02",
+      "family": "AS",
+      "name": "Docs-vs-observed host drift",
+      "severity": "MEDIUM",
+      "prevention_tier": "T2",
+      "script": "detect-as-docs-vs-observed-host-drift.sh",
+      "fired": true,
+      "signals": {
+        "distinct_host_count": 3,
+        "hosts": [
+          "codex desktop",
+          "copilot cli",
+          "vs code"
+        ]
+      },
+      "evidence": "codex desktop=>.agents/skills/session-log-analysis/SKILL.md,.agents/skills/session-log-analysis/scripts/parse_session.py,.agents/skills/session-log-manager/SKILL.md | copilot cli=>.agents/skills/auditing-terminal-discipline/SKILL.md,.agents/skills/auditing-terminal-discipline/scripts/audit_terminal.py,.agents/skills/batch-completion-report/SKILL.md | vs code=>.agents/skills/auditing-terminal-discipline/scripts/audit_terminal.py,.agents/skills/building-skill/references/examples.md,.agents/skills/retro-orchestrator/SKILL.md",
+      "reason": "docs disagree about the active host",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-03",
+      "family": "AS",
+      "name": "Missing runtime heartbeat",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-as-missing-runtime-heartbeat.sh",
+      "fired": false,
+      "signals": {
+        "runtime_file_count": 147,
+        "heartbeat_file_count": 12
+      },
+      "evidence": "runtime=>.agents/skills/auditing-terminal-discipline/SKILL.md,.agents/skills/auditing-terminal-discipline/scripts/audit_terminal.py,.agents/skills/batch-completion-report/SKILL.md,.agents/skills/batch-completion-report/references/report-template.md | heartbeat=>.agents/skills/checking-alignment/SKILL.md,.agents/skills/principle-alignment-review/SKILL.md,.agents/skills/reviewing-code-locally/scripts/local_review.sh,.agents/skills/seeking-external-critique/scripts/external_critique.sh",
+      "reason": "runtime heartbeat is present or runtime surfaces are absent",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-04",
+      "family": "AS",
+      "name": "Validator live path gap",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-as-validator-live-path-gap.sh",
+      "fired": false,
+      "signals": {
+        "validation_file_count": 100,
+        "live_path_file_count": 69
+      },
+      "evidence": "validation=>.agents/skills/auditing-terminal-discipline/SKILL.md,.agents/skills/auditing-terminal-discipline/scripts/audit_terminal.py,.agents/skills/batch-completion-report/SKILL.md,.agents/skills/batch-completion-report/references/report-template.md | live_path=>.agents/skills/auditing-terminal-discipline/SKILL.md,.agents/skills/auditing-terminal-discipline/scripts/audit_terminal.py,.agents/skills/batch-completion-report/SKILL.md,.agents/skills/batch-completion-report/references/report-template.md",
+      "reason": "live path coverage exists or validation surfaces are absent",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-05",
+      "family": "AS",
+      "name": "Memory authority confusion",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-as-memory-authority-confusion.sh",
+      "fired": false,
+      "signals": {
+        "canonical": 26,
+        "memory": 0,
+        "conflicting_memory_claims": 0
+      },
+      "evidence": "canonical=>.agents/skills/checking-alignment/SKILL.md,.agents/skills/living-roadmap/SKILL.md,.agents/skills/living-roadmap/references/bootstrap-source-policy.md,.agents/skills/living-roadmap/references/lane-import-contract.md | memory=>none | memory_authority=>none",
+      "reason": "memory surfaces stay separated from live authority claims",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-06",
+      "family": "AS",
+      "name": "Prompt-only optimization surface",
+      "severity": "MEDIUM",
+      "prevention_tier": "T2",
+      "script": "detect-as-prompt-only-optimization-surface.sh",
+      "fired": false,
+      "signals": {
+        "prompt_surface_count": 9,
+        "executed_surface_count": 6
+      },
+      "evidence": "prompt=>.agents/skills/building-skill/references/design-patterns.md,.agents/skills/fleet-dispatch/SKILL.md,.agents/skills/operator-intent-intelligence/scripts/build_operator_intelligence_bundle.py,.agents/skills/scorecard-comparison/SKILL.md | exec=>.agents/skills/batch-completion-report/scripts/generate_report.sh,.agents/skills/building-skill/scripts/validate_skill.py,.agents/skills/living-roadmap/scripts/living_roadmap.py,.agents/skills/operator-intent-intelligence/scripts/build_operator_intelligence_bundle.py",
+      "reason": "optimization language also appears on executable surfaces",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-07",
+      "family": "AS",
+      "name": "Unused platform surface",
+      "severity": "MEDIUM",
+      "prevention_tier": "T2",
+      "script": "detect-as-unused-platform-surface.sh",
+      "fired": true,
+      "signals": {
+        "unreferenced_platform_surface_count": 1,
+        "unreferenced_platform_surfaces": [
+          ".agents"
+        ]
+      },
+      "evidence": ".agents=>unreferenced",
+      "reason": "platform surface exists without registry or invocation documentation",
+      "scanned_files": 200
+    },
+    {
+      "ds_id": "AS-08",
+      "family": "AS",
+      "name": "External critique health",
+      "severity": "HIGH",
+      "prevention_tier": "T1",
+      "script": "detect-external-critique-health.sh",
+      "fired": true,
+      "signals": {
+        "responder_truth_file_count": 1,
+        "receipt_output_file_count": 1,
+        "helper_only_file_count": 1,
+        "bounded_calibration_file_count": 0,
+        "validation_file_count": 44
+      },
+      "evidence": "responder_truth=>.agents/skills/run-quality-battery/SKILL.md | receipt_output=>.github/agents/flywheel.agent.md | helper_only=>.agents/skills/parallel-lane-dispatch/SKILL.md | bounded_calibration=>none | validation=>.agents/skills/auditing-terminal-discipline/SKILL.md,.agents/skills/auditing-terminal-discipline/scripts/audit_terminal.py,.agents/skills/batch-completion-report/SKILL.md,.agents/skills/batch-completion-report/references/report-template.md",
+      "reason": "repo exposes two or more critique-health evidence classes with validation support",
+      "scanned_files": 200
+    }
+  ],
+  "capability_metadata": {
+    "family_totals": {
+      "un": {
+        "total": 1,
+        "fired": 0,
+        "signatures": [
+          "unknown"
+        ]
+      },
+      "DS": {
+        "total": 13,
+        "fired": 5,
+        "signatures": [
+          "DS-35",
+          "DS-36",
+          "DS-37",
+          "DS-38",
+          "DS-39",
+          "DS-40",
+          "DS-41",
+          "DS-42",
+          "DS-43",
+          "DS-44",
+          "DS-45",
+          "DS-46",
+          "DS-47"
+        ]
+      },
+      "AS": {
+        "total": 8,
+        "fired": 4,
+        "signatures": [
+          "AS-01",
+          "AS-02",
+          "AS-03",
+          "AS-04",
+          "AS-05",
+          "AS-06",
+          "AS-07",
+          "AS-08"
+        ]
+      }
+    },
+    "fired_signatures": [
+      "DS-38",
+      "DS-39",
+      "DS-43",
+      "DS-44",
+      "DS-47",
+      "AS-01",
+      "AS-02",
+      "AS-07",
+      "AS-08"
+    ],
+    "signature_order": [
+      "unknown",
+      "DS-35",
+      "DS-36",
+      "DS-37",
+      "DS-38",
+      "DS-39",
+      "DS-40",
+      "DS-41",
+      "DS-42",
+      "DS-43",
+      "DS-44",
+      "DS-45",
+      "DS-46",
+      "DS-47",
+      "AS-01",
+      "AS-02",
+      "AS-03",
+      "AS-04",
+      "AS-05",
+      "AS-06",
+      "AS-07",
+      "AS-08"
+    ]
+  }
+}

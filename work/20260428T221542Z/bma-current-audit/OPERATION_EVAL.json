@@ -1,0 +1,95 @@
+{
+  "score": 22,
+  "max": 22,
+  "verdict": "PASS",
+  "audit_dir": "/Users/briancl/repos/repo-optimizer/work/20260428T221542Z/bma-current-audit",
+  "issues": [],
+  "command_output_roi_receipt": {
+    "generated_at": "2026-04-28T22:20:32Z",
+    "schema_version": "1.0.0",
+    "artifact": "COMMAND_OUTPUT_ROI_RECEIPT",
+    "receipt_id": "repo-auditor-command-output-roi",
+    "source_benchmark": {
+      "tactic_id": "command_output_roi",
+      "promotion_scope": "fleet-portable",
+      "evidence_ref": "build-meta-analysis:research/reports/provider-neutral-tier3-live-paired-benchmark-2026-04-26.md"
+    },
+    "owner_surface": {
+      "repo": "repo-auditor",
+      "runtime_surface": "scripts/score-operation.sh",
+      "mode": "standard/deep audit output evaluation"
+    },
+    "governed_artifacts": [
+      {
+        "path": "AUDIT_REPORT.md",
+        "artifact_class": "human_report",
+        "scanned": true
+      },
+      {
+        "path": "pre-scan/PRE_SCAN.md",
+        "artifact_class": "human_report",
+        "scanned": true
+      },
+      {
+        "path": "maturity.txt",
+        "artifact_class": "other_governed",
+        "scanned": true
+      },
+      {
+        "path": "stall-risk.txt",
+        "artifact_class": "other_governed",
+        "scanned": true
+      },
+      {
+        "path": "dna.txt",
+        "artifact_class": "other_governed",
+        "scanned": true
+      },
+      {
+        "path": "drift.txt",
+        "artifact_class": "other_governed",
+        "scanned": true
+      },
+      {
+        "path": "SCORECARD.json",
+        "artifact_class": "machine_summary",
+        "scanned": true
+      },
+      {
+        "path": "DEEP_FINDINGS.json",
+        "artifact_class": "machine_summary",
+        "scanned": false
+      },
+      {
+        "path": "DS-34-plus-results.json",
+        "artifact_class": "machine_summary",
+        "scanned": true
+      }
+    ],
+    "allowed_raw_receipt_artifacts": [
+      "SCORECARD_RECEIPTS.json",
+      "pre-scan-log.txt",
+      "*.jsonl",
+      "*RECEIPT*.md"
+    ],
+    "verdict": "pass",
+    "raw_transcript_detected": false,
+    "violations": [],
+    "policy": {
+      "summary_required": true,
+      "raw_logs_allowed_in": [
+        "receipt artifacts",
+        "stdout/stderr logs",
+        "raw jsonl transcripts"
+      ],
+      "direct_metric_claim": false,
+      "cache_claim": false
+    },
+    "bounded_non_claims": [
+      "This receipt does not prove cache savings.",
+      "This receipt does not promote provider-scoped prompt/context tactics.",
+      "This receipt does not authorize target-repo mutation."
+    ]
+  },
+  "timestamp": "2026-04-28T22:20:32Z"
+}

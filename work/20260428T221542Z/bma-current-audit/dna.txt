@@ -1,0 +1,26 @@
+================================================================
+Repo DNA Fingerprint: build-meta-analysis
+================================================================
+
+  DNA = [2, 5, 0.4, 7, 0.5, 4, 4, 2, 5, 4]
+
+--- Features ---
+  S  Surface Count:        2    (instruction files)
+  K  Skill Density:        5    (22 skills / 3734 files × 1000)
+  Ao Agent Organicity:    0.4   (organic / total agents)
+  Sc Scoring Layers:       7    (distinct scoring mechanisms)
+  Kv Skill Velocity:      0.5   (recent / total skills)
+  G  Governance:           4/5  (AGENTS.md, LEARNINGS, HYPOTHESES, CI, protocol)
+  Pi Plan Infrastructure:  4/4  (0=none, 1=adhoc, 2=template, 3=skill-gen, 4=PR+quantified)
+  Cp Cross-Platform:       2    (platform directories)
+  Ad Self-Audit Depth:     5/6  (0=none → 6=CI-scheduled)
+  Ab Abstraction Depth:    4/4  (0=flat → 4=optimizer-uses-audit)
+
+--- Derived Metrics ---
+  Maturity Score:      99/100
+  Trajectory:          55     (>40 growing, 10-40 stable, <10 stalled)
+  Co-Evolution Ratio: 1.38
+
+--- Counts ---
+  Agents: 16  Skills: 22  Files: 3734
+================================================================

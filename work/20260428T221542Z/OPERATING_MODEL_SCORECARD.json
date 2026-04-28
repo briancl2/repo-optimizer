@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0.0",
+  "session_id": "20260428T221542Z",
+  "timestamp": "2026-04-28T22:37:16Z",
+  "work_dir": "work/20260428T221542Z",
+  "grader_version": "960f0d3",
+  "dimensions": {
+    "hypothesis_discipline": {
+      "score": 3,
+      "max": 3,
+      "evidence": [
+        "1pt: WORK.md has Prediction filled in",
+        "1pt: PASS/FAIL criteria explicit in WORK.md",
+        "1pt: Hypothesis stated checkbox marked"
+      ]
+    },
+    "gate_integrity": {
+      "score": 3,
+      "max": 4,
+      "evidence": [
+        "1pt: Gate 1 ran (WORK.md + pre-audit/ present)",
+        "0pt: 0/0 session-scoped (0 commits since 960f0d3) commits have trailers",
+        "1pt: No --no-verify detected in session-scoped (0 commits since 960f0d3)",
+        "1pt: Gate 3 ran (post-audit/ present)"
+      ]
+    },
+    "learning_extraction": {
+      "score": 4,
+      "max": 4,
+      "evidence": [
+        "1pt: 1 new L-number entries since baseline",
+        "1pt: New entries use pipe-delimited table format",
+        "1pt: New entries have non-empty source column",
+        "1pt: New entries have non-trivial content (>20 chars)"
+      ]
+    },
+    "self_correction": {
+      "score": 3,
+      "max": 4,
+      "evidence": [
+        "1pt: Review evidence found in work dir",
+        "1pt: Critique evidence found in work dir",
+        "0pt: No fix-related commits in session-scoped (0 commits since 960f0d3)",
+        "1pt: Assessment/scorecard evidence in work dir"
+      ]
+    }
+  },
+  "composite": {
+    "score": 13,
+    "max": 15,
+    "percentage": 86.7
+  },
+  "verdict": "PASS"
+}

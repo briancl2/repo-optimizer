@@ -1,0 +1,17 @@
+================================================================
+Pre-Scan Complete: build-meta-analysis
+================================================================
+Total files:        3734
+Auditorignore:      yes
+AI surfaces:        50 (16a, 22s, 3i, 9p)
+Co-Evolution Ratio: 1.38
+Large files (>200L): 50
+Tier:               xlarge → multi session, budget 500
+AI dump size:       5696 lines, 257219 bytes
+
+Outputs:
+  /Users/briancl/repos/repo-optimizer/work/20260428T221542Z/bma-current-audit/pre-scan/PRE_SCAN.md            (repo structure)
+  /Users/briancl/repos/repo-optimizer/work/20260428T221542Z/bma-current-audit/pre-scan/AI_SURFACES_FULL.md    (full AI surface text)
+  /Users/briancl/repos/repo-optimizer/work/20260428T221542Z/bma-current-audit/pre-scan/LARGE_FILES.md         (files >200L)
+  /Users/briancl/repos/repo-optimizer/work/20260428T221542Z/bma-current-audit/pre-scan/GITIGNORE_ANALYSIS.md  (.gitignore analysis)
+================================================================

@@ -1,0 +1,31 @@
+{
+  "findings_total": 46,
+  "findings_approved": 26,
+  "findings_rejected": 6,
+  "findings_downgraded": 9,
+  "patches_generated": 0,
+  "patches_valid": 0,
+  "expected_delta": 0,
+  "categories": {
+    "decompose": 18,
+    "consolidate": 11,
+    "extract": 11,
+    "standardize": 6
+  },
+  "meta": {
+    "timestamp": "2026-04-28T22:33:47Z",
+    "optimizer_version": "1.0.0",
+    "scorecard_input": "work/20260428T221542Z/bma-current-audit/SCORECARD.json",
+    "target": "build-meta-analysis",
+    "status": "completed",
+    "discovery_ok": 4,
+    "discovery_fail": 0,
+    "critic_status": "completed",
+    "critic_receipt_class": "terminal_markdown_captured",
+    "synthesis_status": "completed",
+    "synthesis_receipt_class": "terminal_markdown_captured",
+    "patch_status": "not_requested",
+    "runtime_receipts": "RUNTIME_RECEIPTS.json",
+    "command_blocked_detected": false
+  }
+}

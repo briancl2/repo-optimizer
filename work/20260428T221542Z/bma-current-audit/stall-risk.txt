@@ -1,0 +1,20 @@
+================================================================
+Stall Risk Score: build-meta-analysis
+================================================================
+
+  SCORE: 6 / 100   🟢 LOW
+
+--- Signal Breakdown ---
+
+  S1 Refactor Ratio:        1/25  (ratio=0.04 , 12/309 commits)
+  S2 Add/Delete Ratio:      0/20  (adr=274.40, +1234258/-4498 lines)
+  S3 Skill Velocity:        0/20  (rate=22.00 skills/mo, 22 skills, 1.0 months)
+  S4 Commit Freq Decay:     0/15  (slope=8.0  , weeks: 59→80→52→83)
+  S5 Plan Infrastructure:   5/10  (infra=5/10)
+  S6 Surface Diversity:     0/10  (types=5/5)
+
+--- Thresholds ---
+  0-20  🟢 Low       21-40 🟡 Watch
+  41-60 🟠 Warning   61-80 🔴 High
+  81-100 🚨 Critical
+================================================================

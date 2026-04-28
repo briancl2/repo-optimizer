@@ -1,0 +1,55 @@
+# Large Files (>200 lines)
+
+| file | lines | type |
+|---|---|---|
+| research/evidence/make-clock-next-session-2026-04-27/last-30d/session-scope.json | 64757 | json |
+| research/evidence/work-closure-makefile-speedup-retrospective-2026-04-28/last-30d/session-scope.json | 62069 | json |
+| research/evidence/closure-gate-delete-merge-analysis-2026-04-28/last-30d/session-scope.json | 61845 | json |
+| research/evidence/make-clock-next-session-2026-04-27/last-7d/session-scope.json | 9695 | json |
+| research/evidence/closure-gate-delete-merge-analysis-2026-04-28/last-7d/session-scope.json | 8533 | json |
+| research/evidence/work-closure-makefile-speedup-retrospective-2026-04-28/last-7d/session-scope.json | 8449 | json |
+| research/evidence/make-gate-frequency-reduction-2026-04-28/pre/last-7d/session-scope.json | 8351 | json |
+| .github/aw/logs/run-22119152406/sandbox/agent/logs/process-1771369352396-130.log | 6315 | log |
+| research/evidence/provider-neutral-tier3-live-paired-benchmark-2026-04-26/agent-run-receipts.json | 6187 | json |
+| scripts/analyze-token-allocation.py | 5614 | py |
+| research/evidence/make-clock-next-session-2026-04-27/last-30d/make-invocations.jsonl | 5579 | jsonl |
+| .github/aw/logs/run-22142651591/sandbox/agent/logs/process-1771423124416-131.log | 5495 | log |
+| research/evidence/make-clock-time-reduction-2026-04-25/last-30d-bma/make-invocations.jsonl | 5357 | jsonl |
+| research/evidence/gpt55-runtime-regression-2026-04-24/command-phase-ledger.csv | 5100 | csv |
+| research/evidence/closure-gate-delete-merge-analysis-2026-04-28/last-30d/make-invocations.jsonl | 4961 | jsonl |
+| research/evidence/work-closure-makefile-speedup-retrospective-2026-04-28/last-30d/make-invocations.jsonl | 4936 | jsonl |
+| research/evidence/make-clock-next-session-2026-04-27/last-30d/session-scope.tsv | 4620 | tsv |
+| research/evidence/work-closure-makefile-speedup-retrospective-2026-04-28/last-30d/session-scope.tsv | 4428 | tsv |
+| research/evidence/closure-gate-delete-merge-analysis-2026-04-28/last-30d/session-scope.tsv | 4412 | tsv |
+| research/evidence/stage17-post-closure-cross-repo-operating-model-retrospective-2026-04-21/host-session-summary.json | 3697 | json |
+| research/evidence/stage17-post-closure-cross-repo-operating-model-retrospective-2026-04-21/combined-session-manifest.csv | 3672 | csv |
+| research/evidence/stage17-post-closure-cross-repo-operating-model-retrospective-2026-04-21/evidence-ledger.csv | 3603 | csv |
+| research/evidence/stage17-post-closure-cross-repo-operating-model-retrospective-2026-04-21/combined-session-corpus.jsonl | 3545 | jsonl |
+| scripts/build-external-critique-audit.py | 3533 | py |
+| .github/aw/logs/run-22142651591/workflow-logs/3_agent.txt | 3518 | txt |
+| research/evidence/stage17-post-closure-cross-repo-operating-model-retrospective-2026-04-21/session-freeze/build-meta-analysis-session-manifest.csv | 3139 | csv |
+| research/evidence/stage17-post-closure-cross-repo-operating-model-retrospective-2026-04-21/session-freeze/build-meta-analysis-session-corpus.jsonl | 3013 | jsonl |
+| research/evidence/agent-practice-frontier-deep-crawl-2026-04-25/x-public-captures/frontier-006.json | 2782 | json |
+| research/evidence/agent-practice-frontier-deep-crawl-2026-04-25/x-public-captures/frontier-007.json | 2600 | json |
+| scripts/run-continuous-loop.sh | 2574 | sh |
+| research/evidence/agent-practice-frontier-deep-crawl-2026-04-25/embedded-link-ledger.json | 2483 | json |
+| research/evidence/agent-practice-frontier-deep-crawl-2026-04-25/x-public-captures/frontier-011.json | 2480 | json |
+| .github/aw/logs/run-22119152406/workflow-logs/0_agent.txt | 2475 | txt |
+| research/evidence/principle-realignment-30d-2026-04-06/session-manifest.csv | 2458 | csv |
+| research/evidence/agent-practice-frontier-deep-crawl-2026-04-25/frontier-deep-crawl-ledger.json | 2338 | json |
+| research/evidence/agent-practice-frontier-deep-crawl-2026-04-25/access-receipts.json | 2254 | json |
+| research/benchmarks/token-efficiency-preservation/token-allocation-report-summary-production-2026-03-17.json | 2246 | json |
+| research/benchmarks/token-efficiency-preservation/token-allocation-report-summary-baseline-2026-03-17.json | 2243 | json |
+| scripts/work-close.sh | 2216 | sh |
+| scripts/build-newsletter-cost-optimization-readiness.py | 2168 | py |
+| tests/test-124-operator-facing-output-gate.sh | 2153 | sh |
+| research/evidence/stage18-feedback-loop-foundation-and-stage17-scope-decision-2026-04-08/session-manifest.csv | 2124 | csv |
+| .agents/skills/living-roadmap/scripts/living_roadmap.py | 1966 | py |
+| research/evidence/agent-practice-frontier-deep-crawl-2026-04-25/x-public-captures/frontier-018.json | 1932 | json |
+| research/evidence/agent-practice-frontier-deep-crawl-2026-04-25/x-public-captures/frontier-026.json | 1923 | json |
+| scripts/build-newsletter-token-cost-analysis.py | 1913 | py |
+| tests/test-128-living-roadmap.sh | 1790 | sh |
+| docs/flywheel-stage-history.md | 1786 | md |
+| scripts/analyze-make-clock-time.py | 1639 | py |
+| scripts/build-principle-realignment-bundle.py | 1611 | py |
+
