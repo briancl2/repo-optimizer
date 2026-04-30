@@ -3,7 +3,7 @@ name: repo-optimizer-synthesis
 description: >
   Synthesize findings from 4 domain optimizers and critic verdicts into
   a cohesive OPTIMIZATION_PLAN.md with prioritized action items.
-model: claude-opus-4.6
+model: claude-opus-4.7
 tools: [read, search]
 stop_rules:
   timeout_seconds: 600

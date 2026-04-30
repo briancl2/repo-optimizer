@@ -76,7 +76,7 @@ bash scripts/repo-optimizer.sh "$REPO" "$AUDIT_DIR" "$OUTPUT_DIR" --patch
 ### Pattern B: Agent (from copilot CLI)
 
 ```bash
-cd ~/repos/repo-optimizer && timeout 600 copilot --model claude-opus-4.6 \
+cd ~/repos/repo-optimizer && timeout 600 copilot --model claude-opus-4.7 \
   -p "Read .agents/repo-optimizer.agent.md. Optimize $REPO. \
       AUDIT_DIR: $AUDIT_DIR. OUTPUT: $OUTPUT_DIR." \
   --allow-all --no-ask-user

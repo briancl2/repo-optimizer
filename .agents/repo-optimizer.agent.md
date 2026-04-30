@@ -4,7 +4,7 @@ description: >
   Produce concrete optimization patches based on SCORECARD.json and
   optional OPPORTUNITIES.md. Report-only by default; patches require
   explicit --patch flag. Adversarial critic is non-negotiable.
-model: claude-opus-4.6
+model: claude-opus-4.7
 tools: [read, search, execute, agent, edit]
 required_context:
   - AGENTS.md

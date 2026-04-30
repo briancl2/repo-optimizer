@@ -3,7 +3,7 @@ name: repo-optimizer-critic
 description: >
   Adversarial critic that approves, downgrades, or rejects findings
   before patch generation. Applies evidence-quality filters and anti-goals.
-model: claude-opus-4.6
+model: claude-opus-4.7
 tools: [read, search]
 stop_rules:
   max_findings_reviewed: 40

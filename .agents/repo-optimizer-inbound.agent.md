@@ -3,7 +3,7 @@ name: repo-optimizer-inbound
 description: >
   Inbound invocation: optimize the current repository. Reads context from pwd,
   resolves skills and scripts from this agent repo.
-model: claude-opus-4.6
+model: claude-opus-4.7
 tools: [read, search, execute]
 stop_rules:
   max_files: 200

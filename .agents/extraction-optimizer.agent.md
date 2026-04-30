@@ -3,7 +3,7 @@ name: extraction-optimizer
 description: >
   Identify inline logic that should be promoted to skills or shared utilities.
   Finds reusable procedures embedded in agent prompts or scripts.
-model: claude-sonnet-4.5
+model: claude-sonnet-4.6
 tools: [read, search, execute]
 stop_rules:
   max_files_scanned: 30

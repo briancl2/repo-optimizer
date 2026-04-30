@@ -23,7 +23,7 @@ from pathlib import Path
 DEFAULT_OLDER_SHA = "12f2b2a334337f9e86de2784a4eed57e548a3eae"
 DEFAULT_REPAIR_SHA = "e114efb"
 DEFAULT_TARGET_SHA = "f31933cda7d297e13d18b7ccca7044d09a8fec43"
-DEFAULT_MODEL = "claude-opus-4.6"
+DEFAULT_MODEL = "claude-opus-4.7"
 WAIT_PATTERN = "Waiting up to 300 seconds for command output"
 ROOT_COMMAND_FAMILY = (
     "bash scripts/repo-optimizer.sh <repo-auditor> <audit-dir> <output-dir> --patch"

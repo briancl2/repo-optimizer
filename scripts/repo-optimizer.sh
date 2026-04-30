@@ -899,7 +899,7 @@ elif command -v copilot >/dev/null 2>&1; then
     PAYLOADS_DIR="$OUTPUT_DIR/payloads"
     mkdir -p "$PAYLOADS_DIR"
 
-    OPT_MODEL="${OPTIMIZER_DEEP_MODEL:-claude-sonnet-4.5}"
+    OPT_MODEL="${OPTIMIZER_DEEP_MODEL:-claude-sonnet-4.6}"
     OPT_TIMEOUT="${OPTIMIZER_TIMEOUT:-180}"
     _to="timeout"; command -v timeout >/dev/null 2>&1 || _to="gtimeout"
     _has_timeout=false; command -v "$_to" >/dev/null 2>&1 && _has_timeout=true
@@ -949,7 +949,7 @@ elif command -v copilot >/dev/null 2>&1; then
         critic_ok=false
         if run_copilot_phase_with_receipt \
             "critic" \
-            "claude-opus-4.6" \
+            "claude-opus-4.7" \
             "$critic_prompt" \
             "$OUTPUT_DIR/critic-verdicts.md" \
             "$OPT_TIMEOUT" \
@@ -1002,7 +1002,7 @@ elif command -v copilot >/dev/null 2>&1; then
         synth_ok=false
         if run_copilot_phase_with_receipt \
             "synthesis" \
-            "claude-opus-4.6" \
+            "claude-opus-4.7" \
             "$synth_prompt" \
             "$OUTPUT_DIR/OPTIMIZATION_PLAN.md" \
             "$OPT_TIMEOUT" \
@@ -1062,7 +1062,7 @@ elif command -v copilot >/dev/null 2>&1; then
 else
     echo "  copilot CLI not available — generating pre-flight stubs only"
     echo "  To run full optimization:"
-    echo "    copilot --model claude-opus-4.6 \\"
+    echo "    copilot --model claude-opus-4.7 \\"
     echo "      -p 'Read .agents/repo-optimizer.agent.md. Run phases 2-4 on target $REPO."
     echo "          SCORECARD at $AUDIT_DIR/SCORECARD.json."
     echo "          Write output to $OUTPUT_DIR/.' \\"

@@ -3,7 +3,7 @@ name: decomposition-optimizer
 description: >
   Identify files >200 lines that should be decomposed into focused components.
   Finds monolithic agents, oversized scripts, and merged concerns.
-model: claude-sonnet-4.5
+model: claude-sonnet-4.6
 tools: [read, search, execute]
 stop_rules:
   max_files_scanned: 30

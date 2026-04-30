@@ -3,7 +3,7 @@ name: standardization-optimizer
 description: >
   Normalize naming conventions, YAML frontmatter, file organization,
   and pattern consistency across the repository.
-model: claude-sonnet-4.5
+model: claude-sonnet-4.6
 tools: [read, search, execute]
 stop_rules:
   max_files_scanned: 30

@@ -3,7 +3,7 @@ name: consolidation-optimizer
 description: >
   Find near-duplicate files, dead code, and merge opportunities.
   Targets copy-paste patterns, unused scripts, and redundant configs.
-model: claude-sonnet-4.5
+model: claude-sonnet-4.6
 tools: [read, search, execute]
 stop_rules:
   max_files_scanned: 30
