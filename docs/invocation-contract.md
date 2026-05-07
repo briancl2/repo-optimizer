@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.4 | Spec: 054 | Date: 2026-04-20
+> Version: 1.5 | Spec: 054 + 003 | Date: 2026-05-07
 
 ## Purpose
 
@@ -13,7 +13,7 @@ agent (copilot CLI). All consumers must follow this contract.
 | Input | Type | Required | Description |
 |---|---|---|---|
 | `repo_path` | filesystem path | YES | Absolute path to target repository |
-| `audit_dir` | filesystem path | YES | Directory containing SCORECARD.json + AUDIT_REPORT.md from repo-auditor |
+| `audit_dir` | filesystem path | YES | Directory containing a completed audit receipt, SCORECARD.json, and AUDIT_REPORT.md from repo-auditor |
 | `output_dir` | filesystem path | NO | Where to write optimization artifacts (default: `optimizer_output`) |
 | `--patch` | flag | NO | Enable patch generation (default: report-only) |
 
@@ -28,7 +28,45 @@ agent (copilot CLI). All consumers must follow this contract.
 | `critic-phase-receipt.json` | YES | Critic phase artifact-contract receipt |
 | `synthesis-phase-receipt.json` | YES | Synthesis phase artifact-contract receipt |
 | `RUNTIME_RECEIPTS.json` | YES | Phase-by-phase runtime status and fail-closed receipts |
+| `audit-admission-receipt.json` | YES | Audit receipt admission verdict before optimizer discovery |
 | `PATCH_PACK/*.patch` | Only with --patch | Unified diff patches |
+
+## Audit Receipt Admission
+
+Normal optimizer runs are strict consumers of repo-auditor completion receipts.
+The optimizer only makes a normal readiness claim when all of these inputs are
+present:
+
+1. `SCORECARD.json`
+2. `AUDIT_REPORT.md`
+3. a completed audit receipt (`AUDIT_RUN_RECEIPT.json`, `AUDIT_RECEIPT.json`, or
+   `SCORECARD_RECEIPTS.json`) whose audit status normalizes to `completed`
+
+Admission outcomes:
+
+| Audit input shape | Normal admission | Receipt behavior |
+|---|---|---|
+| Completed receipt + scorecard + audit report | admitted | `audit-admission-receipt.json` records `admission_status=admitted` and `normal_readiness_claim=true` |
+| Partial receipt | blocked | blocked receipts are written; no normal readiness claim is emitted |
+| Failed receipt | blocked | blocked receipts are written; no normal readiness claim is emitted |
+| Missing receipt | blocked | blocked receipts are written even when legacy `SCORECARD.json` and `AUDIT_REPORT.md` exist |
+| Completed receipt missing `AUDIT_REPORT.md` | blocked | blocked receipts are written because required report materialization is incomplete |
+
+The only non-normal bypass is the explicit calibration mode:
+
+```bash
+REPO_OPTIMIZER_RESEARCH_MODE=partial-audit-calibration \
+  bash scripts/repo-optimizer.sh "$REPO" "$AUDIT_DIR" \
+  "research-mode/partial-audit-calibration/<run-id>"
+```
+
+Research mode must write under an output path containing
+`research-mode/partial-audit-calibration/` and must still carry an audit receipt
+or scorecard audit status that proves an incomplete audit shape. The run records
+`research_mode=partial-audit-calibration` in `pre-flight.json`,
+`OPTIMIZATION_SCORECARD.json`, and `OPERATION_EVAL.json`. Research mode preserves
+partial-audit calibration evidence only; it does not create a normal readiness
+claim.
 
 ## Additive Bounded Consumer
 
@@ -62,6 +100,7 @@ summary instead of collapsing it into one stronger basis claim.
 | 1 | AUDIT_REPORT.md not found in audit_dir |
 | 1 | Target repo path does not exist |
 | 1 | Pre-flight failed |
+| 1 | Audit admission blocked; inspect `audit-admission-receipt.json.blocker.code` |
 
 ## Invocation Patterns
 
@@ -101,6 +140,7 @@ the relevant command, outcome, and artifact path; raw logs remain in `.jsonl`,
 
 All outputs go to `$output_dir/`:
 - `$output_dir/pre-flight.json`
+- `$output_dir/audit-admission-receipt.json`
 - `$output_dir/OPTIMIZATION_PLAN.md`
 - `$output_dir/OPTIMIZATION_SCORECARD.json`
 - `$output_dir/critic-phase-receipt.json`
@@ -133,6 +173,7 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.5 | 2026-05-07 | Added completed/partial/failed audit receipt admission and the explicit partial-audit calibration research mode |
 | 1.4 | 2026-04-20 | Added calibration metadata for transfer-oracle receipts and documented mixed-family calibration-basis summarization |
 | 1.3 | 2026-04-19 | Added proof-boundary metadata to phase and runtime receipts so artifact existence, startability, and phase completion remain distinct |
 | 1.2 | 2026-04-13 | Pattern B contract now requires bounded stdout progress during long Copilot-backed phases so public agent invocations retain terminal artifacts instead of dying in a silent shell wait |

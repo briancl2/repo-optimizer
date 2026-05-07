@@ -28,8 +28,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-LOCKDIR="${LOCKDIR:-/tmp/repo-optimizer-locks}"
+LOCKDIR="${LOCKDIR:-$SCRIPT_DIR/../work/locks}"
 LOCKFILE="$LOCKDIR/$(echo "$TARGET" | tr '/' '_').lock"
+mkdir -p "$LOCKDIR"
 
 PASS=0
 FAIL=0

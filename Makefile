@@ -111,6 +111,7 @@ test:
 	@echo "=== Running optimizer test suite ==="
 	@bash tests/test-critic-rejects.sh
 	@bash tests/test-discovery-payload-capture.sh
+	@bash tests/test-audit-admission.sh
 	@bash tests/test-phase-output-classifier.sh
 	@bash tests/test-transfer-oracle-consumer.sh
 	@bash tests/test-patches-apply.sh

@@ -5,7 +5,7 @@
 #
 # Inputs:
 #   repo_path  — Target repository to optimize
-#   audit_dir  — Directory containing SCORECARD.json + AUDIT_REPORT.md (from repo-auditor)
+#   audit_dir  — Directory containing completed audit receipt + SCORECARD.json + AUDIT_REPORT.md (from repo-auditor)
 #   output_dir — Where to write optimization artifacts (default: optimizer_output)
 #   --patch    — Enable patch generation (default: report-only)
 #
@@ -70,14 +70,8 @@ if [ ! -d "$REPO" ]; then
     exit 1
 fi
 
-if [ ! -f "$AUDIT_DIR/SCORECARD.json" ]; then
-    echo "ERROR: SCORECARD.json not found in $AUDIT_DIR" >&2
-    echo "  Run repo-auditor first: make audit TARGET=$REPO" >&2
-    exit 1
-fi
-
 # ── C4: Shared lockdir (H3 fix: single definition, passed to guard) ──
-LOCKDIR="/tmp/repo-optimizer-locks"
+LOCKDIR="${REPO_OPTIMIZER_LOCKDIR:-$SCRIPT_DIR/../work/locks}"
 
 GUARD_SCRIPT="$SCRIPT_DIR/operation-guard.sh"
 if [ -x "$GUARD_SCRIPT" ]; then
@@ -110,6 +104,7 @@ CRITIC_PHASE_RECEIPT="$OUTPUT_DIR/critic-phase-receipt.json"
 SYNTH_PHASE_RECEIPT="$OUTPUT_DIR/synthesis-phase-receipt.json"
 CRITIC_RECEIPT_CLASS="not_run"
 SYNTH_RECEIPT_CLASS="not_run"
+AUDIT_ADMISSION_RECEIPT="$OUTPUT_DIR/audit-admission-receipt.json"
 
 append_runtime_note() {
     local note="$1"
@@ -574,7 +569,7 @@ PY
 write_runtime_receipts() {
     python3 - "$RUNTIME_RECEIPTS" "$PATCH_MODE" "$PREFLIGHT_ONLY" "$DISCOVERY_OK" "$DISCOVERY_FAIL" \
         "$PATCH_STATUS" "$COMMAND_BLOCKED" "$PATCHES_VALID" "$DISCOVERY_CONTEXT_FILE" "$RUNTIME_NOTES" \
-        "$CRITIC_PHASE_RECEIPT" "$SYNTH_PHASE_RECEIPT" <<'PY'
+        "$CRITIC_PHASE_RECEIPT" "$SYNTH_PHASE_RECEIPT" "$AUDIT_ADMISSION_RECEIPT" <<'PY'
 from __future__ import annotations
 
 import hashlib
@@ -596,7 +591,8 @@ from pathlib import Path
     runtime_notes,
     critic_receipt_file,
     synth_receipt_file,
-) = sys.argv[1:13]
+    audit_admission_file,
+) = sys.argv[1:14]
 
 notes = [note.strip() for note in runtime_notes.split(";") if note.strip()]
 
@@ -614,6 +610,10 @@ def load_receipt(path_str: str, phase: str) -> dict:
 
 critic_receipt = load_receipt(critic_receipt_file, "critic")
 synth_receipt = load_receipt(synth_receipt_file, "synthesis")
+audit_admission = {}
+audit_admission_path = Path(audit_admission_file)
+if audit_admission_path.exists():
+    audit_admission = json.loads(audit_admission_path.read_text(encoding="utf-8"))
 
 
 def stable_fingerprint(payload: dict[str, object]) -> str:
@@ -646,6 +646,9 @@ payload = {
     "preflight_only": preflight_only == "true",
     "command_blocked_detected": command_blocked == "true",
     "discovery_context_file": discovery_context_file,
+    "audit_admission": audit_admission,
+    "normal_readiness_claim": bool(audit_admission.get("normal_readiness_claim")),
+    "research_mode": audit_admission.get("research_mode"),
     "phases": {
         "discovery": {
             "ok_count": int(discovery_ok),
@@ -671,6 +674,11 @@ payload = {
                 "patch_status": patch_status,
                 "critic": critic_boundary,
                 "synthesis": synth_boundary,
+                "audit_admission": {
+                    "admission_status": audit_admission.get("admission_status"),
+                    "normal_readiness_claim": audit_admission.get("normal_readiness_claim"),
+                    "research_mode": audit_admission.get("research_mode"),
+                },
             }
         ),
         "phase_classification_evidence": {
@@ -706,6 +714,31 @@ payload = {
 Path(out_path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
 }
+
+ADMISSION_RC=0
+python3 "$SCRIPT_DIR/audit-admission.py" evaluate \
+    --audit-dir "$AUDIT_DIR" \
+    --output-dir "$OUTPUT_DIR" \
+    --research-mode "${REPO_OPTIMIZER_RESEARCH_MODE:-}" > "$AUDIT_ADMISSION_RECEIPT" || ADMISSION_RC=$?
+ADMISSION_STATUS="$(phase_receipt_field "$AUDIT_ADMISSION_RECEIPT" "admission_status")"
+ADMISSION_RESEARCH_MODE="$(phase_receipt_field "$AUDIT_ADMISSION_RECEIPT" "research_mode")"
+if [ -z "$ADMISSION_STATUS" ] || { [ "$ADMISSION_RC" -ne 0 ] && [ "$ADMISSION_STATUS" != "blocked" ]; }; then
+    echo "ERROR: Audit admission receipt was malformed or unavailable. Aborting fail-closed." >&2
+    exit 1
+fi
+if [ "$ADMISSION_STATUS" = "blocked" ]; then
+    echo "ERROR: Audit admission blocked optimizer run." >&2
+    python3 "$SCRIPT_DIR/audit-admission.py" write-blocked \
+        --admission-receipt "$AUDIT_ADMISSION_RECEIPT" \
+        --output-dir "$OUTPUT_DIR" \
+        --repo-name "$REPO_NAME" \
+        --patch-mode "$PATCH_MODE" \
+        --preflight-only "$PREFLIGHT_ONLY"
+    exit 1
+fi
+if [ "$ADMISSION_STATUS" = "research_admitted" ]; then
+    append_runtime_note "research mode admitted audit calibration path: $ADMISSION_RESEARCH_MODE"
+fi
 
 echo "================================================================"
 echo "Repo Optimizer: $REPO_NAME"
@@ -804,24 +837,33 @@ print()
 if len(scores) >= 2:
     print(f'  Bottom 2: {scores[0][0]} ({scores[0][1]}/{scores[0][2]}), {scores[1][0]} ({scores[1][1]}/{scores[1][2]})')
     # Write pre-flight context
+    with open('$AUDIT_ADMISSION_RECEIPT') as admission_file:
+        audit_admission = json.load(admission_file)
+    normal_readiness_claim = bool(audit_admission.get('normal_readiness_claim'))
+    research_mode = audit_admission.get('research_mode')
+    preflight = {
+        'target': '$REPO_NAME',
+        'composite': data.get('composite', 0),
+        'bottom_2': [scores[0][0], scores[1][0]],
+        'bottom_dimensions': [scores[0][0], scores[1][0]],
+        'all_dimensions': {s[0]: {'score': s[1], 'max': s[2]} for s in scores},
+        'patch_mode': $( [ "$PATCH_MODE" = "true" ] && echo "True" || echo "False" ),
+        'budget_tier': '$BUDGET_TIER',
+        'file_count': $FILE_COUNT,
+        'discovery_scope': {
+            'tier': '$BUDGET_TIER',
+            'eligible_files': $ELIGIBLE_FILES,
+            'total_files': $FILE_COUNT,
+            'coverage_pct': $COVERAGE_PCT,
+            'scope_description': '$SCOPE_DESC'
+        },
+        'audit_admission': audit_admission,
+        'normal_readiness_claim': normal_readiness_claim
+    }
+    if research_mode:
+        preflight['research_mode'] = research_mode
     with open('$OUTPUT_DIR/pre-flight.json', 'w') as f:
-        json.dump({
-            'target': '$REPO_NAME',
-            'composite': data.get('composite', 0),
-            'bottom_2': [scores[0][0], scores[1][0]],
-            'bottom_dimensions': [scores[0][0], scores[1][0]],
-            'all_dimensions': {s[0]: {'score': s[1], 'max': s[2]} for s in scores},
-            'patch_mode': $( [ "$PATCH_MODE" = "true" ] && echo "True" || echo "False" ),
-            'budget_tier': '$BUDGET_TIER',
-            'file_count': $FILE_COUNT,
-            'discovery_scope': {
-                'tier': '$BUDGET_TIER',
-                'eligible_files': $ELIGIBLE_FILES,
-                'total_files': $FILE_COUNT,
-                'coverage_pct': $COVERAGE_PCT,
-                'scope_description': '$SCOPE_DESC'
-            }
-        }, f, indent=2)
+        json.dump(preflight, f, indent=2)
         print(f'  Pre-flight context → $OUTPUT_DIR/pre-flight.json')
 " 2>/dev/null || echo "  WARNING: Could not parse SCORECARD.json"
 
@@ -1174,6 +1216,8 @@ import pathlib
 import re
 with open('$OUTPUT_DIR/pre-flight.json') as f:
     preflight = json.load(f)
+audit_admission = preflight.get('audit_admission', {})
+research_mode = preflight.get('research_mode') or audit_admission.get('research_mode')
 
 payload_dir = pathlib.Path('$OUTPUT_DIR/payloads')
 critic_path = pathlib.Path('$OUTPUT_DIR/critic-verdicts.md')
@@ -1234,6 +1278,9 @@ scorecard = {
     'patches_valid': $PATCHES_VALID,
     'expected_delta': 0,
     'categories': categories,
+    'audit_admission': audit_admission,
+    'normal_readiness_claim': bool(audit_admission.get('normal_readiness_claim')),
+    'research_mode': research_mode,
     'meta': {
         'timestamp': '$(date -u +%Y-%m-%dT%H:%M:%SZ)',
         'optimizer_version': '1.0.0',
@@ -1256,7 +1303,10 @@ scorecard = {
         'synthesis_receipt_class': '$SYNTH_RECEIPT_CLASS',
         'patch_status': '$PATCH_STATUS',
         'runtime_receipts': 'RUNTIME_RECEIPTS.json',
-        'command_blocked_detected': '$COMMAND_BLOCKED' == 'true'
+        'command_blocked_detected': '$COMMAND_BLOCKED' == 'true',
+        'audit_admission_status': audit_admission.get('admission_status'),
+        'normal_readiness_claim': bool(audit_admission.get('normal_readiness_claim')),
+        'research_mode': research_mode
     }
 }
 with open('$OUTPUT_DIR/OPTIMIZATION_SCORECARD.json', 'w') as f:

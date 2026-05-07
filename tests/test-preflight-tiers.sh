@@ -32,6 +32,15 @@ check() {
     fi
 }
 
+init_target_repo() {
+    local repo="$1"
+    git -C "$repo" init -q
+    git -C "$repo" config user.email "test@example.com"
+    git -C "$repo" config user.name "Test User"
+    git -C "$repo" add .
+    git -C "$repo" commit -q -m "init target fixture"
+}
+
 echo "=== Pre-flight Budget Tier Tests ==="
 
 # Create synthetic SCORECARD.json
@@ -53,6 +62,8 @@ data = {
 with open('$AUDIT_DIR/SCORECARD.json', 'w') as f:
     json.dump(data, f, indent=2)
 "
+printf '%s\n' '# Synthetic Audit Report' '' 'Completed audit fixture for optimizer pre-flight tests.' > "$AUDIT_DIR/AUDIT_REPORT.md"
+printf '%s\n' '{' '  "status": "completed"' '}' > "$AUDIT_DIR/AUDIT_RUN_RECEIPT.json"
 
 # --- Test 1: Full tier (<200 files) ---
 echo ""
@@ -66,6 +77,7 @@ done
 mkdir -p "$REPO_FULL/.agents"
 echo "agent" > "$REPO_FULL/AGENTS.md"
 echo "readme" > "$REPO_FULL/README.md"
+init_target_repo "$REPO_FULL"
 
 OUTPUT_FULL="$TEST_DIR/out-full"
 check env OPTIMIZER_PREFLIGHT_ONLY=true bash "$OPT_DIR/scripts/repo-optimizer.sh" "$REPO_FULL" "$AUDIT_DIR" "$OUTPUT_FULL"
@@ -94,6 +106,7 @@ for i in $(seq 1 500); do
     echo "content $i" > "$REPO_FOCUSED/file-$i.txt"
 done
 echo "agent" > "$REPO_FOCUSED/AGENTS.md"
+init_target_repo "$REPO_FOCUSED"
 
 OUTPUT_FOCUSED="$TEST_DIR/out-focused"
 check env OPTIMIZER_PREFLIGHT_ONLY=true bash "$OPT_DIR/scripts/repo-optimizer.sh" "$REPO_FOCUSED" "$AUDIT_DIR" "$OUTPUT_FOCUSED"
@@ -123,6 +136,7 @@ for i in $(seq 1 1100); do
 done
 echo "agent" > "$REPO_MINIMAL/AGENTS.md"
 echo "makefile" > "$REPO_MINIMAL/Makefile"
+init_target_repo "$REPO_MINIMAL"
 
 OUTPUT_MINIMAL="$TEST_DIR/out-minimal"
 check env OPTIMIZER_PREFLIGHT_ONLY=true bash "$OPT_DIR/scripts/repo-optimizer.sh" "$REPO_MINIMAL" "$AUDIT_DIR" "$OUTPUT_MINIMAL"
