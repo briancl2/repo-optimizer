@@ -44,6 +44,11 @@ PY
 TARGET_REPO="$TEST_DIR/target-repo"
 mkdir -p "$TARGET_REPO"
 printf '# Target Repo\n' > "$TARGET_REPO/AGENTS.md"
+git -C "$TARGET_REPO" init -q
+git -C "$TARGET_REPO" config user.email "test@example.com"
+git -C "$TARGET_REPO" config user.name "Test User"
+git -C "$TARGET_REPO" add AGENTS.md
+git -C "$TARGET_REPO" commit -q -m "init target fixture"
 
 AUDIT_DIR="$TEST_DIR/audit"
 mkdir -p "$AUDIT_DIR"
@@ -67,6 +72,8 @@ payload = {
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(payload, handle, indent=2)
 PY
+printf '%s\n' '# Synthetic Audit Report' '' 'Completed audit fixture for discovery payload capture.' > "$AUDIT_DIR/AUDIT_REPORT.md"
+printf '%s\n' '{' '  "status": "completed"' '}' > "$AUDIT_DIR/AUDIT_RUN_RECEIPT.json"
 
 FAKE_BIN="$TEST_DIR/bin"
 mkdir -p "$FAKE_BIN"

@@ -504,7 +504,24 @@ print(json.dumps(lines))
     if [ "${COMMAND_OUTPUT_RC:-0}" -ne 0 ]; then VERDICT="FAIL"; fi
 
     COMMAND_OUTPUT_ROI_RECEIPT="$COMMAND_OUTPUT_ROI_RECEIPT" python3 -c "
-import json, os, sys
+import json, os, pathlib, sys
+root = pathlib.Path('$OPT_DIR')
+audit_admission = {}
+for rel in ('audit-admission-receipt.json', 'pre-flight.json', 'OPTIMIZATION_SCORECARD.json'):
+    path = root / rel
+    if not path.is_file():
+        continue
+    try:
+        payload = json.loads(path.read_text(encoding='utf-8'))
+    except Exception:
+        continue
+    if rel == 'audit-admission-receipt.json':
+        audit_admission = payload
+    elif isinstance(payload.get('audit_admission'), dict):
+        audit_admission = payload['audit_admission']
+    if audit_admission:
+        break
+research_mode = audit_admission.get('research_mode')
 result = {
     'score': $SCORE,
     'max': $MAX,
@@ -512,6 +529,9 @@ result = {
     'output_dir': '$OPT_DIR',
     'issues': $ISSUES_JSON,
     'command_output_roi_receipt': json.loads(os.environ.get('COMMAND_OUTPUT_ROI_RECEIPT') or '{}'),
+    'audit_admission': audit_admission,
+    'normal_readiness_claim': bool(audit_admission.get('normal_readiness_claim')),
+    'research_mode': research_mode,
     'timestamp': __import__('datetime').datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 }
 json.dump(result, sys.stdout, indent=2)
