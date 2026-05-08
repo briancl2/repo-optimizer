@@ -101,7 +101,7 @@ def compute_coverage(output_dir: Path, args: argparse.Namespace, scorecard: dict
         path = payload_dir / filename
         rows = table_rows(path)
         domain_rows[domain] = rows
-        categories.setdefault(category, rows)
+        categories[category] = rows
         if payload_materialized(path):
             completed_domains.append(domain)
 
