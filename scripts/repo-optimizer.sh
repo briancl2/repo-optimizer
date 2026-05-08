@@ -1314,6 +1314,18 @@ with open('$OUTPUT_DIR/OPTIMIZATION_SCORECARD.json', 'w') as f:
 print('  ✅ OPTIMIZATION_SCORECARD.json written')
 " 2>/dev/null || echo "  WARNING: Could not write OPTIMIZATION_SCORECARD.json"
 
+if [ -s "$OUTPUT_DIR/OPTIMIZATION_SCORECARD.json" ]; then
+    python3 "$SCRIPT_DIR/coverage-verdict.py" apply \
+        --output-dir "$OUTPUT_DIR" \
+        --preflight-only "$PREFLIGHT_ONLY" \
+        --discovery-ok "$DISCOVERY_OK" \
+        --discovery-fail "$DISCOVERY_FAIL" \
+        --critic-status "$CRITIC_STATUS" \
+        --synthesis-status "$SYNTH_STATUS" \
+        --patch-status "$PATCH_STATUS"
+    echo "  ✅ coverage verdict applied"
+fi
+
 echo "  ✅ OPTIMIZATION_PLAN.md written"
 echo ""
 echo "================================================================"

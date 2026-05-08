@@ -47,6 +47,93 @@
       "type": "integer",
       "description": "Expected composite score improvement"
     },
+    "coverage_verdict": {
+      "type": "string",
+      "enum": ["complete", "partial", "blocked", "pass_with_coverage_gap"],
+      "description": "Additive discovery-coverage verdict; does not replace ROI, receipt, or score trend fields"
+    },
+    "recommendation_strength": {
+      "type": "string",
+      "enum": ["strong", "limited", "diagnostic", "none"],
+      "description": "Maximum supported recommendation strength after applying discovery coverage constraints"
+    },
+    "discovery_coverage": {
+      "type": "object",
+      "description": "Domain coverage metadata for the four optimizer discovery domains",
+      "properties": {
+        "coverage_verdict": {
+          "type": "string",
+          "enum": ["complete", "partial", "blocked", "pass_with_coverage_gap"]
+        },
+        "schema_version": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "coverage_reason": { "type": "string" },
+        "recommendation_strength": {
+          "type": "string",
+          "enum": ["strong", "limited", "diagnostic", "none"]
+        },
+        "expected_domains": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "completed_domains": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "missing_domains": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "completed_count": { "type": "integer", "minimum": 0 },
+        "missing_count": { "type": "integer", "minimum": 0 },
+        "expected_count": { "type": "integer", "minimum": 0 },
+        "coverage_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "domain_finding_rows": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "discovery_attempted": { "type": "boolean" },
+        "preflight_only": { "type": "boolean" },
+        "critic_status": { "type": "string" },
+        "synthesis_status": { "type": "string" },
+        "patch_status": { "type": "string" },
+        "bounded_non_claims": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "finding_count_agreement": {
+      "type": "object",
+      "description": "Agreement check between the deterministic human plan coverage section and JSON finding counts",
+      "properties": {
+        "source": { "type": "string" },
+        "plan_declared_counts": {
+          "type": ["object", "null"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "approved": { "type": "integer", "minimum": 0 },
+            "rejected": { "type": "integer", "minimum": 0 },
+            "downgraded": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "scorecard_counts": {
+          "type": "object",
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "approved": { "type": "integer", "minimum": 0 },
+            "rejected": { "type": "integer", "minimum": 0 },
+            "downgraded": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "matches_scorecard": { "type": "boolean" }
+      }
+    },
+    "bounded_non_claims": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Non-claims that bound partial coverage outputs"
+    },
     "categories": {
       "type": "object",
       "description": "Finding counts per optimization category",

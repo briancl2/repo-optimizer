@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.5 | Spec: 054 + 003 | Date: 2026-05-07
+> Version: 1.6 | Spec: 054 + 003 + 004 | Date: 2026-05-08
 
 ## Purpose
 
@@ -30,6 +30,11 @@ agent (copilot CLI). All consumers must follow this contract.
 | `RUNTIME_RECEIPTS.json` | YES | Phase-by-phase runtime status and fail-closed receipts |
 | `audit-admission-receipt.json` | YES | Audit receipt admission verdict before optimizer discovery |
 | `PATCH_PACK/*.patch` | Only with --patch | Unified diff patches |
+
+`OPTIMIZATION_SCORECARD.json`, `RUNTIME_RECEIPTS.json`, `OPERATION_EVAL.json`,
+and the deterministic coverage section in `OPTIMIZATION_PLAN.md` carry additive
+coverage verdict metadata. These fields do not replace ROI scoring, receipt
+status, score trends, or existing finding counts.
 
 ## Audit Receipt Admission
 
@@ -67,6 +72,31 @@ or scorecard audit status that proves an incomplete audit shape. The run records
 `OPTIMIZATION_SCORECARD.json`, and `OPERATION_EVAL.json`. Research mode preserves
 partial-audit calibration evidence only; it does not create a normal readiness
 claim.
+
+## Coverage-Aware Optimizer Verdicts
+
+Optimizer outputs include an additive discovery-coverage verdict:
+
+| Verdict | Meaning | Recommendation strength |
+|---|---|---|
+| `complete` | All four discovery domains produced payloads and downstream critic/synthesis completed | `strong` |
+| `pass_with_coverage_gap` | A plan materialized but at least one discovery domain is missing | `limited` |
+| `partial` | Discovery was intentionally skipped or downstream phases did not fully complete | `diagnostic` |
+| `blocked` | No discovery domain completed, or audit admission blocked before discovery | `none` |
+
+The expected discovery domains are `decomposition`, `consolidation`,
+`extraction`, and `standardization`. Missing domains are listed in
+`discovery_coverage.missing_domains`; any missing domain constrains
+`recommendation_strength` below `strong` and emits bounded non-claims that the
+run did not observe complete discovery coverage and may have missed
+higher-priority opportunities. Coverage verdicts are P3 discovery-coverage
+metadata only: they do not implement Phase 3 target-policy/P4, P5 cleanup, P7
+denominator measurement, or repo-agent-core shared schema changes.
+
+The optimizer also writes a deterministic `## Coverage Verdict` section in
+`OPTIMIZATION_PLAN.md` with machine finding counts. The
+`finding_count_agreement` object in `OPTIMIZATION_SCORECARD.json` records whether
+those plan-declared counts match the JSON scorecard counts.
 
 ## Additive Bounded Consumer
 
@@ -173,6 +203,7 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.6 | 2026-05-08 | Added additive coverage verdict metadata, missing-domain recommendation constraints, and plan/scorecard finding-count agreement |
 | 1.5 | 2026-05-07 | Added completed/partial/failed audit receipt admission and the explicit partial-audit calibration research mode |
 | 1.4 | 2026-04-20 | Added calibration metadata for transfer-oracle receipts and documented mixed-family calibration-basis summarization |
 | 1.3 | 2026-04-19 | Added proof-boundary metadata to phase and runtime receipts so artifact existence, startability, and phase completion remain distinct |
