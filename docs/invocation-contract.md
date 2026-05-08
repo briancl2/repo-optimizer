@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.7 | Spec: 054 + 003 + 004 + 005 | Date: 2026-05-08
+> Version: 1.8 | Spec: 054 + 003 + 004 + 005 + 006 | Date: 2026-05-08
 
 ## Purpose
 
@@ -23,8 +23,9 @@ agent (copilot CLI). All consumers must follow this contract.
 |---|---|---|
 | `OPTIMIZATION_PLAN.md` | YES | Human-readable optimization plan |
 | `OPTIMIZATION_SCORECARD.json` | YES | Machine-readable scoring of optimization |
-| `pre-flight.json` | YES | Pre-flight analysis (budget tier, bottom-2 dimensions) |
+| `pre-flight.json` | YES | Pre-flight analysis (budget tier, bottom-2 dimensions, pointer-only target policy context) |
 | `runtime-safe-target-context.md` | YES | Deterministic inventory for safe LLM discovery |
+| `target-policy-context.json` | YES | Pointer-only target policy context metadata mirrored in `pre-flight.json.target_policy_context` |
 | `critic-phase-receipt.json` | YES | Critic phase artifact-contract receipt |
 | `synthesis-phase-receipt.json` | YES | Synthesis phase artifact-contract receipt |
 | `RUNTIME_RECEIPTS.json` | YES | Phase-by-phase runtime status and fail-closed receipts |
@@ -54,6 +55,19 @@ These fields are metadata only. They do not change `file_count`,
 `discovery_scope.total_files`, `discovery_scope.eligible_files`,
 `discovery_scope.coverage_pct`, budget tier selection, coverage verdicts, or
 SCORECARD consumers.
+
+`pre-flight.json.target_policy_context` carries additive pointer-only metadata
+for obvious target-local policy files. The same object is written to
+`target-policy-context.json`, and `runtime-safe-target-context.md` renders a
+compact `## Target Policy Pointers` table. Matching is intentionally bounded to
+clear policy paths such as `system/policy/**`, `.github/**policy**`,
+`docs/**policy**`, and root `*policy*.{json,yaml,yml,md}` files.
+
+This context is not a policy engine. Its `policy_context_non_claim` says listed
+files are for optimizer context and not fully interpreted. Consumers may use the
+pointers to explain, downgrade, or require stronger authority for potentially
+policy-conflicting findings, but must not claim complete target policy
+interpretation from this artifact alone.
 
 ## Audit Receipt Admission
 
@@ -109,9 +123,11 @@ The expected discovery domains are `decomposition`, `consolidation`,
 `recommendation_strength` below `strong` and emits bounded non-claims that the
 run did not observe complete discovery coverage and may have missed
 higher-priority opportunities. Coverage verdicts are P3 discovery-coverage
-metadata only: they do not implement Phase 3 target-policy/P4, P5 cleanup, or
-repo-agent-core shared schema changes. P7 (BMA Phase 3A denominator lane)
-semantics are carried separately in `pre-flight.json.discovery_scope` metadata.
+metadata only: they do not implement P4 target-policy interpretation, P5
+cleanup, or repo-agent-core shared schema changes. P4 pointer-only context is
+carried separately in `pre-flight.json.target_policy_context`; P7 (BMA Phase 3A
+denominator lane) semantics are carried separately in
+`pre-flight.json.discovery_scope` metadata.
 
 The optimizer also writes a deterministic `## Coverage Verdict` section in
 `OPTIMIZATION_PLAN.md` with machine finding counts. The
@@ -190,6 +206,7 @@ the relevant command, outcome, and artifact path; raw logs remain in `.jsonl`,
 
 All outputs go to `$output_dir/`:
 - `$output_dir/pre-flight.json`
+- `$output_dir/target-policy-context.json`
 - `$output_dir/audit-admission-receipt.json`
 - `$output_dir/OPTIMIZATION_PLAN.md`
 - `$output_dir/OPTIMIZATION_SCORECARD.json`
@@ -223,6 +240,7 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.8 | 2026-05-08 | Added pointer-only target policy context metadata in `pre-flight.json`, `target-policy-context.json`, and runtime-safe context |
 | 1.7 | 2026-05-08 | Added additive pre-flight discovery-scope denominator semantics and excluded path-class metadata |
 | 1.6 | 2026-05-08 | Added additive coverage verdict metadata, missing-domain recommendation constraints, and plan/scorecard finding-count agreement |
 | 1.5 | 2026-05-07 | Added completed/partial/failed audit receipt admission and the explicit partial-audit calibration research mode |
