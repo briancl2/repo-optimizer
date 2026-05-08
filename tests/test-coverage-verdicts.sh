@@ -117,6 +117,22 @@ check "missing extraction domain recorded" "true" "$(json_contains "$SCORECARD" 
 check "missing standardization domain recorded" "true" "$(json_contains "$SCORECARD" "discovery_coverage.missing_domains" "standardization")"
 check "recommendation strength constrained" "limited" "$(json_field "$SCORECARD" "recommendation_strength")"
 check "count agreement recorded" "true" "$(json_field "$SCORECARD" "finding_count_agreement.matches_scorecard")"
+check "decomposition category count from payload" "1" "$(json_field "$SCORECARD" "categories.decompose")"
+check "extraction category count from missing payload" "0" "$(json_field "$SCORECARD" "categories.extract")"
+
+STALE="$TEST_ROOT/stale-categories"
+cp -R "$OUTPUT_DIR" "$STALE"
+python3 -c 'import json,sys; path=sys.argv[1]; data=json.load(open(path)); data["categories"]={"decompose":99,"consolidate":98,"extract":97,"standardize":96}; json.dump(data, open(path, "w"), indent=2)' "$STALE/OPTIMIZATION_SCORECARD.json"
+python3 "$OPT_DIR/scripts/coverage-verdict.py" apply \
+    --output-dir "$STALE" \
+    --preflight-only false \
+    --discovery-ok 2 \
+    --discovery-fail 2 \
+    --critic-status completed \
+    --synthesis-status completed \
+    --patch-status not_requested
+check "stale decompose category overwritten" "1" "$(json_field "$STALE/OPTIMIZATION_SCORECARD.json" "categories.decompose")"
+check "stale extraction category overwritten" "0" "$(json_field "$STALE/OPTIMIZATION_SCORECARD.json" "categories.extract")"
 
 if grep -Fq '## Coverage Verdict' "$PLAN" \
     && grep -Fq 'Machine finding counts: total=2; approved=1; rejected=1; downgraded=1.' "$PLAN" \
