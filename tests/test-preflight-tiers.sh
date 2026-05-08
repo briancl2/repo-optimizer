@@ -32,6 +32,18 @@ check() {
     fi
 }
 
+json_field() {
+    python3 -c 'import functools,json,sys; data=json.load(open(sys.argv[1])); value=functools.reduce(lambda acc,key: acc.get(key) if isinstance(acc,dict) else None, sys.argv[2].split("."), data); print("true" if value is True else "false" if value is False else "" if value is None else value)' "$1" "$2"
+}
+
+json_list_contains() {
+    python3 -c 'import functools,json,sys; data=json.load(open(sys.argv[1])); value=functools.reduce(lambda acc,key: acc.get(key) if isinstance(acc,dict) else None, sys.argv[2].split("."), data); print("true" if sys.argv[3] in (value or []) else "false")' "$1" "$2" "$3"
+}
+
+json_float_equals() {
+    python3 -c 'import functools,json,sys; data=json.load(open(sys.argv[1])); value=functools.reduce(lambda acc,key: acc.get(key) if isinstance(acc,dict) else None, sys.argv[2].split("."), data); print("true" if float(value) == float(sys.argv[3]) else "false")' "$1" "$2" "$3"
+}
+
 init_target_repo() {
     local repo="$1"
     git -C "$repo" init -q
@@ -77,6 +89,8 @@ done
 mkdir -p "$REPO_FULL/.agents"
 echo "agent" > "$REPO_FULL/AGENTS.md"
 echo "readme" > "$REPO_FULL/README.md"
+mkdir -p "$REPO_FULL/node_modules/pkg"
+echo "vendored" > "$REPO_FULL/node_modules/pkg/index.js"
 init_target_repo "$REPO_FULL"
 
 OUTPUT_FULL="$TEST_DIR/out-full"
@@ -94,6 +108,48 @@ if [ -f "$OUTPUT_FULL/pre-flight.json" ]; then
 else
     FAIL=$((FAIL + 1))
     echo "  FAIL ($TOTAL): pre-flight.json not created"
+fi
+
+# --- Test 1b: Full tier metadata is additive and preserves legacy counts ---
+echo ""
+echo "--- Full tier: denominator metadata and count preservation ---"
+if [ -f "$OUTPUT_FULL/pre-flight.json" ]; then
+    TOTAL=$((TOTAL + 1))
+    # 52 = 50 numbered files + AGENTS.md + README.md; node_modules/pkg/index.js is intentionally excluded.
+    if [ "$(json_field "$OUTPUT_FULL/pre-flight.json" "file_count")" = "52" ] \
+        && [ "$(json_field "$OUTPUT_FULL/pre-flight.json" "discovery_scope.total_files")" = "52" ] \
+        && [ "$(json_field "$OUTPUT_FULL/pre-flight.json" "discovery_scope.eligible_files")" = "52" ] \
+        && [ "$(json_float_equals "$OUTPUT_FULL/pre-flight.json" "discovery_scope.coverage_pct" "100.0")" = "true" ]; then
+        PASS=$((PASS + 1))
+        echo "  PASS ($TOTAL): legacy count and coverage fields unchanged"
+    else
+        FAIL=$((FAIL + 1))
+        echo "  FAIL ($TOTAL): legacy count or coverage field changed"
+        python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); print(json.dumps({"file_count": data.get("file_count"), "discovery_scope": data.get("discovery_scope", {})}, indent=2))' "$OUTPUT_FULL/pre-flight.json"
+    fi
+
+    TOTAL=$((TOTAL + 1))
+    if [ "$(json_field "$OUTPUT_FULL/pre-flight.json" "discovery_scope.denominator_semantics.name")" = "optimizer_budgeting_denominator" ]; then
+        PASS=$((PASS + 1))
+        echo "  PASS ($TOTAL): denominator_semantics metadata present"
+    else
+        FAIL=$((FAIL + 1))
+        echo "  FAIL ($TOTAL): denominator_semantics metadata missing"
+    fi
+
+    TOTAL=$((TOTAL + 1))
+    if [ "$(json_list_contains "$OUTPUT_FULL/pre-flight.json" "discovery_scope.excluded_path_classes" ".git")" = "true" ] \
+        && [ "$(json_list_contains "$OUTPUT_FULL/pre-flight.json" "discovery_scope.excluded_path_classes" "node_modules")" = "true" ]; then
+        PASS=$((PASS + 1))
+        echo "  PASS ($TOTAL): excluded_path_classes metadata names .git and node_modules"
+    else
+        FAIL=$((FAIL + 1))
+        echo "  FAIL ($TOTAL): excluded_path_classes metadata missing .git or node_modules"
+    fi
+else
+    FAIL=$((FAIL + 3))
+    TOTAL=$((TOTAL + 3))
+    echo "  FAIL: pre-flight.json not created"
 fi
 
 # --- Test 2: Focused tier (200-1000 files) ---

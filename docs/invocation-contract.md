@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.6 | Spec: 054 + 003 + 004 | Date: 2026-05-08
+> Version: 1.7 | Spec: 054 + 003 + 004 + 005 | Date: 2026-05-08
 
 ## Purpose
 
@@ -35,6 +35,25 @@ agent (copilot CLI). All consumers must follow this contract.
 and the deterministic coverage section in `OPTIMIZATION_PLAN.md` carry additive
 coverage verdict metadata. These fields do not replace ROI scoring, receipt
 status, score trends, or existing finding counts.
+
+`pre-flight.json.discovery_scope` also carries additive denominator metadata for
+optimizer budgeting:
+
+- `denominator_semantics.name=optimizer_budgeting_denominator`
+- `denominator_semantics.description` explains that the denominator is regular
+  files under the target repository after excluded path classes are removed
+- `denominator_semantics.total_files_field` points to `file_count` and
+  `discovery_scope.total_files`
+- `denominator_semantics.eligible_files_field` points to
+  `discovery_scope.eligible_files`
+- `denominator_semantics.coverage_pct_field` points to
+  `discovery_scope.coverage_pct`
+- `excluded_path_classes` lists `.git` and `node_modules`
+
+These fields are metadata only. They do not change `file_count`,
+`discovery_scope.total_files`, `discovery_scope.eligible_files`,
+`discovery_scope.coverage_pct`, budget tier selection, coverage verdicts, or
+SCORECARD consumers.
 
 ## Audit Receipt Admission
 
@@ -90,8 +109,9 @@ The expected discovery domains are `decomposition`, `consolidation`,
 `recommendation_strength` below `strong` and emits bounded non-claims that the
 run did not observe complete discovery coverage and may have missed
 higher-priority opportunities. Coverage verdicts are P3 discovery-coverage
-metadata only: they do not implement Phase 3 target-policy/P4, P5 cleanup, P7
-denominator measurement, or repo-agent-core shared schema changes.
+metadata only: they do not implement Phase 3 target-policy/P4, P5 cleanup, or
+repo-agent-core shared schema changes. P7 (BMA Phase 3A denominator lane)
+semantics are carried separately in `pre-flight.json.discovery_scope` metadata.
 
 The optimizer also writes a deterministic `## Coverage Verdict` section in
 `OPTIMIZATION_PLAN.md` with machine finding counts. The
@@ -203,6 +223,7 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.7 | 2026-05-08 | Added additive pre-flight discovery-scope denominator semantics and excluded path-class metadata |
 | 1.6 | 2026-05-08 | Added additive coverage verdict metadata, missing-domain recommendation constraints, and plan/scorecard finding-count agreement |
 | 1.5 | 2026-05-07 | Added completed/partial/failed audit receipt admission and the explicit partial-audit calibration research mode |
 | 1.4 | 2026-04-20 | Added calibration metadata for transfer-oracle receipts and documented mixed-family calibration-basis summarization |
