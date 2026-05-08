@@ -132,7 +132,8 @@ def evaluate_admission(audit_dir: Path, output_dir: Path, research_mode: str) ->
     scorecard_fallback_status, scorecard_status_source = scorecard_status(scorecard_path)
 
     receipt_present = receipt_path is not None
-    normalized_status = status or scorecard_fallback_status
+    normalized_status = status if receipt_present else scorecard_fallback_status
+    receipt_status_missing = receipt_present and status is None
     scorecard_present = scorecard_path.is_file()
     report_present = report_path.is_file()
     mode = research_mode.strip()
@@ -154,6 +155,11 @@ def evaluate_admission(audit_dir: Path, output_dir: Path, research_mode: str) ->
             "invalid_research_output_path",
             "Research-mode output path must include research-mode/partial-audit-calibration/.",
         )
+    elif mode == RESEARCH_MODE and receipt_status_missing:
+        block = blocker(
+            "malformed_audit_receipt",
+            "Audit receipt is present but has no parseable status.",
+        )
     elif mode == RESEARCH_MODE and not receipt_present and not scorecard_fallback_status:
         block = blocker(
             "research_mode_missing_audit_status",
@@ -168,6 +174,11 @@ def evaluate_admission(audit_dir: Path, output_dir: Path, research_mode: str) ->
         admission_status = "research_admitted"
     elif not receipt_present:
         block = blocker("missing_audit_receipt", "Normal optimizer runs require a completed audit receipt.")
+    elif receipt_status_missing:
+        block = blocker(
+            "malformed_audit_receipt",
+            "Normal optimizer runs require a receipt-derived audit status.",
+        )
     elif normalized_status != "completed":
         block = blocker(
             f"audit_status_{normalized_status or 'unknown'}",
