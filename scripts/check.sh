@@ -51,14 +51,18 @@ fi
 
 # ── Trailer check ─────────────────────────────────────────────────────
 echo "-- trailer --"
-LAST_MSG=$(git log -1 --format=%B 2>/dev/null || echo "")
-if echo "$LAST_MSG" | grep -qE '^(Spec-ID|Spec-Exempt):'; then
-    echo "  PASS: last commit has Spec-ID or Spec-Exempt trailer"
-elif [ -z "$LAST_MSG" ]; then
-    echo "  SKIP: no commits yet"
+if ! git diff --cached --quiet --; then
+    echo "  SKIP: staged changes present; validate the new commit with make check after committing"
 else
-    echo "  FAIL: last commit lacks Spec-ID or Spec-Exempt trailer"
-    FAIL=1
+    LAST_MSG=$(git log -1 --format=%B 2>/dev/null || echo "")
+    if echo "$LAST_MSG" | grep -qE '^(Spec-ID|Spec-Exempt):'; then
+        echo "  PASS: last commit has Spec-ID or Spec-Exempt trailer"
+    elif [ -z "$LAST_MSG" ]; then
+        echo "  SKIP: no commits yet"
+    else
+        echo "  FAIL: last commit lacks Spec-ID or Spec-Exempt trailer"
+        FAIL=1
+    fi
 fi
 
 # ── Warning counter (lightweight circuit breaker per spec 054 C1) ────
