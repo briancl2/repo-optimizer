@@ -118,6 +118,7 @@ test:
 	@bash tests/test-patches-apply.sh
 	@bash tests/test-preflight-tiers.sh
 	@bash tests/test-target-policy-context.sh
+	@bash tests/test-cleanup-ledger-contract.sh
 	@bash tests/test-optimization-benchmark-harness.sh
 	@bash tests/test-agent-run-receipts.sh
 	@bash tests/test-self-management.sh

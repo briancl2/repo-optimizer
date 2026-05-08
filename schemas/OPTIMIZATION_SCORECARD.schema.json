@@ -134,6 +134,31 @@
       "items": { "type": "string" },
       "description": "Non-claims that bound partial coverage outputs"
     },
+    "cleanup_contract": {
+      "type": "object",
+      "description": "Additive P5 cleanup-safety contract metadata; does not change score semantics.",
+      "properties": {
+        "schema_version": { "type": "string" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "findings_with_cleanup_class": { "type": "integer", "minimum": 0 },
+        "destructive_findings_total": { "type": "integer", "minimum": 0 },
+        "destructive_findings_blocked": { "type": "integer", "minimum": 0 },
+        "destructive_findings_authorized": { "type": "integer", "minimum": 0 },
+        "missing_owner_boundary_count": { "type": "integer", "minimum": 0 },
+        "missing_keep_set_count": { "type": "integer", "minimum": 0 },
+        "authorization_required_missing_count": { "type": "integer", "minimum": 0 },
+        "unclassified_requires_amendment_count": { "type": "integer", "minimum": 0 },
+        "patch_generation_blocked": { "type": "boolean" },
+        "bounded_non_claims": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "CLEANUP_FINDING_METADATA.schema.json" }
+        }
+      }
+    },
     "categories": {
       "type": "object",
       "description": "Finding counts per optimization category",

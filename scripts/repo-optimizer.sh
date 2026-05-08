@@ -1342,6 +1342,15 @@ if [ -s "$OUTPUT_DIR/OPTIMIZATION_SCORECARD.json" ]; then
         --synthesis-status "$SYNTH_STATUS" \
         --patch-status "$PATCH_STATUS"
     echo "  ✅ coverage verdict applied"
+    CLEANUP_CONTRACT_RC=0
+    python3 "$SCRIPT_DIR/cleanup-contract.py" apply \
+        --output-dir "$OUTPUT_DIR" \
+        --patch-mode "$PATCH_MODE" || CLEANUP_CONTRACT_RC=$?
+    if [ "$CLEANUP_CONTRACT_RC" -ne 0 ]; then
+        echo "ERROR: Cleanup contract blocked unsafe patch output. Inspect PATCH_BLOCKED_BY_CLEANUP_CONTRACT.json." >&2
+        exit "$CLEANUP_CONTRACT_RC"
+    fi
+    echo "  ✅ cleanup contract applied"
 fi
 
 echo "  ✅ OPTIMIZATION_PLAN.md written"

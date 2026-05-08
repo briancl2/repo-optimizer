@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cleanup Finding Metadata",
+  "description": "Additive P5 cleanup-safety metadata for optimizer findings.",
+  "type": "object",
+  "required": [
+    "cleanup_action_class",
+    "cleanup_action_scope",
+    "destructive_action",
+    "target_paths",
+    "protected_keep_paths",
+    "keep_set_evidence",
+    "owner_boundary_class",
+    "owner_boundary_evidence",
+    "authorization_status",
+    "evidence_threshold",
+    "cleanup_safety_non_claims"
+  ],
+  "properties": {
+    "cleanup_action_class": {
+      "type": "string",
+      "enum": [
+        "fix",
+        "compress",
+        "delete",
+        "archive",
+        "keep",
+        "defer",
+        "needs_authorization",
+        "unclassified_requires_amendment"
+      ]
+    },
+    "cleanup_action_scope": {
+      "type": "string",
+      "enum": [
+        "single_file",
+        "directory",
+        "generated_artifact",
+        "archive_surface",
+        "customer_or_private_surface",
+        "unknown"
+      ]
+    },
+    "destructive_action": { "type": "boolean" },
+    "destructive_action_reason": { "type": ["string", "null"] },
+    "target_paths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "protected_keep_paths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "keep_set_evidence": {
+      "type": "array",
+      "items": {}
+    },
+    "owner_boundary_class": {
+      "type": "string",
+      "enum": [
+        "target_owned",
+        "target_policy_owned",
+        "archive_or_historical",
+        "customer_or_private",
+        "generated_or_cache",
+        "third_party_or_vendor",
+        "unknown"
+      ]
+    },
+    "owner_boundary_evidence": {},
+    "authorization_status": {
+      "type": "string",
+      "enum": [
+        "not_required",
+        "explicit_authorized",
+        "required_missing",
+        "policy_forbidden",
+        "blocked_unknown"
+      ]
+    },
+    "evidence_threshold": {
+      "type": "string",
+      "enum": [
+        "literal_reference",
+        "reachable_by_command",
+        "unreferenced_with_keep_set",
+        "policy_conflict",
+        "insufficient"
+      ]
+    },
+    "cleanup_safety_non_claims": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
