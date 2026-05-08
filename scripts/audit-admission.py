@@ -18,6 +18,7 @@ from typing import Any
 
 RESEARCH_MODE = "partial-audit-calibration"
 RECEIPT_NAMES = ("AUDIT_RUN_RECEIPT.json", "AUDIT_RECEIPT.json", "SCORECARD_RECEIPTS.json")
+EXPECTED_DISCOVERY_DOMAINS = ["decomposition", "consolidation", "extraction", "standardization"]
 
 
 def utc_now() -> str:
@@ -323,11 +324,40 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def blocked_coverage(preflight_only: str) -> dict[str, Any]:
+    return {
+        "schema_version": "1.0.0",
+        "generated_at": utc_now(),
+        "coverage_verdict": "blocked",
+        "coverage_reason": "audit_admission_blocked_before_discovery",
+        "recommendation_strength": "none",
+        "expected_domains": list(EXPECTED_DISCOVERY_DOMAINS),
+        "completed_domains": [],
+        "missing_domains": list(EXPECTED_DISCOVERY_DOMAINS),
+        "completed_count": 0,
+        "missing_count": len(EXPECTED_DISCOVERY_DOMAINS),
+        "expected_count": len(EXPECTED_DISCOVERY_DOMAINS),
+        "coverage_ratio": 0.0,
+        "domain_finding_rows": {domain: 0 for domain in EXPECTED_DISCOVERY_DOMAINS},
+        "discovery_attempted": False,
+        "preflight_only": preflight_only == "true",
+        "critic_status": "skipped_audit_admission_blocked",
+        "synthesis_status": "skipped_audit_admission_blocked",
+        "patch_status": "fail_closed_audit_admission_blocked",
+        "bounded_non_claims": [
+            "Optimizer discovery did not run because audit admission blocked the input.",
+            "Blocked optimizer outputs are not recommendation-strength claims.",
+            "Coverage verdicts do not implement target-policy/P4 or P7 denominator measurement.",
+        ],
+    }
+
+
 def write_blocked_outputs(admission_receipt: Path, output_dir: Path, repo_name: str, patch_mode: str, preflight_only: str) -> None:
     admission = json.loads(admission_receipt.read_text(encoding="utf-8"))
     audit_dir = Path(admission["audit_dir"])
     composite, bottom, dims = scorecard_summary(audit_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    coverage = blocked_coverage(preflight_only)
 
     preflight = {
         "target": repo_name,
@@ -369,6 +399,22 @@ def write_blocked_outputs(admission_receipt: Path, output_dir: Path, repo_name: 
     block = admission.get("blocker") or {}
     if block:
         plan.extend(["", "## Blocker", "", f"- {block.get('code')}: {block.get('message')}"])
+    plan.extend(
+        [
+            "",
+            "## Coverage Verdict",
+            "",
+            "- Coverage verdict: `blocked`",
+            "- Recommendation strength: `none`",
+            f"- Discovery coverage: 0/{coverage['expected_count']} domains completed.",
+            f"- Missing domains: {', '.join(coverage['missing_domains'])}",
+            "- Machine finding counts: total=0; approved=0; rejected=0; downgraded=0.",
+            "",
+            "### Bounded Non-Claims",
+            "",
+        ]
+    )
+    plan.extend(f"- {claim}" for claim in coverage["bounded_non_claims"])
     (output_dir / "OPTIMIZATION_PLAN.md").write_text("\n".join(plan) + "\n", encoding="utf-8")
 
     critic_receipt = phase_stub(
@@ -400,6 +446,10 @@ def write_blocked_outputs(admission_receipt: Path, output_dir: Path, repo_name: 
         "audit_admission": admission,
         "normal_readiness_claim": False,
         "research_mode": admission.get("research_mode"),
+        "coverage_verdict": coverage["coverage_verdict"],
+        "recommendation_strength": coverage["recommendation_strength"],
+        "discovery_coverage": coverage,
+        "bounded_non_claims": coverage["bounded_non_claims"],
         "phases": {
             "discovery": {"ok_count": 0, "fail_count": 0, "status": "skipped_audit_admission_blocked"},
             "critic": critic_receipt,
@@ -425,6 +475,7 @@ def write_blocked_outputs(admission_receipt: Path, output_dir: Path, repo_name: 
                     "blocker": admission.get("blocker"),
                 },
                 "discovery": {"ok_count": 0, "fail_count": 0},
+                "discovery_coverage": coverage,
                 "patch_generation": {"status": "fail_closed_audit_admission_blocked", "patches_valid": 0},
             },
         },
@@ -443,6 +494,16 @@ def write_blocked_outputs(admission_receipt: Path, output_dir: Path, repo_name: 
         "audit_admission": admission,
         "normal_readiness_claim": False,
         "research_mode": admission.get("research_mode"),
+        "coverage_verdict": coverage["coverage_verdict"],
+        "recommendation_strength": coverage["recommendation_strength"],
+        "discovery_coverage": coverage,
+        "bounded_non_claims": coverage["bounded_non_claims"],
+        "finding_count_agreement": {
+            "source": "OPTIMIZATION_PLAN.md coverage verdict section",
+            "plan_declared_counts": {"total": 0, "approved": 0, "rejected": 0, "downgraded": 0},
+            "scorecard_counts": {"total": 0, "approved": 0, "rejected": 0, "downgraded": 0},
+            "matches_scorecard": True,
+        },
         "meta": {
             "timestamp": utc_now(),
             "optimizer_version": "1.0.0",
@@ -452,6 +513,13 @@ def write_blocked_outputs(admission_receipt: Path, output_dir: Path, repo_name: 
             "audit_admission_status": admission.get("admission_status"),
             "normal_readiness_claim": False,
             "research_mode": admission.get("research_mode"),
+            "coverage_verdict": coverage["coverage_verdict"],
+            "recommendation_strength": coverage["recommendation_strength"],
+            "discovery_coverage": {
+                "completed_count": coverage["completed_count"],
+                "expected_count": coverage["expected_count"],
+                "missing_count": coverage["missing_count"],
+            },
             "runtime_receipts": "RUNTIME_RECEIPTS.json",
             "command_blocked_detected": False,
         },
@@ -467,6 +535,10 @@ def write_blocked_outputs(admission_receipt: Path, output_dir: Path, repo_name: 
         "audit_admission": admission,
         "normal_readiness_claim": False,
         "research_mode": admission.get("research_mode"),
+        "coverage_verdict": coverage["coverage_verdict"],
+        "recommendation_strength": coverage["recommendation_strength"],
+        "discovery_coverage": coverage,
+        "bounded_non_claims": coverage["bounded_non_claims"],
         "timestamp": utc_now(),
     }
     write_json(output_dir / "OPERATION_EVAL.json", operation_eval)

@@ -507,6 +507,7 @@ print(json.dumps(lines))
 import json, os, pathlib, sys
 root = pathlib.Path('$OPT_DIR')
 audit_admission = {}
+optimization_scorecard = {}
 for rel in ('audit-admission-receipt.json', 'pre-flight.json', 'OPTIMIZATION_SCORECARD.json'):
     path = root / rel
     if not path.is_file():
@@ -517,11 +518,17 @@ for rel in ('audit-admission-receipt.json', 'pre-flight.json', 'OPTIMIZATION_SCO
         continue
     if rel == 'audit-admission-receipt.json':
         audit_admission = payload
-    elif isinstance(payload.get('audit_admission'), dict):
+    elif rel == 'OPTIMIZATION_SCORECARD.json':
+        optimization_scorecard = payload
+        if not audit_admission and isinstance(payload.get('audit_admission'), dict):
+            audit_admission = payload['audit_admission']
+    elif not audit_admission and isinstance(payload.get('audit_admission'), dict):
         audit_admission = payload['audit_admission']
-    if audit_admission:
-        break
 research_mode = audit_admission.get('research_mode')
+coverage_verdict = optimization_scorecard.get('coverage_verdict')
+discovery_coverage = optimization_scorecard.get('discovery_coverage', {})
+recommendation_strength = optimization_scorecard.get('recommendation_strength')
+bounded_non_claims = optimization_scorecard.get('bounded_non_claims', [])
 result = {
     'score': $SCORE,
     'max': $MAX,
@@ -532,6 +539,10 @@ result = {
     'audit_admission': audit_admission,
     'normal_readiness_claim': bool(audit_admission.get('normal_readiness_claim')),
     'research_mode': research_mode,
+    'coverage_verdict': coverage_verdict,
+    'discovery_coverage': discovery_coverage,
+    'recommendation_strength': recommendation_strength,
+    'bounded_non_claims': bounded_non_claims,
     'timestamp': __import__('datetime').datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 }
 json.dump(result, sys.stdout, indent=2)
