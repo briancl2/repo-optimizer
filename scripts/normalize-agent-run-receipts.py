@@ -19,6 +19,8 @@ DIRECT_TOKEN_FIELDS = {
     "cached_tokens": ("cacheReadTokens", "cacheWriteTokens", "cached_tokens", "cachedTokens"),
 }
 
+ARTIFACT_REUSE_PAIR_TYPE = "artifact_reuse_stdout_no_tools_phase3_pair"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -194,6 +196,146 @@ def passthrough_receipts(rows: list[Any]) -> list[dict[str, Any]]:
     return []
 
 
+def is_pass(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"pass", "passed", "success", "true", "0"}
+
+
+def row_passes(row: dict[str, Any]) -> bool:
+    summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+    return (
+        bool(row.get("passes"))
+        and is_pass(summary.get("final_status"))
+        and number(summary.get("overall_return_code")) == 0
+        and number(summary.get("phase_return_code")) == 0
+        and number(summary.get("validation_return_code")) == 0
+        and number(summary.get("curated_receipt_return_code")) == 0
+    )
+
+
+def metric_payload(value: Any) -> dict[str, Any] | None:
+    metric = number(value)
+    if metric is None:
+        return None
+    return {"value": int(metric) if metric.is_integer() else metric, "source": "direct"}
+
+
+def burst_pair_boundary(payload: dict[str, Any]) -> dict[str, Any]:
+    selected = payload.get("selected_source_no_refetch") if isinstance(payload.get("selected_source_no_refetch"), dict) else {}
+    fixture = payload.get("fixture") if isinstance(payload.get("fixture"), dict) else {}
+    sidecars = selected.get("sidecars") if isinstance(selected.get("sidecars"), dict) else {}
+    required_sidecars = {
+        "phase2_selected_source_ids",
+        "phase2_fetch_attempt_ledger",
+        "phase2_no_refetch_compliance",
+    }
+    no_refetch_bound = (
+        bool(selected.get("exists"))
+        and str(selected.get("admission_verdict") or "") == "admit_no_refetch"
+        and bool(selected.get("sha256"))
+        and bool(selected.get("source_pack_sha256"))
+        and selected.get("source_pack_sha256") == fixture.get("source_pack_sha256")
+        and all(
+            isinstance(sidecars.get(name), dict)
+            and bool(sidecars[name].get("exists"))
+            and bool(sidecars[name].get("sha256"))
+            for name in required_sidecars
+        )
+    )
+    non_claims = [str(item) for item in payload.get("non_claims", []) if str(item).strip()]
+    claim_fields = {
+        "dollar_savings_claimed": bool(payload.get("dollar_savings_claimed")),
+        "billing_claimed": bool(payload.get("billing_claimed")),
+        "production_adoption_claimed": bool(payload.get("production_adoption_claimed")),
+        "durable_savings_claimed": bool(payload.get("durable_savings_claimed")),
+        "receipt_stale": bool(payload.get("receipt_stale") or payload.get("stale")),
+    }
+    return {
+        "receipt_type": payload.get("receipt_type"),
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "admission": payload.get("admission") if isinstance(payload.get("admission"), dict) else {},
+        "deltas": payload.get("deltas") if isinstance(payload.get("deltas"), dict) else {},
+        "fixture": fixture,
+        "selected_source_no_refetch": selected,
+        "no_refetch_bound": no_refetch_bound,
+        "non_claims": non_claims,
+        "boundary_claims": claim_fields,
+    }
+
+
+def artifact_reuse_pair_receipts(payload: dict[str, Any], path: Path) -> list[dict[str, Any]]:
+    if payload.get("receipt_type") != ARTIFACT_REUSE_PAIR_TYPE:
+        return []
+    boundary = burst_pair_boundary(payload)
+    slice_info = payload.get("slice") if isinstance(payload.get("slice"), dict) else {}
+    fixture = boundary["fixture"]
+    receipts: list[dict[str, Any]] = []
+    for row_name, variant in (("control", "baseline"), ("candidate", "candidate")):
+        row = payload.get(row_name) if isinstance(payload.get(row_name), dict) else {}
+        summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+        metrics_source = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+        metrics: dict[str, dict[str, Any]] = {}
+        metric_map = {
+            "input_tokens": "input_tokens",
+            "output_tokens": "output_tokens",
+            "reasoning_tokens": "reasoning_tokens",
+            "cache_read_tokens": "cache_read_tokens",
+            "cache_write_tokens": "cache_write_tokens",
+            "request_count": "request_count",
+            "tool_calls": "tool_calls",
+        }
+        for output_name, source_name in metric_map.items():
+            item = metric_payload(metrics_source.get(source_name))
+            if item is not None:
+                metrics[output_name] = item
+        row_ok = row_passes(row)
+        session_bound = (
+            str(metrics_source.get("session_detection_status") or "") == "bound_candidate"
+            and number(metrics_source.get("bound_candidate_count")) == 1
+            and number(metrics_source.get("candidate_count")) == 1
+        )
+        direct_fields_complete = bool(metrics_source.get("direct_fields_complete")) and not metrics_source.get("missing_direct_provider_token_fields")
+        run_id = str(summary.get("run_id") or slice_info.get("candidate_run_id") or "")
+        receipt = {
+            "schema_version": "1.0.0",
+            "receipt_id": f"{ARTIFACT_REUSE_PAIR_TYPE}:{run_id}:{variant}",
+            "harness": "private-newsletter-phase3",
+            "provider": "openai",
+            "model": str(metrics_source.get("model") or summary.get("model") or slice_info.get("model") or ""),
+            "model_version": str(slice_info.get("model") or metrics_source.get("model") or ""),
+            "model_family": "openai",
+            "invocation_surface": "private-newsletter-stdout-no-tools" if variant == "candidate" else "private-newsletter-control",
+            "fixture_id": str(fixture.get("manifest_id") or "artifact-reuse-stdout-no-tools-phase3"),
+            "variant": variant,
+            "run_index": 1,
+            "started_at": str(payload.get("generated_at_utc") or utc_now()),
+            "completed_at": str(payload.get("generated_at_utc") or utc_now()),
+            "wall_time_ms": 0,
+            "prompt_hash": str(metrics_source.get("prompt_sha256") or metrics_source.get("original_prompt_sha256") or row_name),
+            "fixture_hash": str(fixture.get("manifest_sha256") or fixture.get("source_pack_sha256") or sha256_file(path)),
+            "raw_receipt_path": str(path),
+            "exit_status": "success" if row_ok else "failed",
+            "target_repo_mutated": False,
+            "correctness_pass": row_ok,
+            "closeout_truth_pass": row_ok,
+            "metrics": metrics,
+            "artifact_reuse_stdout_no_tools_boundary": {
+                **boundary,
+                "row_name": row_name,
+                "row_passes": row_ok,
+                "session_bound": session_bound,
+                "direct_fields_complete": direct_fields_complete,
+                "missing_direct_provider_token_fields": metrics_source.get("missing_direct_provider_token_fields", []),
+            },
+            "source_format": ARTIFACT_REUSE_PAIR_TYPE,
+        }
+        receipts.append(receipt)
+    return receipts
+
+
 def parsed_defaults(fmt: str, rows: list[Any]) -> dict[str, str]:
     if fmt == "copilot":
         return {
@@ -267,7 +409,8 @@ def main() -> int:
     output_path = Path(args.output).resolve()
     rows = read_json_or_jsonl(input_path)
     fmt = detect_format(input_path, rows) if args.source_format == "auto" else args.source_format
-    receipts = passthrough_receipts(rows) or [build_receipt(args, fmt, input_path, rows)]
+    pair_receipts = artifact_reuse_pair_receipts(rows[0], input_path) if len(rows) == 1 and isinstance(rows[0], dict) else []
+    receipts = passthrough_receipts(rows) or pair_receipts or [build_receipt(args, fmt, input_path, rows)]
     payload = {
         "schema_version": "1.0.0",
         "artifact": "AGENT_RUN_RECEIPTS",

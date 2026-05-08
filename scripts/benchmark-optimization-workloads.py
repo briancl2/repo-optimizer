@@ -216,6 +216,72 @@ def claim_cache_result(baseline: dict[str, Any], candidate: dict[str, Any]) -> d
     }
 
 
+def artifact_reuse_gate(
+    workload: dict[str, Any],
+    baseline: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any] | None:
+    boundary = workload.get("artifact_reuse_stdout_no_tools_boundary")
+    if not isinstance(boundary, dict):
+        return None
+    base_requests = as_number(baseline.get("request_count"))
+    cand_requests = as_number(candidate.get("request_count"))
+    base_tools = as_number(baseline.get("tool_calls"))
+    cand_tools = as_number(candidate.get("tool_calls"))
+    request_delta = None if base_requests is None or cand_requests is None else cand_requests - base_requests
+    tool_delta = None if base_tools is None or cand_tools is None else cand_tools - base_tools
+    boundary_claims = boundary.get("boundary_claims") if isinstance(boundary.get("boundary_claims"), dict) else {}
+    admission = boundary.get("admission") if isinstance(boundary.get("admission"), dict) else {}
+    invalid_claims = sorted(key for key, value in boundary_claims.items() if bool(value))
+    non_claims = [str(item).lower() for item in boundary.get("non_claims", [])]
+    required_non_claims = {
+        "not_production": any("not production" in item or "not production behavior" in item for item in non_claims),
+        "not_billing": any("not a billing claim" in item or "not billing" in item for item in non_claims),
+        "not_durable_savings": any("not a durable savings" in item or "not durable" in item for item in non_claims),
+    }
+    failures: list[str] = []
+    if not bool(boundary.get("required_row_boundaries_present")):
+        failures.append("artifact reuse control and candidate boundaries are both required")
+    if not bool(boundary.get("row_passes")):
+        failures.append("quality/pass status did not bind for both rows")
+    if not bool(boundary.get("direct_fields_complete")):
+        failures.append("direct provider token fields are incomplete")
+    if not bool(boundary.get("session_bound")):
+        failures.append("session binding is incomplete")
+    if not bool(boundary.get("no_refetch_bound")):
+        failures.append("selected-source/no-refetch binding is incomplete")
+    if request_delta is None or tool_delta is None:
+        failures.append("request/tool amplification fields are incomplete")
+    else:
+        if request_delta > 0:
+            failures.append("candidate request count is higher than control")
+        if cand_tools != 0:
+            failures.append("candidate tool calls are nonzero for stdout/no-tools receipt")
+        if tool_delta > 0:
+            failures.append("candidate tool calls are higher than control")
+    if invalid_claims:
+        failures.append(f"forbidden claim boundary fields are present: {', '.join(invalid_claims)}")
+    missing_non_claims = [name for name, present in required_non_claims.items() if not present]
+    if missing_non_claims:
+        failures.append(f"required non-claim boundaries are missing: {', '.join(missing_non_claims)}")
+    return {
+        "evaluated": True,
+        "passed": not failures,
+        "single_pair_admitted": bool(admission.get("admitted_for_single_live_benchmark_pair")),
+        "quality_pass": bool(boundary.get("row_passes")),
+        "direct_fields_complete": bool(boundary.get("direct_fields_complete")),
+        "session_bound": bool(boundary.get("session_bound")),
+        "no_refetch_bound": bool(boundary.get("no_refetch_bound")),
+        "row_boundaries_present": boundary.get("row_boundaries_present", {}),
+        "request_count_delta": request_delta,
+        "tool_calls_delta": tool_delta,
+        "candidate_tool_calls": cand_tools,
+        "non_claim_boundaries": required_non_claims,
+        "invalid_claim_boundaries": invalid_claims,
+        "failures": failures,
+    }
+
+
 def provider_stratum(workload: dict[str, Any]) -> dict[str, str]:
     return {
         "provider": str(workload.get("provider") or ""),
@@ -284,6 +350,7 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
     claims: list[dict[str, Any]] = []
     variance_ok = None
     stratum = provider_stratum(workload)
+    artifact_gate = artifact_reuse_gate(workload, baseline, candidate)
 
     if str(workload.get("admission_status") or "admitted") != "admitted":
         return {
@@ -304,6 +371,7 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
                 "target_repo_mutated": target_mutated,
             },
             "variance_gate": {"evaluated": False, "passed": None},
+            "artifact_reuse_gate": artifact_gate or {"evaluated": False, "passed": None},
             "measured_metrics": {},
             "claims": [],
             **stratum,
@@ -327,13 +395,18 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
         if missing_metadata:
             reasons.append(f"live-paired measurement lacks provider metadata: {', '.join(missing_metadata)}")
         run_count = as_number(candidate.get("run_count"))
-        if run_count is None or run_count < float(thresholds["llm_backed_run_count"]):
+        single_pair_admitted = bool(artifact_gate and artifact_gate.get("single_pair_admitted"))
+        if run_count is None or (not single_pair_admitted and run_count < float(thresholds["llm_backed_run_count"])):
             reasons.append("live-paired measurement lacks the required paired repetition count")
         variance_ok = paired_variance_ok(workload, thresholds)
+        if variance_ok is None and single_pair_admitted and run_count == 1:
+            variance_ok = True
         if variance_ok is False:
             reasons.append("live-paired delta does not clear the variance rule")
         elif variance_ok is None:
             reasons.append("live-paired measurement lacks paired delta samples and observed mean delta")
+    if artifact_gate is not None and not artifact_gate["passed"]:
+        reasons.extend(f"artifact reuse gate: {failure}" for failure in artifact_gate["failures"])
 
     if role in {"correctness_control", "policy_control"}:
         disposition = "rejected" if hard_regression else "not-measured"
@@ -356,6 +429,7 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
                 "target_repo_mutated": target_mutated,
             },
             "variance_gate": {"evaluated": variance_ok is not None, "passed": variance_ok},
+            "artifact_reuse_gate": artifact_gate or {"evaluated": False, "passed": None},
             "measured_metrics": {},
             "claims": [],
             **stratum,
@@ -415,6 +489,7 @@ def evaluate_workload(workload: dict[str, Any], mode: str, thresholds: dict[str,
             "target_repo_mutated": target_mutated,
         },
         "variance_gate": {"evaluated": variance_ok is not None, "passed": variance_ok},
+        "artifact_reuse_gate": artifact_gate or {"evaluated": False, "passed": None},
         "measured_metrics": compact_claim_metrics(claims),
         "claims": claims,
         "evidence_refs": workload.get("evidence_refs", []),

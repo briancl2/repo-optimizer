@@ -111,6 +111,51 @@ def proxy_metrics(receipts: list[dict[str, Any]]) -> dict[str, list[str]]:
     return ignored
 
 
+def direct_metric_average(receipts: list[dict[str, Any]], metric: str) -> float | int | None:
+    values = [metric_value(item, metric) for item in receipts]
+    present = [item for item in values if item is not None]
+    return compact_number(avg(present))
+
+
+def aggregate_artifact_reuse_boundary(receipts: list[dict[str, Any]]) -> dict[str, Any] | None:
+    boundaries = [
+        item.get("artifact_reuse_stdout_no_tools_boundary")
+        for item in receipts
+        if isinstance(item.get("artifact_reuse_stdout_no_tools_boundary"), dict)
+    ]
+    if not boundaries:
+        return None
+    candidate = next((item for item in boundaries if item.get("row_name") == "candidate"), {})
+    control = next((item for item in boundaries if item.get("row_name") == "control"), {})
+    required_rows_present = bool(candidate) and bool(control)
+    claim_fields: dict[str, Any] = {}
+    for boundary in boundaries:
+        if isinstance(boundary.get("boundary_claims"), dict):
+            for key, value in boundary["boundary_claims"].items():
+                claim_fields[key] = bool(claim_fields.get(key)) or bool(value)
+    return {
+        "receipt_type": str(candidate.get("receipt_type") or control.get("receipt_type") or ""),
+        "generated_at_utc": str(candidate.get("generated_at_utc") or control.get("generated_at_utc") or ""),
+        "admission": candidate.get("admission") or control.get("admission") or {},
+        "row_boundaries_present": {
+            "control": bool(control),
+            "candidate": bool(candidate),
+        },
+        "required_row_boundaries_present": required_rows_present,
+        "no_refetch_bound": required_rows_present and all(bool(item.get("no_refetch_bound")) for item in boundaries),
+        "session_bound": required_rows_present and all(bool(item.get("session_bound")) for item in boundaries),
+        "direct_fields_complete": required_rows_present and all(bool(item.get("direct_fields_complete")) for item in boundaries),
+        "row_passes": required_rows_present and all(bool(item.get("row_passes")) for item in boundaries),
+        "missing_direct_provider_token_fields": [
+            field
+            for item in boundaries
+            for field in item.get("missing_direct_provider_token_fields", [])
+        ],
+        "non_claims": sorted({text for item in boundaries for text in item.get("non_claims", [])}),
+        "boundary_claims": claim_fields,
+    }
+
+
 def build_workload(
     fixture: dict[str, Any],
     provider: str,
@@ -169,7 +214,15 @@ def build_workload(
             candidate["wall_time_ms"] = candidate_value
 
     all_receipts = baseline_receipts + candidate_receipts
-    return {
+    for metric in ("output_tokens", "reasoning_tokens", "request_count", "tool_calls"):
+        baseline_value = direct_metric_average(baseline_receipts, metric)
+        candidate_value = direct_metric_average(candidate_receipts, metric)
+        if baseline_value is not None:
+            baseline[metric] = baseline_value
+        if candidate_value is not None:
+            candidate[metric] = candidate_value
+
+    workload = {
         "workload_id": f"{fixture['fixture_id']}--{provider or 'missing-provider'}--{harness or 'missing-harness'}--{model or 'missing-model'}",
         "source_repo": fixture.get("source_repo", "mixed"),
         "bucket": fixture.get("bucket", "mixed"),
@@ -196,6 +249,10 @@ def build_workload(
         "normalized_receipt_ids": [str(item.get("receipt_id") or item.get("raw_receipt_path") or "") for item in all_receipts],
         "proxy_metrics_ignored": proxy_metrics(all_receipts),
     }
+    boundary = aggregate_artifact_reuse_boundary(all_receipts)
+    if boundary is not None:
+        workload["artifact_reuse_stdout_no_tools_boundary"] = boundary
+    return workload
 
 
 def main() -> int:
