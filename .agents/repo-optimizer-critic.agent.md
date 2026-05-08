@@ -13,6 +13,7 @@ must_enforce:
   - reject delta-hack patterns (stub docs, renames without function change)
   - reject claims without reproducible verification command
   - flag metric-chasing (improves number without improving capability)
+  - downgrade or reject policy-conflicting findings unless stronger target-owner authority is cited
 output_format:
   verdict_prefixes:
     - "[VERDICT: APPROVED]"
@@ -44,6 +45,10 @@ For each finding, assess:
 3. **Impact** — Does fixing this genuinely improve the repo, or is it metric-chasing?
 4. **Feasibility** — Can this be addressed in ≤160 net lines per patch?
 5. **Safety** — Does this change risk breaking existing functionality?
+6. **Target policy context** — If `pre-flight.json.target_policy_context` lists
+   policy pointers, does the finding conflict with target-local policy? If so,
+   downgrade or reject it unless the finding cites stronger owner-surface
+   authority. Treat pointers as context only, not as fully interpreted policy.
 
 Summarize command evidence by naming the command, exit status or outcome, and
 relevant artifact path. Do not paste raw stdout/stderr transcript blocks into
@@ -56,6 +61,15 @@ For each finding, emit exactly ONE verdict:
 - `[VERDICT: APPROVED]` — Finding is valid, well-evidenced, and safe to patch
 - `[VERDICT: DOWNGRADED]` — Finding is valid but lower priority than claimed
 - `[VERDICT: REJECTED]` — Finding fails evidence quality, is metric-chasing, or is unsafe
+
+Also include one policy interaction category when relevant:
+
+- `target_policy_explained`
+- `target_policy_conflict_downgraded`
+- `target_policy_absent_generic_allowed`
+- `stronger_target_authority_cited`
+- `policy_pointer_ambiguous`
+- `unclassified_requires_amendment`
 
 ## Anti-Goals (MUST reject these patterns)
 

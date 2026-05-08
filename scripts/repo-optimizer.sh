@@ -91,6 +91,7 @@ REPO_NAME="$(basename "$REPO")"
 mkdir -p "$OUTPUT_DIR"
 
 DISCOVERY_CONTEXT_FILE="$OUTPUT_DIR/runtime-safe-target-context.md"
+TARGET_POLICY_CONTEXT_FILE="$OUTPUT_DIR/target-policy-context.json"
 RUNTIME_RECEIPTS="$OUTPUT_DIR/RUNTIME_RECEIPTS.json"
 DISCOVERY_OK=0
 DISCOVERY_FAIL=0
@@ -115,6 +116,10 @@ append_runtime_note() {
         RUNTIME_NOTES="${RUNTIME_NOTES}; "
     fi
     RUNTIME_NOTES="${RUNTIME_NOTES}${note}"
+}
+
+write_target_policy_context() {
+    python3 "$SCRIPT_DIR/target-policy-context.py" json "$REPO" "$TARGET_POLICY_CONTEXT_FILE"
 }
 
 emit_phase_progress() {
@@ -564,6 +569,7 @@ with output.open("w", encoding="utf-8") as handle:
     if not large_files:
         handle.write("| none | n/a |\n")
 PY
+    python3 "$SCRIPT_DIR/target-policy-context.py" markdown "$REPO" >> "$DISCOVERY_CONTEXT_FILE"
 }
 
 write_runtime_receipts() {
@@ -754,6 +760,7 @@ echo ""
 # Phase 1: Pre-flight (deterministic)
 # ============================================================
 echo "--- Phase 1: Pre-flight ---"
+write_target_policy_context
 
 # Read SCORECARD.json
 COMPOSITE=$(python3 -c "import json; d=json.load(open('$AUDIT_DIR/SCORECARD.json')); print(d.get('composite', 0))" 2>/dev/null || echo "?")
@@ -839,6 +846,8 @@ if len(scores) >= 2:
     # Write pre-flight context
     with open('$AUDIT_ADMISSION_RECEIPT') as admission_file:
         audit_admission = json.load(admission_file)
+    with open('$TARGET_POLICY_CONTEXT_FILE') as policy_file:
+        target_policy_context = json.load(policy_file)
     normal_readiness_claim = bool(audit_admission.get('normal_readiness_claim'))
     research_mode = audit_admission.get('research_mode')
     preflight = {
@@ -865,6 +874,7 @@ if len(scores) >= 2:
             },
             'excluded_path_classes': ['.git', 'node_modules']
         },
+        'target_policy_context': target_policy_context,
         'audit_admission': audit_admission,
         'normal_readiness_claim': normal_readiness_claim
     }
@@ -995,7 +1005,7 @@ elif command -v copilot >/dev/null 2>&1; then
     if [ "$OPT_OK" -gt 0 ] && [ -f "$AGENTS_DIR/repo-optimizer-critic.agent.md" ]; then
         echo ""
         echo "  Phase 3: Critic review..."
-        critic_prompt="Read .agents/repo-optimizer-critic.agent.md for instructions. Review all domain findings in $OUTPUT_DIR/payloads/. Use direct read-only commands only; do not use shell loops or command substitution. For each finding, assign verdict: APPROVED, DOWNGRADED, or REJECTED. Must reject at least 1. Summarize command evidence; keep raw stdout/stderr transcripts in receipts or raw logs. Return the verdict markdown in your final assistant response only. Do not use shell, heredocs, or execute-tool writes to emit the verdicts; stdout is captured automatically."
+        critic_prompt="Read .agents/repo-optimizer-critic.agent.md for instructions. Review all domain findings in $OUTPUT_DIR/payloads/ and the pointer-only target policy context in $OUTPUT_DIR/pre-flight.json. Use direct read-only commands only; do not use shell loops or command substitution. For each finding, assign verdict: APPROVED, DOWNGRADED, or REJECTED, and classify any target-policy interaction as target_policy_explained, target_policy_conflict_downgraded, target_policy_absent_generic_allowed, stronger_target_authority_cited, policy_pointer_ambiguous, or unclassified_requires_amendment. Must reject at least 1. Summarize command evidence; keep raw stdout/stderr transcripts in receipts or raw logs. Return the verdict markdown in your final assistant response only. Do not use shell, heredocs, or execute-tool writes to emit the verdicts; stdout is captured automatically."
         critic_ok=false
         if run_copilot_phase_with_receipt \
             "critic" \

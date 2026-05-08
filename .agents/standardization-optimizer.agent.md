@@ -16,6 +16,7 @@ constraints:
   - single-level nesting — do not spawn subagents
   - avoid shell loops, command substitution, arithmetic expansion, or parameter expansion
   - prefer runtime-safe-target-context.md when available
+  - when Target Policy Pointers are present, treat them as pointer-only target context and do not claim full policy interpretation
 ---
 
 # Standardization Optimizer
@@ -29,6 +30,24 @@ Normalize naming, frontmatter, and patterns.
 3. **Incomplete frontmatter** — Missing required fields (model, tools, stop_rules)
 4. **Non-standard paths** — Skills not in .agents/skills/, agents not in .agents/
 5. **Missing shebang/set** — Scripts without `#!/usr/bin/env bash` or `set -euo pipefail`
+
+## Target Policy Context
+
+When `runtime-safe-target-context.md` includes `Target Policy Pointers`, use those
+pointers only as target-local context. Do not ingest or interpret the full policy
+surface. If a standardization finding may conflict with a listed target policy
+pointer, either explain why the finding is still compatible or downgrade it
+unless stronger owner-surface authority is cited.
+
+Use one of these category tokens in the finding or verification cell when policy
+context affects the recommendation:
+
+- `target_policy_explained`
+- `target_policy_conflict_downgraded`
+- `target_policy_absent_generic_allowed`
+- `stronger_target_authority_cited`
+- `policy_pointer_ambiguous`
+- `unclassified_requires_amendment`
 
 ## Output Format
 
