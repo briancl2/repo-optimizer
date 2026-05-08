@@ -58,6 +58,10 @@ write_receipt() {
     printf '%s\n' '{' "  \"status\": \"$2\"" '}' > "$1/AUDIT_RUN_RECEIPT.json"
 }
 
+add_scorecard_audit_status() {
+    python3 -c 'import json,sys; path=sys.argv[1]; data=json.load(open(path)); data.setdefault("meta", {})["audit_status"]=sys.argv[2]; json.dump(data, open(path, "w"))' "$1/SCORECARD.json" "$2"
+}
+
 setup_audit() {
     local name="$1" status="$2" report="$3" receipt="$4"
     local audit_dir="$TEST_ROOT/audit-$name"
@@ -123,6 +127,15 @@ MISSING_RECEIPT_OUT="$TEST_ROOT/out-missing-receipt"
 MISSING_RECEIPT_RC="$(capture_run "$MISSING_RECEIPT_AUDIT" "$MISSING_RECEIPT_OUT")"
 check "missing receipt is blocked" "1" "$MISSING_RECEIPT_RC"
 check "missing receipt blocker code" "missing_audit_receipt" "$(json_field "$MISSING_RECEIPT_OUT/audit-admission-receipt.json" "blocker.code")"
+
+MALFORMED_RECEIPT_AUDIT="$(setup_audit malformed-receipt completed yes yes)"
+printf '%s\n' '{}' > "$MALFORMED_RECEIPT_AUDIT/AUDIT_RUN_RECEIPT.json"
+add_scorecard_audit_status "$MALFORMED_RECEIPT_AUDIT" "completed"
+MALFORMED_RECEIPT_OUT="$TEST_ROOT/out-malformed-receipt"
+MALFORMED_RECEIPT_RC="$(capture_run "$MALFORMED_RECEIPT_AUDIT" "$MALFORMED_RECEIPT_OUT")"
+check "malformed receipt with completed scorecard is blocked" "1" "$MALFORMED_RECEIPT_RC"
+check "malformed receipt blocker code" "malformed_audit_receipt" "$(json_field "$MALFORMED_RECEIPT_OUT/audit-admission-receipt.json" "blocker.code")"
+check "malformed receipt has no normal readiness claim" "false" "$(json_field "$MALFORMED_RECEIPT_OUT/pre-flight.json" "normal_readiness_claim")"
 
 MISSING_REPORT_AUDIT="$(setup_audit missing-report completed no yes)"
 MISSING_REPORT_OUT="$TEST_ROOT/out-missing-report"
