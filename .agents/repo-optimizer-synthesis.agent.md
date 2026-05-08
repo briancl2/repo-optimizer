@@ -42,8 +42,17 @@ Write OPTIMIZATION_PLAN.md with:
 4. **Rejected Findings** — What was rejected and why (transparency)
 5. **Patch Manifest** (if --patch mode) — Files affected, net lines, expected delta
 6. **Expected Impact** — Predicted composite score improvement
-7. **Metadata** — Timestamp, optimizer version, SCORECARD input
+7. **Cleanup Safety Summary** — Count cleanup-classified findings, destructive
+   findings, blocked destructive findings, authorization-required findings, and
+   bounded non-claims; exclude blocked destructive findings from the patch
+   manifest unless owner-boundary, keep-set, authorization, and evidence-threshold
+   receipts are present.
+8. **Metadata** — Timestamp, optimizer version, SCORECARD input
 
 Summarize command evidence instead of copying raw stdout/stderr transcripts into
 `OPTIMIZATION_PLAN.md`. Raw logs belong in `.jsonl`, stdout, or runtime receipt
 artifacts; cite only the relevant command, outcome, and artifact path.
+
+If repo-auditor inventory is absent or partial, summarize it as insufficient
+cleanup evidence rather than authorization. Do not claim cleanup is safe to
+apply; repo-optimizer recommends only and target repositories are not mutated.

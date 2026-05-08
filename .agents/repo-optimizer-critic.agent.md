@@ -14,6 +14,7 @@ must_enforce:
   - reject claims without reproducible verification command
   - flag metric-chasing (improves number without improving capability)
   - downgrade or reject policy-conflicting findings unless stronger target-owner authority is cited
+  - reject or downgrade destructive cleanup findings without owner-boundary evidence, keep-set evidence, authorization status, and sufficient evidence threshold
 output_format:
   verdict_prefixes:
     - "[VERDICT: APPROVED]"
@@ -49,6 +50,22 @@ For each finding, assess:
    policy pointers, does the finding conflict with target-local policy? If so,
    downgrade or reject it unless the finding cites stronger owner-surface
    authority. Treat pointers as context only, not as fully interpreted policy.
+7. **Cleanup safety** — If a finding deletes, archives, compresses, removes
+   behavior, touches generated/archive/customer/private/vendor/unknown surfaces,
+   or would emit a patch in `--patch` mode, require cleanup metadata:
+   `cleanup_action_class`, `cleanup_action_scope`, `destructive_action`,
+   `target_paths`, `protected_keep_paths`, `keep_set_evidence`,
+   `owner_boundary_class`, `owner_boundary_evidence`, `authorization_status`,
+   and `evidence_threshold`.
+
+Destructive findings must be `[VERDICT: REJECTED]` or `[VERDICT: DOWNGRADED]`
+unless they cite owner-boundary evidence, keep-set evidence, and either
+`authorization_status=explicit_authorized` or a documented
+`authorization_status=not_required` for generated/cache-only cleanup.
+If repo-auditor inventory is absent, partial, or unknown, use
+`authorization_status=blocked_unknown`, `evidence_threshold=insufficient`, and
+`cleanup_action_class=unclassified_requires_amendment` or
+`needs_authorization`; do not treat missing inventory as authorization.
 
 Summarize command evidence by naming the command, exit status or outcome, and
 relevant artifact path. Do not paste raw stdout/stderr transcript blocks into
@@ -71,6 +88,11 @@ Also include one policy interaction category when relevant:
 - `policy_pointer_ambiguous`
 - `unclassified_requires_amendment`
 
+Also include one cleanup metadata line per verdict when the finding is cleanup
+related:
+
+`Cleanup metadata: cleanup_action_class=<value>; cleanup_action_scope=<value>; destructive_action=<true|false>; target_paths=<comma-separated paths or none>; protected_keep_paths=<comma-separated paths or none>; keep_set_evidence=<summary or none>; owner_boundary_class=<value>; owner_boundary_evidence=<summary or none>; authorization_status=<value>; evidence_threshold=<value>`
+
 ## Anti-Goals (MUST reject these patterns)
 
 1. **Metric-chasing** — Improves a score number without improving actual capability
@@ -78,3 +100,4 @@ Also include one policy interaction category when relevant:
 3. **Premature deletion** — Removing code without replacement or evidence it's unused
 4. **False precision** — Inventing measurements or metrics that don't exist
 5. **Dependency changes** — Any finding that requires adding/removing packages
+6. **Unsafe cleanup** — Delete/archive/compress recommendations that lack owner-boundary, keep-set, authorization, or sufficient evidence-threshold receipts

@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.8 | Spec: 054 + 003 + 004 + 005 + 006 | Date: 2026-05-08
+> Version: 1.9 | Spec: 054 + 003 + 004 + 005 + 006 + 007 | Date: 2026-05-08
 
 ## Purpose
 
@@ -30,6 +30,7 @@ agent (copilot CLI). All consumers must follow this contract.
 | `synthesis-phase-receipt.json` | YES | Synthesis phase artifact-contract receipt |
 | `RUNTIME_RECEIPTS.json` | YES | Phase-by-phase runtime status and fail-closed receipts |
 | `audit-admission-receipt.json` | YES | Audit receipt admission verdict before optimizer discovery |
+| `CLEANUP_CONTRACT.json` | YES | Additive cleanup-safety classification and patch fail-closed metadata |
 | `PATCH_PACK/*.patch` | Only with --patch | Unified diff patches |
 
 `OPTIMIZATION_SCORECARD.json`, `RUNTIME_RECEIPTS.json`, `OPERATION_EVAL.json`,
@@ -68,6 +69,20 @@ files are for optimizer context and not fully interpreted. Consumers may use the
 pointers to explain, downgrade, or require stronger authority for potentially
 policy-conflicting findings, but must not claim complete target policy
 interpretation from this artifact alone.
+
+`CLEANUP_CONTRACT.json`, `OPTIMIZATION_SCORECARD.json.cleanup_contract`, and the
+`## Cleanup Safety Summary` section in `OPTIMIZATION_PLAN.md` carry additive P5
+cleanup-safety metadata. They classify cleanup-related recommendations with
+`cleanup_action_class`, `cleanup_action_scope`, `destructive_action`,
+`target_paths`, `protected_keep_paths`, `keep_set_evidence`,
+`owner_boundary_class`, `owner_boundary_evidence`, `authorization_status`, and
+`evidence_threshold` when those facts are available.
+
+Patch mode fails closed when emitted patches correspond to destructive cleanup
+recommendations that lack target paths, owner-boundary evidence, keep-set
+evidence, authorization, or sufficient evidence threshold. Missing or partial
+repo-auditor inventory maps to `authorization_status=blocked_unknown` and
+`evidence_threshold=insufficient`; it never authorizes cleanup.
 
 ## Audit Receipt Admission
 
@@ -167,6 +182,7 @@ summary instead of collapsing it into one stronger basis claim.
 | 1 | Target repo path does not exist |
 | 1 | Pre-flight failed |
 | 1 | Audit admission blocked; inspect `audit-admission-receipt.json.blocker.code` |
+| 2 | Patch mode blocked by cleanup contract; inspect `PATCH_BLOCKED_BY_CLEANUP_CONTRACT.json` |
 
 ## Invocation Patterns
 
@@ -240,6 +256,7 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.9 | 2026-05-08 | Added additive P5 cleanup-safety contract metadata and patch fail-closed receipt for unsafe destructive cleanup recommendations |
 | 1.8 | 2026-05-08 | Added pointer-only target policy context metadata in `pre-flight.json`, `target-policy-context.json`, and runtime-safe context |
 | 1.7 | 2026-05-08 | Added additive pre-flight discovery-scope denominator semantics and excluded path-class metadata |
 | 1.6 | 2026-05-08 | Added additive coverage verdict metadata, missing-domain recommendation constraints, and plan/scorecard finding-count agreement |
