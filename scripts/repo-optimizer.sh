@@ -855,7 +855,15 @@ if len(scores) >= 2:
             'eligible_files': $ELIGIBLE_FILES,
             'total_files': $FILE_COUNT,
             'coverage_pct': $COVERAGE_PCT,
-            'scope_description': '$SCOPE_DESC'
+            'scope_description': '$SCOPE_DESC',
+            'denominator_semantics': {
+                'name': 'optimizer_budgeting_denominator',
+                'description': 'Regular files under the target repository after excluding path classes that are outside optimizer budgeting scope.',
+                'total_files_field': 'file_count and discovery_scope.total_files',
+                'eligible_files_field': 'discovery_scope.eligible_files',
+                'coverage_pct_field': 'discovery_scope.coverage_pct'
+            },
+            'excluded_path_classes': ['.git', 'node_modules']
         },
         'audit_admission': audit_admission,
         'normal_readiness_claim': normal_readiness_claim

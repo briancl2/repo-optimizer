@@ -374,6 +374,17 @@ def write_blocked_outputs(admission_receipt: Path, output_dir: Path, repo_name: 
             "total_files": 0,
             "coverage_pct": 0,
             "scope_description": "blocked before optimizer discovery",
+            "denominator_semantics": {
+                "name": "optimizer_budgeting_denominator",
+                "description": (
+                    "Regular files under the target repository after excluding "
+                    "path classes that are outside optimizer budgeting scope."
+                ),
+                "total_files_field": "file_count and discovery_scope.total_files",
+                "eligible_files_field": "discovery_scope.eligible_files",
+                "coverage_pct_field": "discovery_scope.coverage_pct",
+            },
+            "excluded_path_classes": [".git", "node_modules"],
         },
         "audit_admission": admission,
         "normal_readiness_claim": False,
