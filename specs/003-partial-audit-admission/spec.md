@@ -28,7 +28,12 @@ directories and inspect emitted receipts.
 2. **Given** a partial or failed audit receipt, **When** the optimizer runs
    normally, **Then** it exits blocked and writes blocked receipt artifacts
    without a normal readiness claim.
-3. **Given** legacy audit output with no completed receipt or a completed receipt
+3. **Given** a completed receipt whose existing scorecard receipt metadata says
+   the scan was limited or came from a clean-head snapshot, **When** the
+   optimizer runs normally, **Then** it exits blocked, records
+   `audit_evidence_class=scan_limited` or `snapshot_limited`, and emits no
+   normal readiness claim.
+4. **Given** legacy audit output with no completed receipt or a completed receipt
    missing `AUDIT_REPORT.md`, **When** the optimizer runs normally, **Then** it
    exits blocked and records the exact blocker.
 
@@ -89,6 +94,9 @@ research-labeled output path and a normal output path.
   receipt/report admission behavior and the research-mode path.
 - **FR-009**: This PR MUST NOT implement coverage verdicts, target policy
   adapters, repo-auditor changes, or BMA shared-surface edits.
+- **FR-010**: Completed receipts with scan-limited or snapshot-limited evidence
+  metadata MUST be blocked from normal optimizer readiness and classified
+  explicitly in `audit-admission-receipt.json`.
 
 ### Key Entities
 
@@ -102,8 +110,8 @@ research-labeled output path and a normal output path.
 ### Measurable Outcomes
 
 - **SC-001**: Focused audit-admission tests cover completed, partial, failed,
-  missing receipt, missing report, valid research mode, and invalid research
-  output path.
+  scan-limited, snapshot-limited, missing receipt, missing report, valid
+  research mode, and invalid research output path.
 - **SC-002**: `make check` and relevant tests pass before commit.
 - **SC-003**: PR/handoff states the merge-order dependency that strict optimizer
   admission must not merge before repo-auditor emits the receipt shape unless

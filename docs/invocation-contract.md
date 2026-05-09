@@ -100,10 +100,18 @@ Admission outcomes:
 | Audit input shape | Normal admission | Receipt behavior |
 |---|---|---|
 | Completed receipt + scorecard + audit report | admitted | `audit-admission-receipt.json` records `admission_status=admitted` and `normal_readiness_claim=true` |
+| Completed receipt with scan-limited inventory evidence | blocked | `audit_evidence_class=scan_limited`; no normal readiness claim is emitted |
+| Completed receipt from a clean-head snapshot / snapshot-limited audit | blocked | `audit_evidence_class=snapshot_limited`; no normal readiness claim is emitted |
 | Partial receipt | blocked | blocked receipts are written; no normal readiness claim is emitted |
 | Failed receipt | blocked | blocked receipts are written; no normal readiness claim is emitted |
 | Missing receipt | blocked | blocked receipts are written even when legacy `SCORECARD.json` and `AUDIT_REPORT.md` exist |
 | Completed receipt missing `AUDIT_REPORT.md` | blocked | blocked receipts are written because required report materialization is incomplete |
+
+Scan-limited evidence is detected from existing repo-auditor metadata such as
+`SCORECARD_RECEIPTS.json.full_facts_inventory.status=available_limited` or
+`scan_limit_reached=true`. Snapshot-limited evidence is detected from existing
+clean-head snapshot receipt metadata. These classifications are optimizer-local
+consumer admission rules and do not require repo-auditor receipt schema changes.
 
 The only non-normal bypass is the explicit calibration mode:
 
@@ -256,6 +264,7 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.10 | 2026-05-09 | Blocked scan-limited and snapshot-limited completed audit evidence from normal readiness claims |
 | 1.9 | 2026-05-08 | Added additive P5 cleanup-safety contract metadata and patch fail-closed receipt for unsafe destructive cleanup recommendations |
 | 1.8 | 2026-05-08 | Added pointer-only target policy context metadata in `pre-flight.json`, `target-policy-context.json`, and runtime-safe context |
 | 1.7 | 2026-05-08 | Added additive pre-flight discovery-scope denominator semantics and excluded path-class metadata |

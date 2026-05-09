@@ -19,6 +19,7 @@ from typing import Any
 RESEARCH_MODE = "partial-audit-calibration"
 RECEIPT_NAMES = ("AUDIT_RUN_RECEIPT.json", "AUDIT_RECEIPT.json", "SCORECARD_RECEIPTS.json")
 EXPECTED_DISCOVERY_DOMAINS = ["decomposition", "consolidation", "extraction", "standardization"]
+LIMITED_INVENTORY_STATUSES = {"available-limited", "scan-limited", "limited", "partial", "incomplete"}
 
 
 def utc_now() -> str:
@@ -55,6 +56,97 @@ def nested_value(payload: dict[str, Any], path: tuple[str, ...]) -> Any:
             return None
         value = value.get(key)
     return value
+
+
+def truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "y"}
+
+
+def normalize_token(value: Any) -> str | None:
+    if value is None:
+        return None
+    token = str(value).strip().lower().replace("_", "-")
+    return token or None
+
+
+def evidence_source(path: str, value: Any) -> dict[str, Any]:
+    return {"path": path, "value": value}
+
+
+def scan_limited_sources(payload: dict[str, Any], prefix: str) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
+    for section_name in ("full_facts_inventory", "primary_surface_inventory"):
+        section = payload.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        status = normalize_token(section.get("status"))
+        if status in LIMITED_INVENTORY_STATUSES:
+            sources.append(evidence_source(f"{prefix}.{section_name}.status", section.get("status")))
+        if truthy(section.get("scan_limit_reached")):
+            sources.append(
+                evidence_source(f"{prefix}.{section_name}.scan_limit_reached", section.get("scan_limit_reached"))
+            )
+    return sources
+
+
+def audit_evidence_classification(audit_dir: Path) -> dict[str, Any]:
+    receipts = read_json(audit_dir / "SCORECARD_RECEIPTS.json") or {}
+    wrapper = read_json(audit_dir / "post-merge-wrapper-summary.json") or {}
+    snapshot_receipt = read_json(audit_dir / "CLEAN_HEAD_SNAPSHOT_RECEIPT.json")
+    snapshot_sources: list[dict[str, Any]] = []
+    scan_sources = scan_limited_sources(receipts, "SCORECARD_RECEIPTS.json")
+
+    snapshot = receipts.get("clean_head_snapshot")
+    if isinstance(snapshot, dict):
+        if truthy(snapshot.get("non_authorization")):
+            snapshot_sources.append(
+                evidence_source(
+                    "SCORECARD_RECEIPTS.json.clean_head_snapshot.non_authorization",
+                    snapshot.get("non_authorization"),
+                )
+            )
+        if normalize_token(snapshot.get("mode")) == "clean-head-snapshot":
+            snapshot_sources.append(
+                evidence_source("SCORECARD_RECEIPTS.json.clean_head_snapshot.mode", snapshot.get("mode"))
+            )
+
+    if snapshot_receipt is not None:
+        snapshot_sources.append(evidence_source("CLEAN_HEAD_SNAPSHOT_RECEIPT.json", "present"))
+        mode = normalize_token(snapshot_receipt.get("mode"))
+        if mode:
+            snapshot_sources.append(
+                evidence_source("CLEAN_HEAD_SNAPSHOT_RECEIPT.json.mode", snapshot_receipt.get("mode"))
+            )
+
+    for field in ("full_scan_limit_reached", "primary_scan_limit_reached"):
+        if truthy(wrapper.get(field)):
+            scan_sources.append(evidence_source(f"post-merge-wrapper-summary.json.{field}", wrapper.get(field)))
+    for field in ("full_status", "primary_status"):
+        if normalize_token(wrapper.get(field)) in LIMITED_INVENTORY_STATUSES:
+            scan_sources.append(evidence_source(f"post-merge-wrapper-summary.json.{field}", wrapper.get(field)))
+
+    if snapshot_sources:
+        evidence_class = "snapshot_limited"
+        limited = True
+        sources = snapshot_sources + scan_sources
+    elif scan_sources:
+        evidence_class = "scan_limited"
+        limited = True
+        sources = scan_sources
+    else:
+        evidence_class = "not_limited"
+        limited = False
+        sources = []
+
+    return {
+        "audit_evidence_class": evidence_class,
+        "audit_evidence_limited": limited,
+        "audit_evidence_sources": sources,
+    }
 
 
 def first_status(payload: dict[str, Any], paths: tuple[tuple[str, ...], ...]) -> tuple[str | None, str | None]:
@@ -137,6 +229,7 @@ def evaluate_admission(audit_dir: Path, output_dir: Path, research_mode: str) ->
     receipt_status_missing = receipt_present and status is None
     scorecard_present = scorecard_path.is_file()
     report_present = report_path.is_file()
+    evidence_classification = audit_evidence_classification(audit_dir)
     mode = research_mode.strip()
     research_path_ok = research_output_path_valid(output_dir) if mode else None
 
@@ -160,6 +253,24 @@ def evaluate_admission(audit_dir: Path, output_dir: Path, research_mode: str) ->
         block = blocker(
             "malformed_audit_receipt",
             "Audit receipt is present but has no parseable status.",
+        )
+    elif (
+        receipt_present
+        and normalized_status == "completed"
+        and evidence_classification["audit_evidence_class"] == "snapshot_limited"
+    ):
+        block = blocker(
+            "snapshot_limited_audit_evidence",
+            "Snapshot-limited audit evidence cannot support normal optimizer readiness.",
+        )
+    elif (
+        receipt_present
+        and normalized_status == "completed"
+        and evidence_classification["audit_evidence_class"] == "scan_limited"
+    ):
+        block = blocker(
+            "scan_limited_audit_evidence",
+            "Scan-limited audit evidence cannot support normal optimizer readiness.",
         )
     elif mode == RESEARCH_MODE and not receipt_present and not scorecard_fallback_status:
         block = blocker(
@@ -215,6 +326,7 @@ def evaluate_admission(audit_dir: Path, output_dir: Path, research_mode: str) ->
         "receipt_present": receipt_present,
         "receipt_path": str(receipt_path) if receipt_path else None,
         "receipt_status": normalized_status or ("missing" if not receipt_present else "unknown"),
+        **evidence_classification,
         "admission_status": admission_status,
         "normal_readiness_claim": normal_readiness_claim,
         "research_mode": mode or None,

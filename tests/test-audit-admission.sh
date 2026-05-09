@@ -58,6 +58,33 @@ write_receipt() {
     printf '%s\n' '{' "  \"status\": \"$2\"" '}' > "$1/AUDIT_RUN_RECEIPT.json"
 }
 
+write_scan_limited_receipts() {
+    {
+        printf '%s\n' '{'
+        printf '%s\n' '  "full_facts_inventory": {'
+        printf '%s\n' '    "status": "available_limited",'
+        printf '%s\n' '    "scan_limit_reached": true,'
+        printf '%s\n' '    "scan_coverage_ratio": 0.25'
+        printf '%s\n' '  },'
+        printf '%s\n' '  "primary_surface_inventory": {'
+        printf '%s\n' '    "status": "available_limited",'
+        printf '%s\n' '    "scan_limit_reached": true'
+        printf '%s\n' '  }'
+        printf '%s\n' '}'
+    } > "$1/SCORECARD_RECEIPTS.json"
+}
+
+write_snapshot_limited_receipts() {
+    write_scan_limited_receipts "$1"
+    python3 -c 'import json,sys; path=sys.argv[1]; data=json.load(open(path)); data["clean_head_snapshot"]={"mode":"clean-head-snapshot","non_authorization":True,"snapshot_status_clean":True}; json.dump(data, open(path,"w"))' "$1/SCORECARD_RECEIPTS.json"
+    {
+        printf '%s\n' '{'
+        printf '%s\n' '  "mode": "clean-head-snapshot",'
+        printf '%s\n' '  "non_authorization_statement": "snapshot evidence is not normal readiness authority"'
+        printf '%s\n' '}'
+    } > "$1/CLEAN_HEAD_SNAPSHOT_RECEIPT.json"
+}
+
 add_scorecard_audit_status() {
     python3 -c 'import json,sys; path=sys.argv[1]; data=json.load(open(path)); data.setdefault("meta", {})["audit_status"]=sys.argv[2]; json.dump(data, open(path, "w"))' "$1/SCORECARD.json" "$2"
 }
@@ -107,6 +134,24 @@ COMPLETED_RC="$(capture_run "$COMPLETED_AUDIT" "$COMPLETED_OUT")"
 check "completed receipt is admitted" "0" "$COMPLETED_RC"
 check "completed admission status" "admitted" "$(json_field "$COMPLETED_OUT/audit-admission-receipt.json" "admission_status")"
 check "completed normal readiness claim" "true" "$(json_field "$COMPLETED_OUT/pre-flight.json" "normal_readiness_claim")"
+
+SCAN_LIMITED_AUDIT="$(setup_audit scan-limited completed yes yes)"
+write_scan_limited_receipts "$SCAN_LIMITED_AUDIT"
+SCAN_LIMITED_OUT="$TEST_ROOT/out-scan-limited"
+SCAN_LIMITED_RC="$(capture_run "$SCAN_LIMITED_AUDIT" "$SCAN_LIMITED_OUT")"
+check "scan-limited completed audit is blocked" "1" "$SCAN_LIMITED_RC"
+check "scan-limited blocker code" "scan_limited_audit_evidence" "$(json_field "$SCAN_LIMITED_OUT/audit-admission-receipt.json" "blocker.code")"
+check "scan-limited evidence class" "scan_limited" "$(json_field "$SCAN_LIMITED_OUT/audit-admission-receipt.json" "audit_evidence_class")"
+check "scan-limited has no normal readiness claim" "false" "$(json_field "$SCAN_LIMITED_OUT/pre-flight.json" "normal_readiness_claim")"
+
+SNAPSHOT_LIMITED_AUDIT="$(setup_audit snapshot-limited completed yes yes)"
+write_snapshot_limited_receipts "$SNAPSHOT_LIMITED_AUDIT"
+SNAPSHOT_LIMITED_OUT="$TEST_ROOT/out-snapshot-limited"
+SNAPSHOT_LIMITED_RC="$(capture_run "$SNAPSHOT_LIMITED_AUDIT" "$SNAPSHOT_LIMITED_OUT")"
+check "snapshot-limited completed audit is blocked" "1" "$SNAPSHOT_LIMITED_RC"
+check "snapshot-limited blocker code" "snapshot_limited_audit_evidence" "$(json_field "$SNAPSHOT_LIMITED_OUT/audit-admission-receipt.json" "blocker.code")"
+check "snapshot-limited evidence class" "snapshot_limited" "$(json_field "$SNAPSHOT_LIMITED_OUT/audit-admission-receipt.json" "audit_evidence_class")"
+check "snapshot-limited has no normal readiness claim" "false" "$(json_field "$SNAPSHOT_LIMITED_OUT/OPTIMIZATION_SCORECARD.json" "normal_readiness_claim")"
 
 PARTIAL_AUDIT="$(setup_audit partial partial no yes)"
 PARTIAL_OUT="$TEST_ROOT/out-partial"

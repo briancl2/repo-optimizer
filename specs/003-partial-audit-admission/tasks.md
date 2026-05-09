@@ -19,6 +19,7 @@
 - [x] T007 Add focused tests for completed, partial, failed, missing receipt, missing report, valid research mode, and invalid research path.
 - [x] T008 Update existing optimizer-run tests to use completed audit fixtures.
 - [x] T009 Document admission contract and research mode in `docs/invocation-contract.md`.
+- [x] T010 Block and explicitly classify scan-limited and snapshot-limited completed audit evidence.
 
 ## Explicitly Out Of Scope
 
