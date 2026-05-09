@@ -34,5 +34,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Check out repo-agent-core schemas
+        uses: actions/checkout@v4
+        with:
+          repository: briancl2/repo-agent-core
+          path: repo-agent-core
+
       - name: Run deterministic test suite
+        env:
+          REPO_AGENT_CORE: ${{ github.workspace }}/repo-agent-core
         run: make test
