@@ -1,17 +1,65 @@
 #!/usr/bin/env bash
 # test-transfer-oracle-consumer.sh — verify bounded advisory transfer evaluation.
-# Requires a sibling repo-agent-core checkout for shared schema validation.
+# Requires repo-agent-core for shared schema validation.
 
 set -euo pipefail
 
 OPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CORE_DIR_DEFAULT="$(cd "$OPT_DIR/.." && pwd)/repo-agent-core"
-CORE_DIR="${REPO_AGENT_CORE:-$CORE_DIR_DEFAULT}"
-if [ ! -d "$CORE_DIR" ]; then
-    echo "ERROR: repo-agent-core not found. Set REPO_AGENT_CORE to the repo-agent-core checkout."
-    exit 1
-fi
-TEST_TMPDIR="$(mktemp -d)"
+
+core_is_usable() {
+    local core_dir="$1"
+    [ -d "$core_dir" ] &&
+        [ -f "$core_dir/scripts/validate-artifacts.sh" ] &&
+        [ -f "$core_dir/schemas/TRANSFER_ORACLE_RECEIPT.schema.json" ]
+}
+
+print_core_guard() {
+    echo "ERROR: repo-agent-core checkout is required for shared TRANSFER_ORACLE_RECEIPT schema validation." >&2
+    echo "" >&2
+    echo "Searched:" >&2
+    for candidate in "$@"; do
+        echo "  - $candidate" >&2
+    done
+    echo "" >&2
+    echo "Required files under repo-agent-core:" >&2
+    echo "  - scripts/validate-artifacts.sh" >&2
+    echo "  - schemas/TRANSFER_ORACLE_RECEIPT.schema.json" >&2
+    echo "" >&2
+    echo "Action: set REPO_AGENT_CORE=/absolute/path/to/repo-agent-core, place repo-agent-core next to repo-optimizer, or clone it to \$HOME/repos/repo-agent-core." >&2
+}
+
+resolve_core_dir() {
+    if [ -n "${REPO_AGENT_CORE:-}" ]; then
+        if core_is_usable "$REPO_AGENT_CORE"; then
+            printf '%s\n' "$REPO_AGENT_CORE"
+            return 0
+        fi
+        print_core_guard "$REPO_AGENT_CORE (from REPO_AGENT_CORE)"
+        return 1
+    fi
+
+    local sibling_core
+    local home_core
+    sibling_core="$(cd "$OPT_DIR/.." && pwd)/repo-agent-core"
+    home_core="$HOME/repos/repo-agent-core"
+
+    if core_is_usable "$sibling_core"; then
+        printf '%s\n' "$sibling_core"
+        return 0
+    fi
+    if core_is_usable "$home_core"; then
+        printf '%s\n' "$home_core"
+        return 0
+    fi
+
+    print_core_guard "$sibling_core" "$home_core"
+    return 1
+}
+
+CORE_DIR="$(resolve_core_dir)" || exit 1
+TEST_TMP_ROOT="${TMPDIR:-$OPT_DIR/work/tmp}"
+mkdir -p "$TEST_TMP_ROOT"
+TEST_TMPDIR="$(mktemp -d "$TEST_TMP_ROOT/transfer-oracle-consumer.XXXXXX")"
 trap 'rm -rf "$TEST_TMPDIR"' EXIT
 
 PASS=0
