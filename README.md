@@ -48,6 +48,7 @@ make install-hooks             # Install pre-commit hook
 ```
 
 `make test` is deterministic by contract. The suite uses `OPTIMIZER_PREFLIGHT_ONLY=true` when it exercises `repo-optimizer.sh` so budget-tier coverage never blocks on Copilot-backed phases.
+GitHub Actions runs `make check` and `make test` on pull requests and pushes to `main`; the CI test job checks out `repo-agent-core` read-only and sets `REPO_AGENT_CORE` for shared schema validation.
 
 See `AGENTS.md` for full script inventory and `.specify/memory/constitution.md` for governance.
 

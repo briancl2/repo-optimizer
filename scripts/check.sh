@@ -16,6 +16,21 @@ cd "$REPO_ROOT"
 FAIL=0
 WARN_COUNT=0
 
+commit_has_spec_trailer() {
+    git log -1 --format=%B "$1" 2>/dev/null | grep -qE '^(Spec-ID|Spec-Exempt):'
+}
+
+merge_parent_with_spec_trailer() {
+    local parents parent
+    parents="$(git rev-list --parents -n 1 HEAD 2>/dev/null | cut -d' ' -f3-)"
+    for parent in $parents; do
+        if commit_has_spec_trailer "$parent"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # ── Shellcheck ────────────────────────────────────────────────────────
 echo "-- shellcheck --"
 if ! command -v shellcheck > /dev/null 2>&1; then
@@ -55,8 +70,10 @@ if ! git diff --cached --quiet --; then
     echo "  SKIP: staged changes present; validate the new commit with make check after committing"
 else
     LAST_MSG=$(git log -1 --format=%B 2>/dev/null || echo "")
-    if echo "$LAST_MSG" | grep -qE '^(Spec-ID|Spec-Exempt):'; then
+    if commit_has_spec_trailer HEAD; then
         echo "  PASS: last commit has Spec-ID or Spec-Exempt trailer"
+    elif merge_parent_with_spec_trailer; then
+        echo "  PASS: merge commit has a merged parent with Spec-ID or Spec-Exempt trailer"
     elif [ -z "$LAST_MSG" ]; then
         echo "  SKIP: no commits yet"
     else
