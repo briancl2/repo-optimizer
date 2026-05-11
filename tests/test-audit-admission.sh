@@ -34,6 +34,14 @@ json_field() {
     python3 -c 'import functools,json,sys; data=json.load(open(sys.argv[1])); value=functools.reduce(lambda acc,key: acc.get(key) if isinstance(acc,dict) else None, sys.argv[2].split("."), data); print("true" if value is True else "false" if value is False else "" if value is None else value)' "$1" "$2"
 }
 
+file_contains() {
+    if grep -Fq "$2" "$1"; then
+        printf '%s\n' "true"
+    else
+        printf '%s\n' "false"
+    fi
+}
+
 write_scorecard() {
     local audit_dir="$1"
     mkdir -p "$audit_dir"
@@ -64,7 +72,11 @@ write_scan_limited_receipts() {
         printf '%s\n' '  "full_facts_inventory": {'
         printf '%s\n' '    "status": "available_limited",'
         printf '%s\n' '    "scan_limit_reached": true,'
-        printf '%s\n' '    "scan_coverage_ratio": 0.25'
+        printf '%s\n' '    "scan_coverage_ratio": 0.25,'
+        printf '%s\n' '    "scan_limited_rerun_hint": {'
+        printf '%s\n' '      "opaque_test_token": "auditor-owned-rerun-guidance",'
+        printf '%s\n' '      "opaque_nested": {"value": "do-not-parse"}'
+        printf '%s\n' '    }'
         printf '%s\n' '  },'
         printf '%s\n' '  "primary_surface_inventory": {'
         printf '%s\n' '    "status": "available_limited",'
@@ -143,6 +155,10 @@ check "scan-limited completed audit is blocked" "1" "$SCAN_LIMITED_RC"
 check "scan-limited blocker code" "scan_limited_audit_evidence" "$(json_field "$SCAN_LIMITED_OUT/audit-admission-receipt.json" "blocker.code")"
 check "scan-limited evidence class" "scan_limited" "$(json_field "$SCAN_LIMITED_OUT/audit-admission-receipt.json" "audit_evidence_class")"
 check "scan-limited has no normal readiness claim" "false" "$(json_field "$SCAN_LIMITED_OUT/pre-flight.json" "normal_readiness_claim")"
+check "scan-limited rerun owner action" "Rerun repo-auditor using the auditor-provided hint, then rerun repo-optimizer only after a complete or explicitly bounded audit receipt exists." "$(json_field "$SCAN_LIMITED_OUT/audit-admission-receipt.json" "auditor_rerun_guidance.owner_action")"
+check "scan-limited hint quoted opaquely" "auditor-owned-rerun-guidance" "$(json_field "$SCAN_LIMITED_OUT/audit-admission-receipt.json" "auditor_rerun_guidance.hint.opaque_test_token")"
+check "scan-limited plan quotes hint" "true" "$(file_contains "$SCAN_LIMITED_OUT/OPTIMIZATION_PLAN.md" "auditor-owned-rerun-guidance")"
+check "scan-limited plan names optimizer rerun gate" "true" "$(file_contains "$SCAN_LIMITED_OUT/OPTIMIZATION_PLAN.md" "Re-run repo-optimizer only after repo-auditor emits a complete or explicitly bounded audit receipt.")"
 
 SNAPSHOT_LIMITED_AUDIT="$(setup_audit snapshot-limited completed yes yes)"
 write_snapshot_limited_receipts "$SNAPSHOT_LIMITED_AUDIT"

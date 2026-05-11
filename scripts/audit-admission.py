@@ -93,6 +93,40 @@ def scan_limited_sources(payload: dict[str, Any], prefix: str) -> list[dict[str,
     return sources
 
 
+def scan_limited_rerun_guidance(audit_dir: Path) -> dict[str, Any] | None:
+    for name in RECEIPT_NAMES:
+        payload = read_json(audit_dir / name)
+        if payload is None:
+            continue
+        for section_name in ("full_facts_inventory", "primary_surface_inventory"):
+            section = payload.get(section_name)
+            if not isinstance(section, dict):
+                continue
+            if "scan_limited_rerun_hint" not in section:
+                continue
+            hint = section.get("scan_limited_rerun_hint")
+            if hint is None:
+                continue
+            return {
+                "owner": "repo-auditor",
+                "guidance_type": "scan_limited_rerun_hint",
+                "source": f"{name}.{section_name}.scan_limited_rerun_hint",
+                "consumer_handling": "opaque_quote_through",
+                "owner_action": (
+                    "Rerun repo-auditor using the auditor-provided hint, then rerun repo-optimizer "
+                    "only after a complete or explicitly bounded audit receipt exists."
+                ),
+                "optimizer_admission": "blocked_until_complete_or_explicitly_bounded_audit_receipt",
+                "hint": hint,
+                "bounded_non_claims": [
+                    "repo-optimizer did not parse or validate auditor hint internals.",
+                    "The auditor hint does not make limited audit evidence a normal readiness claim.",
+                    "Hint internals are not treated as repo-optimizer or shared-core schema.",
+                ],
+            }
+    return None
+
+
 def audit_evidence_classification(audit_dir: Path) -> dict[str, Any]:
     receipts = read_json(audit_dir / "SCORECARD_RECEIPTS.json") or {}
     wrapper = read_json(audit_dir / "post-merge-wrapper-summary.json") or {}
@@ -230,6 +264,9 @@ def evaluate_admission(audit_dir: Path, output_dir: Path, research_mode: str) ->
     scorecard_present = scorecard_path.is_file()
     report_present = report_path.is_file()
     evidence_classification = audit_evidence_classification(audit_dir)
+    rerun_guidance = None
+    if evidence_classification["audit_evidence_limited"]:
+        rerun_guidance = scan_limited_rerun_guidance(audit_dir)
     mode = research_mode.strip()
     research_path_ok = research_output_path_valid(output_dir) if mode else None
 
@@ -314,6 +351,13 @@ def evaluate_admission(audit_dir: Path, output_dir: Path, research_mode: str) ->
         "scorecard_status_path": scorecard_status_source,
         "receipt_payload_present": receipt_payload is not None,
     }
+    bounded_non_claims = [
+        "Blocked or research-admitted audits are not normal optimizer readiness claims.",
+        "Research mode preserves calibration evidence only; it does not certify target quality.",
+    ]
+    if rerun_guidance is not None:
+        bounded_non_claims.extend(rerun_guidance["bounded_non_claims"])
+
     return {
         "schema_version": "1.0.0",
         "artifact": "AUDIT_ADMISSION_RECEIPT",
@@ -327,16 +371,14 @@ def evaluate_admission(audit_dir: Path, output_dir: Path, research_mode: str) ->
         "receipt_path": str(receipt_path) if receipt_path else None,
         "receipt_status": normalized_status or ("missing" if not receipt_present else "unknown"),
         **evidence_classification,
+        "auditor_rerun_guidance": rerun_guidance,
         "admission_status": admission_status,
         "normal_readiness_claim": normal_readiness_claim,
         "research_mode": mode or None,
         "research_output_path_valid": research_path_ok,
         "blocker": block,
         "source": source,
-        "bounded_non_claims": [
-            "Blocked or research-admitted audits are not normal optimizer readiness claims.",
-            "Research mode preserves calibration evidence only; it does not certify target quality.",
-        ],
+        "bounded_non_claims": bounded_non_claims,
     }
 
 
@@ -522,6 +564,23 @@ def write_blocked_outputs(admission_receipt: Path, output_dir: Path, repo_name: 
     block = admission.get("blocker") or {}
     if block:
         plan.extend(["", "## Blocker", "", f"- {block.get('code')}: {block.get('message')}"])
+    rerun_guidance = admission.get("auditor_rerun_guidance")
+    if isinstance(rerun_guidance, dict):
+        plan.extend(
+            [
+                "",
+                "## Owner Action",
+                "",
+                "- Rerun repo-auditor using the auditor-provided hint quoted below.",
+                "- Re-run repo-optimizer only after repo-auditor emits a complete or explicitly bounded audit receipt.",
+                "- Repo-optimizer treats the hint as opaque repo-auditor guidance; it does not interpret hint internals as shared schema.",
+                f"- Guidance source: `{rerun_guidance.get('source')}`",
+                "",
+                "```json",
+                json.dumps(rerun_guidance.get("hint"), indent=2, sort_keys=True),
+                "```",
+            ]
+        )
     plan.extend(
         [
             "",
