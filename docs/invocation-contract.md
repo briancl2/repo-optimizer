@@ -112,6 +112,13 @@ Scan-limited evidence is detected from existing repo-auditor metadata such as
 `scan_limit_reached=true`. Snapshot-limited evidence is detected from existing
 clean-head snapshot receipt metadata. These classifications are optimizer-local
 consumer admission rules and do not require repo-auditor receipt schema changes.
+When limited evidence also carries
+`full_facts_inventory.scan_limited_rerun_hint`, repo-optimizer quotes that hint
+through as opaque repo-auditor owner guidance in blocked output. The owner action
+is to rerun repo-auditor using the auditor-provided hint, then rerun
+repo-optimizer only after a complete or explicitly bounded audit receipt exists.
+repo-optimizer does not parse hint internals such as basis values, environment
+variable names, or fallback heuristics as optimizer/shared-core schema.
 
 The only non-normal bypass is the explicit calibration mode:
 
