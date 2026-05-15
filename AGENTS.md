@@ -1,144 +1,72 @@
 # AGENTS.md — repo-optimizer
 
-> Produce concrete optimization patches that improve audit scores for any repository.
-> Report-only by default; `--patch` flag enables patch generation.
-> Adversarial critic is non-negotiable. `--no-verify` NEVER permitted.
+> Produce concrete optimization plans and optional validated patches from
+> repo-auditor output. Report-only is the default; `--patch` is explicit.
 
 ## Purpose
 
-`repo-optimizer` reads SCORECARD.json + AUDIT_REPORT.md (from repo-auditor) and
-produces an OPTIMIZATION_PLAN.md with prioritized findings. With `--patch` flag,
-generates unified diff patches validated with `git apply --check`.
+`repo-optimizer` reads `SCORECARD.json` and `AUDIT_REPORT.md`, then emits an
+`OPTIMIZATION_PLAN.md`. With `PATCH=true` or `--patch`, it also emits unified
+diffs validated with `git apply --check`. Keep this file as the live
+bootloader; detailed agent, script, benchmark, and spec-kit inventories live in
+`docs/agent-operations.md`.
 
-## Key Conventions
+## Operating Rules
 
-- **Report-only by default** — `--patch` flag required for modifications
-- Adversarial critic is mandatory (L29) — must reject ≥1 finding per run
-- Pre-commit hook blocks by default (SKIP_REVIEW=1 for emergency only)
-- `--no-verify` is NEVER permitted (L102)
-- AGENTS.md is the canonical instruction surface (L104)
-- Target repos are NEVER modified directly — only patches produced
-- Deterministic tests must stay pre-flight-only; use `OPTIMIZER_PREFLIGHT_ONLY=true` when exercising `repo-optimizer.sh` inside the local test suite
-- Governed optimizer artifacts summarize command evidence instead of copying raw
-  command transcripts; raw stdout/stderr stays in `.jsonl`, stdout, and runtime
-  receipt artifacts.
+- Report-only by default. Patch generation requires explicit `--patch` /
+  `PATCH=true`.
+- Target repositories are never modified directly; only reports and patch files
+  are produced.
+- Generated patches must pass `git apply --check`.
+- Adversarial critique is mandatory and must reject at least one finding per
+  run.
+- `--no-verify` is never permitted.
+- Deterministic tests that exercise `scripts/repo-optimizer.sh` must stay
+  preflight-only with `OPTIMIZER_PREFLIGHT_ONLY=true`.
+- Raw command output stays in `.jsonl`, stdout, or runtime receipts. Human and
+  machine-facing summaries cite command, outcome, and retained path.
 
-## Agents (8)
-
-| # | Agent | Model | Purpose |
-|---|---|---|---|
-| 1 | repo-optimizer | claude-opus-4.6 | Orchestrator — 4-phase pipeline |
-| 2 | repo-optimizer-inbound | claude-opus-4.6 | Inbound invocation (Mode B) |
-| 3 | decomposition-optimizer | claude-sonnet-4.5 | Break >200L files into focused components |
-| 4 | consolidation-optimizer | claude-sonnet-4.5 | Merge near-duplicates, eliminate dead code |
-| 5 | extraction-optimizer | claude-sonnet-4.5 | Promote scripts → skills |
-| 6 | standardization-optimizer | claude-sonnet-4.5 | Normalize naming, frontmatter, patterns |
-| 7 | repo-optimizer-critic | claude-opus-4.6 | Adversarial critic (MANDATORY) |
-| 8 | repo-optimizer-synthesis | claude-opus-4.6 | Findings + patch summary synthesis |
-
-## Spec-Kit Agents (9)
-
-Standard spec-kit pipeline agents (added by spec 054 bootstrap). Dual dispatch:
-interactive (VS Code `runSubagent`) or batch (`spec-orchestrator.sh` → Copilot CLI).
-
-| # | Agent | Purpose |
-|---|---|---|
-| 1 | speckit.specify | Elicit requirements, produce spec skeleton |
-| 2 | speckit.plan | Generate implementation plan from spec |
-| 3 | speckit.tasks | Break plan into discrete tasks |
-| 4 | speckit.analyze | Analyze codebase for spec impact |
-| 5 | speckit.implement | Execute implementation tasks |
-| 6 | speckit.checklist | Validate spec completion checklist |
-| 7 | speckit.clarify | Resolve ambiguities in specs |
-| 8 | speckit.constitution | Enforce governance constraints |
-| 9 | speckit.taskstoissues | Convert tasks to GitHub Issues |
-
-## Spec-Kit Helpers (4)
-
-Infrastructure scripts in `.specify/scripts/bash/` (added by spec 054 bootstrap).
-
-| Script | Purpose |
-|---|---|
-| `check-prerequisites.sh` | Validate spec-kit prerequisites before operations |
-| `common.sh` | Shared functions for spec-kit scripts |
-| `setup-plan.sh` | Initialize plan directory structure |
-| `update-agent-context.sh` | Refresh agent context from spec state |
-
-## Skills (2)
-
-| # | Skill | Purpose |
-|---|---|---|
-| 1 | reviewing-code-locally | Pre-commit code review via Copilot CLI |
-| 2 | bundle-integrity | Validate optimization output bundle completeness |
-
-## Scripts (12)
-
-### Domain Scripts
-
-| Script | Purpose |
-|---|---|
-| `scripts/repo-optimizer.sh` | 4-phase pipeline orchestrator |
-| `scripts/pre-flight.sh` | Read SCORECARD + identify bottom-2 dimensions |
-| `scripts/generate-patches.sh` | Unified diff generation from findings |
-| `scripts/fix-diff-headers.sh` | Hunk header recomputation (L36) |
-| `scripts/validate-patches.sh` | `git apply --check` wrapper |
-| `scripts/compare-scorecards.sh` | Pre/post delta computation |
-
-### Self-Management Scripts (spec 054)
-
-| Script | Purpose |
-|---|---|
-| `scripts/check.sh` | Gate 2 pre-commit check (shellcheck + inventory + trailers) |
-| `scripts/work-init.sh` | Work contract initializer (Gate 1) |
-| `scripts/work-close.sh` | Work contract finalizer (Gate 3 + session grading) |
-| `scripts/score-session.sh` | 4-dimension 15pt session grader |
-| `scripts/pre-commit-hook.sh` | Versioned pre-commit hook (runs make check) |
-| `scripts/pre-push-hook.sh` | Pre-push hook |
-
-## Key Documents
-
-| Document | Purpose |
-|---|---|
-| `docs/invocation-contract.md` | I/O contract for agent and orchestrator invocation (L274) |
-| `LEARNINGS.md` | Append-only operational learnings |
-| `.specify/memory/constitution.md` | Governance (6 domain + 5 self-management principles) |
-
-## How to Use
+## Commands
 
 ```bash
-# Mode A — Outbound (from this repo)
 make optimize TARGET=~/repos/some-repo AUDIT=path/to/audit_output
-
-# Report-only (default)
-make optimize TARGET=~/repos/some-repo AUDIT=path/to/audit_output
-
-# With patch generation
 make optimize TARGET=~/repos/some-repo AUDIT=path/to/audit_output PATCH=true
-
-# Run tests
+make patch-check TARGET=~/repos/some-repo OUTPUT_DIR=optimizer_output
+make transfer-oracle DECISIONS=<path> OUTPUT_DIR=<dir>
+make benchmark-optimization-workloads CORPUS=<path> OUTPUT_DIR=<dir> MODE=retained-replay
+make normalize-agent-run-receipts RECEIPTS=<path> OUTPUT_DIR=<dir>
+make build-live-paired-corpus FIXTURES=<path> RECEIPTS=<path> OUTPUT_DIR=<dir>
+make collect-live-agent-receipts FIXTURES=<path> ADAPTER=<codex|copilot|generic> OUTPUT_DIR=<dir>
+make check
 make test
+make validate
+make review
+make work DESC="..."
+make work-close WORK=work/<dir>
+make install-hooks
 ```
-
-## Pipeline
-
-| Phase | Description | Tokens |
-|---|---|---|
-| 1. Pre-flight | Read SCORECARD, identify bottom-2 dims | Deterministic |
-| 2. Discovery | 4 domain subagents find optimization opportunities | ~20K |
-| 3. Critic | Adversarial review — reject ≥1 finding | ~10K |
-| 4. Synthesis | Assemble plan + optional patches | ~15K |
 
 ## Patch Constraints
 
-- Maximum 5 patches per run
-- Each patch: ≤6 files, ≤160 net lines
-- No dependency changes
-- Validated with `git apply --check`
-- Post-processed hunk headers (L36)
+- Maximum 5 patches per run.
+- Each patch touches at most 6 files and 160 net lines.
+- No dependency changes.
+- Hunk headers are post-processed and validated.
+- Cleanup-ledger and patch-pack contracts must stay schema-valid.
 
 ## Stop Rules
 
-- Max 200 files scanned per target
-- Max 30 findings per domain subagent
-- Max 900 seconds per run
-- Halt if SCORECARD.json missing
+- Halt if `SCORECARD.json` is missing.
+- Max 200 files scanned per target.
+- Max 30 findings per domain subagent.
+- Max 900 seconds per run.
+- Do not infer target-local proof from scan-limited, snapshot-only, or
+  benchmark-only evidence.
+
+## References
+
+- Invocation contract: `docs/invocation-contract.md`
+- Current program status: `docs/current-program-status.md`
+- Provider-neutral Tier 3 benchmarks: `docs/provider-neutral-tier3-benchmarks.md`
+- Agent operations inventory: `docs/agent-operations.md`
+- Constitution: `.specify/memory/constitution.md`
