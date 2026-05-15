@@ -1156,6 +1156,33 @@ else
     fi
 fi
 
+if [ "$PATCH_MODE" = "true" ]; then
+    for patch_manifest in "$OUTPUT_DIR/OPTIMIZATION_PLAN.md" "$AUDIT_DIR/OPTIMIZATION_PLAN.md"; do
+        [ -s "$patch_manifest" ] || continue
+
+        BEFORE_PATCH_COUNT=0
+        if [ -d "$OUTPUT_DIR/PATCH_PACK" ]; then
+            BEFORE_PATCH_COUNT=$(find "$OUTPUT_DIR/PATCH_PACK" -name '*.patch' -type f 2>/dev/null | wc -l | tr -d ' ')
+        fi
+
+        if bash "$SCRIPT_DIR/generate-patches.sh" "$REPO" "$patch_manifest" "$OUTPUT_DIR"; then
+            append_runtime_note "patch generation script completed for $patch_manifest"
+        else
+            PATCH_STATUS="fail_closed_patch_generation_script_failed"
+            append_runtime_note "patch generation script failed for $patch_manifest"
+            break
+        fi
+
+        AFTER_PATCH_COUNT=0
+        if [ -d "$OUTPUT_DIR/PATCH_PACK" ]; then
+            AFTER_PATCH_COUNT=$(find "$OUTPUT_DIR/PATCH_PACK" -name '*.patch' -type f 2>/dev/null | wc -l | tr -d ' ')
+        fi
+        if [ "$AFTER_PATCH_COUNT" -gt "$BEFORE_PATCH_COUNT" ]; then
+            break
+        fi
+    done
+fi
+
 PATCH_COUNT=0
 if [ -d "$OUTPUT_DIR/PATCH_PACK" ]; then
     PATCH_COUNT=$(find "$OUTPUT_DIR/PATCH_PACK" -name '*.patch' -type f 2>/dev/null | wc -l | tr -d ' ')
