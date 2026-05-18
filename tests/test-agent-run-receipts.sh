@@ -47,7 +47,7 @@ root = Path(sys.argv[1])
     "\n".join(
         [
             json.dumps({"type": "session", "data": {"selectedModel": "claude-opus-4.6"}, "timestamp": "2026-04-26T00:01:00Z"}),
-            json.dumps({"type": "assistant", "data": {"inputTokens": 900, "outputTokens": 90, "cacheReadTokens": 12}, "timestamp": "2026-04-26T00:01:04Z"}),
+            json.dumps({"type": "assistant", "data": {"inputTokens": 900, "outputTokens": 90, "cacheReadTokens": 12, "requestCount": 1, "toolCalls": 0}, "timestamp": "2026-04-26T00:01:04Z"}),
         ]
     )
     + "\n",
@@ -59,9 +59,86 @@ root = Path(sys.argv[1])
     encoding="utf-8",
 )
 (root / "fake-generic.json").write_text(
-    json.dumps({"model": "future-model-v1", "inputTokens": 700, "outputTokens": 70, "prompt": "generic provider prompt"}),
+    json.dumps({
+        "model": "future-model-v1",
+        "inputTokens": 700,
+        "outputTokens": 70,
+        "reasoningTokens": 7,
+        "cacheReadTokens": 3,
+        "cacheWriteTokens": 2,
+        "requestCount": 1,
+        "toolCalls": 0,
+        "prompt": "generic provider prompt",
+        "route_command_argv": ["generic-fixture", "--fixture"],
+        "quality_gate_state": {"exit_status": "success", "fixture_quality": "pass"},
+    }),
     encoding="utf-8",
 )
+
+(root / "collector-fixtures.json").write_text(
+    json.dumps(
+        {
+            "schema_version": "1.0.0",
+            "artifact": "LIVE_PAIRED_FIXTURES",
+            "corpus_id": "burst-126a-non-newsletter-fixture",
+            "target_label": "Burst 126A repo-optimizer fixed-input fixture",
+            "fixtures": [
+                {
+                    "fixture_id": "repo-optimizer-non-newsletter-slice",
+                    "source_repo": "repo-optimizer",
+                    "bucket": "receipt_contract",
+                    "tactic_id": "stdout_no_tools_artifact_reuse",
+                    "claim_types": ["token"],
+                    "baseline_prompt": "deterministic baseline telemetry prompt",
+                    "candidate_prompt": "deterministic candidate telemetry prompt",
+                    "required_output_contains": ["telemetry ok"],
+                    "forbidden_output_contains": ["telemetry fail"],
+                }
+            ],
+        },
+        indent=2,
+        sort_keys=True,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+(root / "emit-direct-receipt.sh").write_text(
+    "\n".join(
+        [
+            "#!/usr/bin/env bash",
+            "set -euo pipefail",
+            "prompt_file=\"$1\"",
+            "output_file=\"$2\"",
+            "python3 - \"$prompt_file\" \"$output_file\" <<'PY2'",
+            "from __future__ import annotations",
+            "import hashlib, json, sys",
+            "prompt = open(sys.argv[1], encoding='utf-8').read()",
+            "output_file = sys.argv[2]",
+            "payload = {",
+            "    'prompt': prompt,",
+            "    'inputTokens': 1234,",
+            "    'outputTokens': 123,",
+            "    'reasoningTokens': 12,",
+            "    'cacheReadTokens': 4,",
+            "    'cacheWriteTokens': 2,",
+            "    'requestCount': 1,",
+            "    'toolCalls': 0,",
+            "    'route_command_argv': ['emit-direct-receipt', sys.argv[1], sys.argv[2]],",
+            "    'original_prompt_sha256': hashlib.sha256(prompt.encode('utf-8')).hexdigest(),",
+            "    'rendered_prompt_sha256': hashlib.sha256(prompt.encode('utf-8')).hexdigest(),",
+            "    'frozen_pre_render_input_manifest_sha256': hashlib.sha256(('fixture:' + prompt).encode('utf-8')).hexdigest(),",
+            "    'quality_gate_state': {'fixture_quality': 'pass'},",
+            "    'message': 'telemetry ok',",
+            "}",
+            "open(output_file, 'w', encoding='utf-8').write(json.dumps(payload) + '\\n')",
+            "print('telemetry written to output file')",
+            "PY2",
+        ]
+    )
+    + "\n",
+    encoding="utf-8",
+)
+(root / "emit-direct-receipt.sh").chmod(0o755)
 
 fixtures = {
     "schema_version": "1.0.0",
@@ -224,7 +301,12 @@ import json, sys
 receipt = json.load(open(sys.argv[1], encoding="utf-8"))["receipts"][0]
 assert receipt["harness"] == "copilot-cli", receipt
 assert receipt["provider"] == "github-copilot", receipt
+assert receipt["metrics"]["input_tokens"]["value"] == 900, receipt
+assert receipt["metrics"]["output_tokens"]["value"] == 90, receipt
 assert receipt["metrics"]["cached_tokens"]["source"] == "direct", receipt
+assert receipt["metrics"]["cache_read_tokens"]["source"] == "direct", receipt
+assert receipt["direct_fields_complete"] is False, receipt
+assert "cache_write_tokens" in receipt["missing_direct_provider_token_fields"], receipt
 PY
 
 check_cmd "VS Code and generic normalizers preserve provider-neutral fields" python3 - "$TEST_TMPDIR/normalized-vscode.json" "$TEST_TMPDIR/normalized-generic.json" <<'PY'
@@ -235,6 +317,67 @@ generic = json.load(open(sys.argv[2], encoding="utf-8"))["receipts"][0]
 assert vscode["harness"] == "vscode-chat", vscode
 assert generic["harness"] == "generic-command", generic
 assert "metrics" in vscode and "metrics" in generic
+assert generic["metrics"]["cache_write_tokens"]["source"] == "direct", generic
+assert generic["route_command_argv"] == ["generic-fixture", "--fixture"], generic
+assert generic["quality_gate_state"]["fixture_quality"] == "pass", generic
+assert generic["direct_fields_complete"] is True, generic
+assert generic["missing_direct_provider_token_fields"] == [], generic
+assert vscode["direct_fields_complete"] is False, vscode
+PY
+
+COLLECTOR_OUTPUT="$TEST_TMPDIR/collector-output"
+python3 "$OPT_DIR/scripts/run-live-agent-benchmark.py" \
+    --fixtures "$TEST_TMPDIR/collector-fixtures.json" \
+    --output "$COLLECTOR_OUTPUT/AGENT_RUN_RECEIPTS.json" \
+    --adapter generic \
+    --command-template "$TEST_TMPDIR/emit-direct-receipt.sh {prompt_file} {output_file}" \
+    --variants baseline \
+    --repetitions 1 >/dev/null
+
+check_cmd "live collector emits Burst 126A telemetry fields for baseline-only fixed input" python3 - "$COLLECTOR_OUTPUT/AGENT_RUN_RECEIPTS.json" <<'PY'
+from __future__ import annotations
+import json, sys
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+receipts = payload["receipts"]
+assert len(receipts) == 1, receipts
+receipt = receipts[0]
+assert receipt["variant"] == "baseline", receipt
+assert receipt["fixture_id"] == "repo-optimizer-non-newsletter-slice", receipt
+assert receipt["metrics"]["input_tokens"] == {"source": "direct", "value": 1234}, receipt
+assert receipt["metrics"]["output_tokens"] == {"source": "direct", "value": 123}, receipt
+assert receipt["metrics"]["reasoning_tokens"] == {"source": "direct", "value": 12}, receipt
+assert receipt["metrics"]["cache_read_tokens"] == {"source": "direct", "value": 4}, receipt
+assert receipt["metrics"]["cache_write_tokens"] == {"source": "direct", "value": 2}, receipt
+assert receipt["metrics"]["request_count"] == {"source": "direct", "value": 1}, receipt
+assert receipt["metrics"]["tool_calls"] == {"source": "direct", "value": 0}, receipt
+assert receipt["direct_fields_complete"] is True, receipt
+assert receipt["missing_direct_provider_token_fields"] == [], receipt
+assert receipt["correctness_pass"] is True, receipt
+assert receipt["quality_gate_state"]["correctness_pass"] is True, receipt
+assert receipt["route_command_argv"][0].endswith("emit-direct-receipt.sh"), receipt
+assert receipt["original_prompt_sha256"] == receipt["rendered_prompt_sha256"] == receipt["prompt_hash"], receipt
+assert receipt["frozen_pre_render_input_manifest_sha256"], receipt
+assert "telemetry written to output file" not in open(receipt["raw_receipt_path"], encoding="utf-8").read(), receipt
+PY
+
+COPILOT_DRY_OUTPUT="$TEST_TMPDIR/copilot-dry-output"
+python3 "$OPT_DIR/scripts/run-live-agent-benchmark.py" \
+    --fixtures "$TEST_TMPDIR/collector-fixtures.json" \
+    --output "$COPILOT_DRY_OUTPUT/AGENT_RUN_RECEIPTS.json" \
+    --adapter copilot \
+    --variants baseline \
+    --repetitions 1 \
+    --dry-run >/dev/null
+
+check_cmd "live collector redacts prompt text from route argv" python3 - "$COPILOT_DRY_OUTPUT/AGENT_RUN_RECEIPTS.json" <<'PY'
+from __future__ import annotations
+import json, sys
+receipt = json.load(open(sys.argv[1], encoding="utf-8"))["receipts"][0]
+route_text = "\n".join(receipt["route_command_argv"])
+assert "deterministic baseline telemetry prompt" not in route_text, receipt
+assert any(item.startswith("<prompt_sha256:") for item in receipt["route_command_argv"]), receipt
+assert receipt["direct_fields_complete"] is False, receipt
+assert "input_tokens" in receipt["missing_direct_provider_token_fields"], receipt
 PY
 
 python3 "$OPT_DIR/scripts/build-live-paired-corpus.py" \

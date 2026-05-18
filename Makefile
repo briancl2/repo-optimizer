@@ -14,6 +14,7 @@ RECEIPTS ?=
 ADAPTER ?=
 MODEL ?=
 REPETITIONS ?= 5
+VARIANTS ?= both
 COMMAND_TEMPLATE ?=
 
 help:
@@ -101,7 +102,8 @@ collect-live-agent-receipts:
 		--output "$(OUTPUT_DIR)/AGENT_RUN_RECEIPTS.json" \
 		--adapter "$(ADAPTER)" \
 		--model "$(MODEL)" \
-		--repetitions "$(REPETITIONS)" $(if $(COMMAND_TEMPLATE),--command-template "$(COMMAND_TEMPLATE)",)
+		--repetitions "$(REPETITIONS)" \
+		--variants "$(VARIANTS)" $(if $(COMMAND_TEMPLATE),--command-template "$(COMMAND_TEMPLATE)",)
 	@echo "=== Live receipts written to $(OUTPUT_DIR)/AGENT_RUN_RECEIPTS.json ==="
 
 patch-check:

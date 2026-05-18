@@ -52,6 +52,22 @@
           "target_repo_mutated": { "type": "boolean" },
           "correctness_pass": { "type": "boolean" },
           "closeout_truth_pass": { "type": "boolean" },
+          "route_command_argv": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "original_prompt_sha256": { "type": "string" },
+          "rendered_prompt_sha256": { "type": "string" },
+          "frozen_pre_render_input_manifest_sha256": { "type": "string" },
+          "quality_gate_state": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "direct_fields_complete": { "type": "boolean" },
+          "missing_direct_provider_token_fields": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
           "metrics": {
             "type": "object",
             "additionalProperties": {
