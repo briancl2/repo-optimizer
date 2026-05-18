@@ -16,8 +16,22 @@ DIRECT_TOKEN_FIELDS = {
     "input_tokens": ("inputTokens", "input_tokens", "prompt_tokens"),
     "output_tokens": ("outputTokens", "output_tokens", "completion_tokens"),
     "reasoning_tokens": ("reasoningTokens", "reasoning_tokens"),
+    "cache_read_tokens": ("cacheReadTokens", "cache_read_tokens", "cache_read"),
+    "cache_write_tokens": ("cacheWriteTokens", "cache_write_tokens", "cache_write"),
     "cached_tokens": ("cacheReadTokens", "cacheWriteTokens", "cached_tokens", "cachedTokens"),
+    "request_count": ("requestCount", "request_count", "requests"),
+    "tool_calls": ("toolCalls", "tool_calls"),
 }
+
+REQUIRED_DIRECT_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "request_count",
+    "tool_calls",
+)
 
 ARTIFACT_REUSE_PAIR_TYPE = "artifact_reuse_stdout_no_tools_phase3_pair"
 
@@ -105,14 +119,12 @@ def detect_format(path: Path, rows: list[Any]) -> str:
 
 
 def deep_values(payload: Any) -> list[Any]:
-    values: list[Any] = []
+    values: list[Any] = [payload]
     if isinstance(payload, dict):
         for value in payload.values():
-            values.append(value)
             values.extend(deep_values(value))
     elif isinstance(payload, list):
         for value in payload:
-            values.append(value)
             values.extend(deep_values(value))
     return values
 
@@ -126,6 +138,28 @@ def first_string(rows: list[Any], keys: tuple[str, ...]) -> str:
                     if isinstance(candidate, str) and candidate.strip():
                         return candidate.strip()
     return ""
+
+
+def first_string_list(rows: list[Any], keys: tuple[str, ...]) -> list[str]:
+    for row in rows:
+        for value in deep_values(row):
+            if isinstance(value, dict):
+                for key in keys:
+                    candidate = value.get(key)
+                    if isinstance(candidate, list) and all(isinstance(item, str) for item in candidate):
+                        return [item for item in candidate]
+    return []
+
+
+def first_dict(rows: list[Any], keys: tuple[str, ...]) -> dict[str, Any]:
+    for row in rows:
+        for value in deep_values(row):
+            if isinstance(value, dict):
+                for key in keys:
+                    candidate = value.get(key)
+                    if isinstance(candidate, dict):
+                        return candidate
+    return {}
 
 
 def first_timestamp(rows: list[Any]) -> str:
@@ -169,14 +203,23 @@ def collect_direct_metrics(rows: list[Any]) -> dict[str, dict[str, Any]]:
                 for key in keys:
                     metric = number(value.get(key))
                     if metric is not None:
-                        totals[normalized] = totals.get(normalized, 0.0) + metric
-            tool_calls = number(value.get("toolCalls") or value.get("tool_calls"))
-            if tool_calls is not None:
-                totals["tool_calls"] = max(totals.get("tool_calls", 0.0), tool_calls)
+                        if normalized in {"request_count", "tool_calls"}:
+                            totals[normalized] = max(totals.get(normalized, 0.0), metric)
+                        else:
+                            totals[normalized] = totals.get(normalized, 0.0) + metric
     metrics: dict[str, dict[str, Any]] = {}
     for key, value in totals.items():
         metrics[key] = {"value": int(value) if value.is_integer() else value, "source": "direct"}
     return metrics
+
+
+def direct_field_summary(metrics: dict[str, dict[str, Any]]) -> tuple[bool, list[str]]:
+    missing = [
+        field
+        for field in REQUIRED_DIRECT_FIELDS
+        if not (isinstance(metrics.get(field), dict) and metrics[field].get("source") == "direct")
+    ]
+    return (not missing, missing)
 
 
 def collect_proxy_metrics(path: Path, prompt: str, metrics: dict[str, dict[str, Any]]) -> None:
@@ -299,6 +342,8 @@ def artifact_reuse_pair_receipts(payload: dict[str, Any], path: Path) -> list[di
         )
         direct_fields_complete = bool(metrics_source.get("direct_fields_complete")) and not metrics_source.get("missing_direct_provider_token_fields")
         run_id = str(summary.get("run_id") or slice_info.get("candidate_run_id") or "")
+        prompt_sha = str(metrics_source.get("prompt_sha256") or metrics_source.get("original_prompt_sha256") or row_name)
+        manifest_sha = str(fixture.get("manifest_sha256") or fixture.get("source_pack_sha256") or sha256_file(path))
         receipt = {
             "schema_version": "1.0.0",
             "receipt_id": f"{ARTIFACT_REUSE_PAIR_TYPE}:{run_id}:{variant}",
@@ -314,14 +359,30 @@ def artifact_reuse_pair_receipts(payload: dict[str, Any], path: Path) -> list[di
             "started_at": str(payload.get("generated_at_utc") or utc_now()),
             "completed_at": str(payload.get("generated_at_utc") or utc_now()),
             "wall_time_ms": 0,
-            "prompt_hash": str(metrics_source.get("prompt_sha256") or metrics_source.get("original_prompt_sha256") or row_name),
-            "fixture_hash": str(fixture.get("manifest_sha256") or fixture.get("source_pack_sha256") or sha256_file(path)),
+            "prompt_hash": prompt_sha,
+            "fixture_hash": manifest_sha,
             "raw_receipt_path": str(path),
             "exit_status": "success" if row_ok else "failed",
             "target_repo_mutated": False,
             "correctness_pass": row_ok,
             "closeout_truth_pass": row_ok,
             "metrics": metrics,
+            "route_command_argv": metrics_source.get("route_command_argv") if isinstance(metrics_source.get("route_command_argv"), list) else [],
+            "original_prompt_sha256": str(metrics_source.get("original_prompt_sha256") or prompt_sha),
+            "rendered_prompt_sha256": str(metrics_source.get("rendered_prompt_sha256") or prompt_sha),
+            "frozen_pre_render_input_manifest_sha256": str(
+                metrics_source.get("frozen_pre_render_input_manifest_sha256")
+                or fixture.get("manifest_sha256")
+                or manifest_sha
+            ),
+            "quality_gate_state": {
+                "exit_status": "success" if row_ok else "failed",
+                "row_passes": row_ok,
+                "session_bound": session_bound,
+                "no_refetch_bound": bool(boundary.get("no_refetch_bound")),
+            },
+            "direct_fields_complete": direct_fields_complete,
+            "missing_direct_provider_token_fields": metrics_source.get("missing_direct_provider_token_fields", []),
             "artifact_reuse_stdout_no_tools_boundary": {
                 **boundary,
                 "row_name": row_name,
@@ -375,8 +436,18 @@ def build_receipt(args: argparse.Namespace, fmt: str, path: Path, rows: list[Any
     prompt = args.prompt or first_string(rows, ("prompt", "input", "instructions"))
     metrics = collect_direct_metrics(rows)
     collect_proxy_metrics(path, prompt, metrics)
+    direct_fields_complete, missing_direct_fields = direct_field_summary(metrics)
     started = first_timestamp(rows)
     completed = last_timestamp(rows)
+    prompt_sha = sha256_text(prompt) if prompt else sha256_file(path)
+    route_command_argv = first_string_list(rows, ("route_command_argv", "command_argv", "argv"))
+    quality_gate = first_dict(rows, ("quality_gate_state", "qualityGateState"))
+    if not quality_gate:
+        quality_gate = {
+            "exit_status": "success",
+            "correctness_pass": args.correctness_pass == "true",
+            "closeout_truth_pass": args.closeout_truth_pass == "true",
+        }
     return {
         "schema_version": "1.0.0",
         "harness": args.harness or defaults["harness"],
@@ -391,7 +462,7 @@ def build_receipt(args: argparse.Namespace, fmt: str, path: Path, rows: list[Any
         "started_at": started,
         "completed_at": completed,
         "wall_time_ms": 0,
-        "prompt_hash": sha256_text(prompt) if prompt else sha256_file(path),
+        "prompt_hash": prompt_sha,
         "fixture_hash": args.fixture_hash or sha256_file(path),
         "raw_receipt_path": str(path),
         "exit_status": "success",
@@ -399,6 +470,17 @@ def build_receipt(args: argparse.Namespace, fmt: str, path: Path, rows: list[Any
         "correctness_pass": args.correctness_pass == "true",
         "closeout_truth_pass": args.closeout_truth_pass == "true",
         "metrics": metrics,
+        "route_command_argv": route_command_argv,
+        "original_prompt_sha256": first_string(rows, ("original_prompt_sha256", "originalPromptSha256")) or prompt_sha,
+        "rendered_prompt_sha256": first_string(rows, ("rendered_prompt_sha256", "renderedPromptSha256")) or prompt_sha,
+        "frozen_pre_render_input_manifest_sha256": first_string(
+            rows,
+            ("frozen_pre_render_input_manifest_sha256", "frozenPreRenderInputManifestSha256"),
+        )
+        or sha256_file(path),
+        "quality_gate_state": quality_gate,
+        "direct_fields_complete": direct_fields_complete,
+        "missing_direct_provider_token_fields": missing_direct_fields,
         "source_format": fmt,
     }
 
