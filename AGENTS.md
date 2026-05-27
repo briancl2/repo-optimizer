@@ -25,6 +25,10 @@ bootloader; detailed agent, script, benchmark, and spec-kit inventories live in
   preflight-only with `OPTIMIZER_PREFLIGHT_ONLY=true`.
 - Raw command output stays in `.jsonl`, stdout, or runtime receipts. Human and
   machine-facing summaries cite command, outcome, and retained path.
+- `score-session.sh` remains the default local closeout scorer. For explicit
+  GitHub issue/PR-backed work, use `scripts/work-close.sh
+  --github-native-closeout` so GitHub closure truth is not re-graded as local
+  session ceremony.
 
 ## Commands
 
@@ -43,6 +47,7 @@ make validate
 make review
 make work DESC="..."
 make work-close WORK=work/<dir>
+bash scripts/work-close.sh work/<dir> --github-native-closeout "rationale"
 make install-hooks
 ```
 
