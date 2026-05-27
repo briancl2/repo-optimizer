@@ -125,6 +125,7 @@ test:
 	@bash tests/test-agent-run-receipts.sh
 	@bash tests/test-self-management.sh
 	@bash tests/test-grader-golden.sh
+	@bash tests/test-work-close-github-native.sh
 	@echo ""
 	@echo "=== All tests passed ==="
 

@@ -9,6 +9,7 @@
 # Usage:
 #   work-close.sh <work-dir>
 #   work-close.sh <work-dir> --no-novel-findings "rationale"
+#   work-close.sh <work-dir> --github-native-closeout "rationale"
 #
 # Requires: pre-audit baseline from work-init.sh
 
@@ -22,9 +23,11 @@ shift
 
 # ── Parse flags ──────────────────────────────────────────────────────
 NO_NOVEL_FINDINGS=""
+GITHUB_NATIVE_CLOSEOUT=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --no-novel-findings) NO_NOVEL_FINDINGS="${2:?--no-novel-findings requires a rationale}"; shift 2 ;;
+        --github-native-closeout) GITHUB_NATIVE_CLOSEOUT="${2:?--github-native-closeout requires a rationale}"; shift 2 ;;
         *) shift ;;
     esac
 done
@@ -43,6 +46,11 @@ fi
 if [ ! -f "$WORK_DIR/WORK.md" ]; then
     echo "ERROR: No WORK.md found in $WORK_DIR" >&2
     echo "  Run 'make work DESC=\"...\"' to initialize a work contract first." >&2
+    exit 1
+fi
+
+if [ -n "$GITHUB_NATIVE_CLOSEOUT" ] && [ "${#GITHUB_NATIVE_CLOSEOUT}" -lt 30 ]; then
+    echo "ERROR: --github-native-closeout requires a concrete rationale (>=30 chars)." >&2
     exit 1
 fi
 
@@ -138,7 +146,45 @@ echo "  DELTA.md written."
 
 # ── Session grader (soft dependency) ─────────────────────────────────
 SESSION_ID=$(basename "$WORK_DIR")
-if [ -f scripts/score-session.sh ]; then
+SCORE_SESSION_MODE="session_grader"
+if [ -n "$GITHUB_NATIVE_CLOSEOUT" ]; then
+    SCORE_SESSION_MODE="github_native_bypass"
+    BYPASS_FILE="$WORK_DIR/score-session-bypass.json"
+    python3 - "$BYPASS_FILE" "$WORK_DIR" "$SESSION_ID" "$GITHUB_NATIVE_CLOSEOUT" <<'PY'
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+out, work_dir, session_id, rationale = sys.argv[1:]
+repo_root = os.getcwd()
+try:
+    rel_work_dir = os.path.relpath(work_dir, repo_root)
+except ValueError:
+    rel_work_dir = work_dir
+
+receipt = {
+    "schema_version": "1.0.0",
+    "mode": "github_native_issue_pr",
+    "status": "score_session_not_authoritative",
+    "work_dir": rel_work_dir,
+    "session_id": session_id,
+    "skipped_script": "scripts/score-session.sh",
+    "rationale": rationale,
+    "non_claims": [
+        "Does not prove GitHub issue closure by itself.",
+        "Does not apply to non-GitHub or session-local work.",
+        "Does not change score-session thresholds."
+    ],
+    "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+}
+
+with open(out, "w", encoding="utf-8") as fh:
+    json.dump(receipt, fh, indent=2, sort_keys=True)
+    fh.write("\n")
+PY
+    echo "  Session grader skipped: GitHub-native issue/PR closure authority."
+elif [ -f scripts/score-session.sh ]; then
     echo "  Running session grader..."
     if bash scripts/score-session.sh "$WORK_DIR" "$SESSION_ID" 2>&1; then
         echo "  Session grader complete."
@@ -152,11 +198,11 @@ fi
 # ── Operations ledger (13.1.5: T1 mechanical) ─────────────────────────
 # Append JSONL event to work/OPERATIONS_LEDGER.jsonl for fleet-level observability.
 # Schema: compatible with BMA score-ledger-event.schema.json.
-OPS_LEDGER="$REPO_ROOT/work/OPERATIONS_LEDGER.jsonl"
+OPS_LEDGER="${WORK_CLOSE_OPS_LEDGER:-$REPO_ROOT/work/OPERATIONS_LEDGER.jsonl}"
 _ops_ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 _ops_rid=$(echo "ops-$(basename "$WORK_DIR")-$PRE_RESULT-$POST_RESULT" | shasum -a 256 | head -c 16)
 _ops_ver=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-_ops_event="{\"event_type\":\"work-close\",\"run_id\":\"$_ops_rid\",\"timestamp\":\"$_ops_ts\",\"target_id\":\"$(basename "$REPO_ROOT")\",\"source\":{\"script\":\"work-close.sh\",\"version\":\"$_ops_ver\"},\"data\":{\"test_pre\":\"$PRE_RESULT\",\"test_post\":\"$POST_RESULT\",\"learnings_added\":$LEARNINGS_ADDED,\"work_dir\":\"$(basename "$WORK_DIR")\"}}"
+_ops_event="{\"event_type\":\"work-close\",\"run_id\":\"$_ops_rid\",\"timestamp\":\"$_ops_ts\",\"target_id\":\"$(basename "$REPO_ROOT")\",\"source\":{\"script\":\"work-close.sh\",\"version\":\"$_ops_ver\"},\"data\":{\"test_pre\":\"$PRE_RESULT\",\"test_post\":\"$POST_RESULT\",\"learnings_added\":$LEARNINGS_ADDED,\"work_dir\":\"$(basename "$WORK_DIR")\",\"score_session_mode\":\"$SCORE_SESSION_MODE\"}}"
 if echo "$_ops_event" | python3 -c "import json,sys; json.loads(sys.stdin.read())" 2>/dev/null; then
     echo "$_ops_event" >> "$OPS_LEDGER"
     echo "  Ops ledger: recorded (learnings=$LEARNINGS_ADDED)"
@@ -174,5 +220,5 @@ echo "  Learnings:   $LEARNINGS_ADDED new"
 if [ -n "$NO_NOVEL_FINDINGS" ]; then
     echo "  NNF:         $NO_NOVEL_FINDINGS"
 fi
-echo "  Artifacts:   DELTA.md$([ -f "$WORK_DIR/OPERATING_MODEL_SCORECARD.json" ] && echo ', OPERATING_MODEL_SCORECARD.json')"
+echo "  Artifacts:   DELTA.md$([ -f "$WORK_DIR/OPERATING_MODEL_SCORECARD.json" ] && echo ', OPERATING_MODEL_SCORECARD.json')$([ -f "$WORK_DIR/score-session-bypass.json" ] && echo ', score-session-bypass.json')"
 echo "=== Done ==="
