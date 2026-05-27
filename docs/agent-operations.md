@@ -63,8 +63,8 @@ Spec-kit helper scripts retained in this repo include
 |---|---|
 | `scripts/check.sh` | Gate 2 pre-commit check |
 | `scripts/work-init.sh` | Work contract initializer |
-| `scripts/work-close.sh` | Work contract finalizer and session grader |
-| `scripts/score-session.sh` | Operating-model scorecard |
+| `scripts/work-close.sh` | Work contract finalizer; runs the session grader by default and writes `score-session-bypass.json` for explicit GitHub-native issue/PR closeout |
+| `scripts/score-session.sh` | Operating-model scorecard for ordinary session-local work |
 | `scripts/pre-commit-hook.sh` | Runs `make check` |
 | `scripts/pre-push-hook.sh` | Pre-push guard |
 

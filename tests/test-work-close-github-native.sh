@@ -71,6 +71,13 @@ chmod +x "$FAKEBIN/make"
 echo "=== GitHub-native work-close tests ==="
 
 echo ""
+echo "=== Fixture 0: live surface sync ==="
+check "AGENTS documents GitHub-native closeout flag" "true" "$(grep -Fq -- '--github-native-closeout' AGENTS.md && echo true || echo false)"
+check "Makefile help documents GitHub-native closeout flag" "true" "$(grep -Fq -- '--github-native-closeout' Makefile && echo true || echo false)"
+check "agent operations documents bypass receipt" "true" "$(grep -Fq -- 'score-session-bypass.json' docs/agent-operations.md && echo true || echo false)"
+check "agent operations preserves default scorer boundary" "true" "$(grep -Fq -- 'runs the session grader by default' docs/agent-operations.md && echo true || echo false)"
+
+echo ""
 echo "=== Fixture 1: explicit GitHub-native bypass ==="
 WORK1="$TMPDIR/work-github-native"
 make_fixture "$WORK1"

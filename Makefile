@@ -35,6 +35,8 @@ help:
 	@echo "  make check                               Pre-commit gate (shellcheck + inventory)"
 	@echo "  make work DESC=\"...\"                     Open work contract"
 	@echo "  make work-close WORK=<dir>               Close work contract"
+	@echo "  bash scripts/work-close.sh <work-dir> --github-native-closeout \"...\""
+	@echo "                                            Close issue/PR-backed work without session score authority"
 	@echo "  make spec-init DESC=\"...\"               Create new spec"
 	@echo "  make install-hooks                       Install git hooks"
 
