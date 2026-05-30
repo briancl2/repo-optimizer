@@ -26,6 +26,12 @@ Optimize the repository at the current working directory.
 3. Write OPTIMIZATION_PLAN.md to `./optimizer_output/`
 4. If --patch flag present, write PATCH_PACK/ directory
 
+Inbound reciprocal proving-ground checks remain read-only. If the current repo
+is acting as a live proving ground for owner-repo guidance, compare and verify
+read-only targets without mutating downstream targets. Keep optimizer output
+limited to plan artifacts and patch files unless a named owner issue or PR
+explicitly authorizes owner-repo mutation.
+
 ## Invocation
 
 This agent is invoked from within a target repo that references it:
@@ -34,3 +40,8 @@ This agent is invoked from within a target repo that references it:
 ## External Agents
 - Optimize: @repo-optimizer at briancl2/repo-optimizer, optimize this repo
 ```
+
+`PATCH_PACK/` is a review artifact, not auto-apply permission. Do not create
+owner branches, commits, pull requests, background sync, or any other mutation
+path from inbound mode unless the invoking prompt cites a named owner issue/PR
+that authorizes the write.

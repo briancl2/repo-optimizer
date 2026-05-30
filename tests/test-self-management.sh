@@ -63,6 +63,12 @@ check "0 occurrences of '0 LLM tokens'" "0" "$ZERO_LLM_COUNT"
 # ── Test 9: Agent file references invocation contract ────────────────
 check "Agent file references invocation contract" "true" "$(grep -q 'invocation-contract' .agents/repo-optimizer.agent.md 2>/dev/null && echo true || echo false)"
 
+# ── Test 10: Live agent guidance preserves read-only mutation boundary ─
+check "Orchestrator mentions read-only reciprocal proving ground" "true" "$(grep -q 'read-only' .agents/repo-optimizer.agent.md 2>/dev/null && grep -q 'named owner issue or PR' .agents/repo-optimizer.agent.md 2>/dev/null && echo true || echo false)"
+check "Critic rejects mutation laundering from proving-ground evidence" "true" "$(grep -q 'Mutation laundering' .agents/repo-optimizer-critic.agent.md 2>/dev/null && grep -q 'named owner issue/PR' .agents/repo-optimizer-critic.agent.md 2>/dev/null && echo true || echo false)"
+check "Inbound guidance keeps patch-pack review-only" "true" "$(grep -q 'PATCH_PACK/' .agents/repo-optimizer-inbound.agent.md 2>/dev/null && grep -q 'review artifact' .agents/repo-optimizer-inbound.agent.md 2>/dev/null && echo true || echo false)"
+check "Synthesis states patch-files-only owner boundary" "true" "$(grep -q 'patch-files-only handoff' .agents/repo-optimizer-synthesis.agent.md 2>/dev/null && grep -q 'named owner issue/PR' .agents/repo-optimizer-synthesis.agent.md 2>/dev/null && echo true || echo false)"
+
 # ── Summary ──────────────────────────────────────────────────────────
 echo ""
 echo "=== Self-Management Test Summary ==="

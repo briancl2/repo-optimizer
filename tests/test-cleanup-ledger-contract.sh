@@ -280,6 +280,13 @@ for token in cleanup_action_class destructive_action authorization_status eviden
     fi
 done
 
+if grep -Fq 'named owner issue/PR authority' "$OPT_DIR/.agents/repo-optimizer-critic.agent.md" \
+    && grep -Fq 'read-only proof only' "$OPT_DIR/.agents/repo-optimizer-critic.agent.md"; then
+    pass "critic prompt blocks owner mutation without named authority"
+else
+    fail "critic prompt blocks owner mutation without named authority"
+fi
+
 echo ""
 echo "=== Cleanup Ledger Contract Results: $PASS passed, $FAIL failed ==="
 if [ "$FAIL" -gt 0 ]; then
