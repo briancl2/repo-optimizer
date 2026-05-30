@@ -315,8 +315,66 @@ def materialize_wm02() -> None:
     write_patch(patch_dir / "WM-02-github-native-closeout-bypass.patch", changes)
 
 
+def materialize_wm03() -> None:
+    if not has_manifest_row("WM-03"):
+        return
+
+    changes: list[tuple[str, list[str], list[str]]] = []
+    block = [
+        "## Issue #164 core-five proving-ground guidance",
+        "",
+        "- The core five are reciprocal proving grounds: BMA, repo-auditor, repo-upgrade-advisor, repo-optimizer, and repo-agent-core may validate against each other read-only.",
+        "- Core-five target use is ordinary validation, not downstream adoption or permission to mutate that target repo.",
+        "- Each core-five repo changes only through its own owner issue, branch, PR, checks, and merge.",
+    ]
+
+    rel = "AGENTS.md"
+    old = read_lines(repo / rel)
+    if old is not None:
+        changes.append((rel, old, insert_after_heading(old, block)))
+
+    rel = "docs/issue164-ecosystem-architecture.md"
+    old = read_lines(repo / rel)
+    if old is not None:
+        changes.append((rel, old, insert_after_heading(old, block)))
+
+    write_patch(patch_dir / "WM-03-core-five-proving-ground-guidance.patch", changes)
+
+
+def materialize_wm04() -> None:
+    if not has_manifest_row("WM-04"):
+        return
+
+    changes: list[tuple[str, list[str], list[str]]] = []
+    block = [
+        "## Issue #164 capability-home owner-surface routing",
+        "",
+        "| Capability family | Owner surface | First deliverable shape |",
+        "|---|---|---|",
+        "| Outer-loop campaign console | build-meta-analysis | Issue #164 child issue and GitHub-native PR |",
+        "| Audit/signature detection | repo-auditor | Detector signature, fixture, and repo-native test |",
+        "| Recommendation packaging | repo-upgrade-advisor | Recommendation template, scorer rule, and packaging fixture |",
+        "| Patch-pack materialization | repo-optimizer | Deterministic patch materializer and `git apply --check` fixture |",
+        "| Shared repo-agent contract | repo-agent-core | Copy-synced guidance contract after portability proof |",
+    ]
+
+    rel = "AGENTS.md"
+    old = read_lines(repo / rel)
+    if old is not None:
+        changes.append((rel, old, insert_after_heading(old, block)))
+
+    rel = "docs/issue164-ecosystem-architecture.md"
+    old = read_lines(repo / rel)
+    if old is not None:
+        changes.append((rel, old, insert_after_heading(old, block)))
+
+    write_patch(patch_dir / "WM-04-capability-home-owner-surface-table.patch", changes)
+
+
 materialize_wm01()
 materialize_wm02()
+materialize_wm03()
+materialize_wm04()
 PY
 
 # Post-process any existing patches
