@@ -50,6 +50,37 @@ check "Good verdict = PASS" "PASS" "$GOOD_VERDICT"
 check "Good fixture reports missing critic output as not scanned" "False" "$GOOD_CRITIC_SCANNED"
 echo "  (good scored $GOOD_SCORE, verdict=$GOOD_VERDICT)"
 
+PATCHABILITY_SCORE="$(mktemp -d "${TMPDIR:-/tmp}/repo-optimizer-patchability-score.XXXXXX")"
+cp -R "$SCRIPT_DIR/tests/fixtures/good-operation/." "$PATCHABILITY_SCORE/"
+rm -f "$PATCHABILITY_SCORE/PATCH_PACK"/*.patch
+cat > "$PATCHABILITY_SCORE/PATCHABILITY_BLOCKERS.json" <<'EOF'
+{
+  "schema_version": "1.0.0",
+  "artifact": "PATCHABILITY_BLOCKERS",
+  "generated_at": "2026-05-30T00:00:00Z",
+  "source_manifest": "OPTIMIZATION_PLAN.md",
+  "patch_dir": "PATCH_PACK",
+  "patches_generated": 0,
+  "blocker_count": 1,
+  "blockers": [
+    {
+      "row_id": "TP-01",
+      "patch": "Transcript pilot patch",
+      "findings": "Unsupported transcript pilot patch manifest row",
+      "files_touched": "2",
+      "blocker_code": "unsupported_manifest_row",
+      "reason": "No deterministic patch materializer is implemented for manifest row TP-01."
+    }
+  ]
+}
+EOF
+PATCHABILITY_OUT=$(bash "$SCORER" "$PATCHABILITY_SCORE" --json 2>/dev/null)
+PATCHABILITY_VERDICT=$(echo "$PATCHABILITY_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['verdict'])")
+PATCHABILITY_ISSUES=$(echo "$PATCHABILITY_OUT" | python3 -c "import json,sys; print('\\n'.join(json.load(sys.stdin)['issues']))")
+check "Patchability blockers fixture verdict = PASS" "PASS" "$PATCHABILITY_VERDICT"
+check "Patchability blockers suppress zero-patch issue" "false" "$(echo "$PATCHABILITY_ISSUES" | grep -q 'PATCH_PACK directory exists but contains 0 patches' && echo true || echo false)"
+rm -rf "$PATCHABILITY_SCORE"
+
 EMPTY_DIR="$(mktemp -d "${TMPDIR:-/tmp}/repo-optimizer-empty.XXXXXX")"
 EMPTY_OUT=$(bash "$SCORER" "$EMPTY_DIR" --json 2>/dev/null)
 EMPTY_RECEIPT_VERDICT=$(echo "$EMPTY_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['command_output_roi_receipt']['verdict'])")

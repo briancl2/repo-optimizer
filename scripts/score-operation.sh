@@ -343,10 +343,16 @@ if [ -d "$PATCH_DIR" ]; then
     PATCH_COUNT=$(find "$PATCH_DIR" -name '*.patch' -type f 2>/dev/null | wc -l | tr -d ' ')
     if [ "$PATCH_COUNT" -gt 0 ]; then
         add_score 2 "PATCH_PACK contains $PATCH_COUNT patches"
+    elif [ -s "$OPT_DIR/PATCHABILITY_BLOCKERS.json" ]; then
+        BLOCKER_COUNT=$(python3 -c "import json; print(json.load(open('$OPT_DIR/PATCHABILITY_BLOCKERS.json')).get('blocker_count', 0))" 2>/dev/null || echo "0")
+        add_score 2 "PATCHABILITY_BLOCKERS.json reports $BLOCKER_COUNT blocker(s)"
     else
         add_score 1 "PATCH_PACK dir exists but no patches"
         add_issue "PATCH_PACK directory exists but contains 0 patches"
     fi
+elif [ -s "$OPT_DIR/PATCHABILITY_BLOCKERS.json" ]; then
+    BLOCKER_COUNT=$(python3 -c "import json; print(json.load(open('$OPT_DIR/PATCHABILITY_BLOCKERS.json')).get('blocker_count', 0))" 2>/dev/null || echo "0")
+    add_score 2 "PATCHABILITY_BLOCKERS.json reports $BLOCKER_COUNT blocker(s)"
 else
     # Patch generation may not have been requested — partial credit
     add_score 1 "No PATCH_PACK (report-only mode)"

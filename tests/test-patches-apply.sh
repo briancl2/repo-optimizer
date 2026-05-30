@@ -236,6 +236,91 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+BLOCKED_OUTPUT="$(mktemp -d)"
+BLOCKED_AUDIT_INPUT="$(mktemp -d)"
+BLOCKED_PIPELINE_OUTPUT="$(mktemp -d)"
+trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
+BLOCKED_FINDINGS="$BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$BLOCKED_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| TP-01 | Transcript chunking boundary normalization | 2 |
+| TP-02 | Speaker diarization fallback contract | 3 |
+| TP-03 | OCR retry budget guidance | 2 |
+| TP-04 | Metadata provenance receipt plumbing | 4 |
+| TP-05 | Read-only pilot reporting guardrails | 2 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$BLOCKED_FINDINGS" "$BLOCKED_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for unsupported transcript pilot manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for unsupported transcript pilot manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ ! -e "$BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 5; assert {row['row_id'] for row in d['blockers']} == {'TP-01','TP-02','TP-03','TP-04','TP-05'}"; then
+    echo "  ✓ unsupported transcript pilot manifest emits PATCHABILITY_BLOCKERS.json"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ unsupported transcript pilot manifest did not emit PATCHABILITY_BLOCKERS.json as expected"
+    FAIL=$((FAIL + 1))
+fi
+
+cat > "$BLOCKED_AUDIT_INPUT/SCORECARD.json" <<'EOF'
+{
+  "composite": 81,
+  "audit_status": "completed",
+  "dimensions": {
+    "D1_governance": {"score": 14, "max": 20},
+    "D2_tests": {"score": 18, "max": 20},
+    "D3_skill_maturity": {"score": 15, "max": 20}
+  }
+}
+EOF
+cat > "$BLOCKED_AUDIT_INPUT/AUDIT_RUN_RECEIPT.json" <<'EOF'
+{
+  "status": "completed"
+}
+EOF
+printf '%s\n' '# Audit Report' > "$BLOCKED_AUDIT_INPUT/AUDIT_REPORT.md"
+cp "$BLOCKED_FINDINGS" "$BLOCKED_AUDIT_INPUT/OPTIMIZATION_PLAN.md"
+
+if OPTIMIZER_PREFLIGHT_ONLY=true bash "$OPT_DIR/scripts/repo-optimizer.sh" "$TARGET_REPO" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT" --patch >/dev/null; then
+    echo "  ✓ repo-optimizer.sh completed for unsupported transcript pilot manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ repo-optimizer.sh failed for unsupported transcript pilot manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$BLOCKED_PIPELINE_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$BLOCKED_PIPELINE_OUTPUT/OPTIMIZATION_SCORECARD.json')); assert d['patches_generated'] == 0 and d['patches_valid'] == 0; assert d['meta']['patch_status'] == 'fail_closed_patchability_blocked'"; then
+    echo "  ✓ optimizer scorecard and artifacts report patchability-blocked state"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ optimizer scorecard did not report patchability-blocked state"
+    FAIL=$((FAIL + 1))
+fi
+
+BLOCKED_VALIDATE_OUTPUT="$BLOCKED_OUTPUT/validate-output.txt"
+if make -C "$OPT_DIR" validate OUTPUT_DIR="$BLOCKED_PIPELINE_OUTPUT" > "$BLOCKED_VALIDATE_OUTPUT" 2>&1 \
+    && grep -Fq 'Patchability blockers: 5' "$BLOCKED_VALIDATE_OUTPUT" \
+    && grep -Fq 'TP-01: unsupported_manifest_row' "$BLOCKED_VALIDATE_OUTPUT"; then
+    echo "  ✓ make validate reports patchability blockers clearly"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ make validate did not report patchability blockers clearly"
+    cat "$BLOCKED_VALIDATE_OUTPUT" 2>/dev/null || true
+    FAIL=$((FAIL + 1))
+fi
+
 echo ""
 echo "  PASS: $PASS  FAIL: $FAIL"
 if [ "$FAIL" -gt 0 ]; then

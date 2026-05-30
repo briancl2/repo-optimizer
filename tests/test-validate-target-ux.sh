@@ -61,6 +61,14 @@ run_expect_status "complete bundle fixture" "0" "$valid_output" \
 check "complete bundle still reaches bundle validator" "true" \
     "$(grep -Fq 'VERDICT: PASS' "$valid_output" && echo true || echo false)"
 
+patchability_output="$TMPDIR/patchability-output.log"
+run_expect_status "patchability-blocked bundle fixture" "0" "$patchability_output" \
+    make validate OUTPUT_DIR="$REPO_ROOT/tests/fixtures/patchability-blocked-operation"
+check "patchability fixture reports blocker count" "true" \
+    "$(grep -Fq 'Patchability blockers: 5' "$patchability_output" && echo true || echo false)"
+check "patchability fixture names unsupported row" "true" \
+    "$(grep -Fq 'TP-01: unsupported_manifest_row' "$patchability_output" && echo true || echo false)"
+
 help_output="$TMPDIR/help-output.log"
 make help > "$help_output"
 check "Makefile help clarifies validate target" "true" \
