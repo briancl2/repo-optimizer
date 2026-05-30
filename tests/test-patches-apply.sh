@@ -62,6 +62,11 @@ cat > "$TARGET_REPO/docs/agent-operations.md" <<'EOF'
 |---|---|
 | `scripts/work-close.sh` | Work contract finalizer; runs the session grader |
 EOF
+cat > "$TARGET_REPO/docs/issue164-ecosystem-architecture.md" <<'EOF'
+# Issue 164 Ecosystem Architecture
+
+This fixture intentionally lacks the core-five proving-ground and capability-home guidance.
+EOF
 cat > "$TARGET_REPO/scripts/work-close.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -89,6 +94,8 @@ cat > "$FINDINGS" <<'EOF'
 | P4 | S-05 + S-06 + S-07 (bundled shell hardening) | 2 |
 | WM-01 | no-handback recommendation contract | 3 |
 | WM-02 | GitHub-native closeout bypass / closure authority clarification | 3 |
+| WM-03 | core-five proving-ground guidance | 2 |
+| WM-04 | capability-home / owner-surface table | 2 |
 EOF
 
 if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$FINDINGS" "$OUTPUT_DIR" >/dev/null; then
@@ -157,6 +164,39 @@ if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$OUTPUT_DIR/PATCH
     PASS=$((PASS + 1))
 else
     echo "  ✗ at least one generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+WM03_PATCH="$OUTPUT_DIR/PATCH_PACK/WM-03-core-five-proving-ground-guidance.patch"
+if [ -s "$WM03_PATCH" ] \
+    && grep -Fq 'diff --git a/AGENTS.md b/AGENTS.md' "$WM03_PATCH" \
+    && grep -Fq 'diff --git a/docs/issue164-ecosystem-architecture.md b/docs/issue164-ecosystem-architecture.md' "$WM03_PATCH" \
+    && grep -Fq 'core-five proving-ground guidance' "$WM03_PATCH" \
+    && grep -Fq 'validate against each other read-only' "$WM03_PATCH" \
+    && grep -Fq 'not downstream adoption' "$WM03_PATCH" \
+    && grep -Fq 'own owner issue, branch, PR, checks, and merge' "$WM03_PATCH"; then
+    echo "  ✓ WM-03 patch materialized core-five proving-ground guidance"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-03 patch missing core-five proving-ground guidance"
+    [ -f "$WM03_PATCH" ] && cat "$WM03_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+WM04_PATCH="$OUTPUT_DIR/PATCH_PACK/WM-04-capability-home-owner-surface-table.patch"
+if [ -s "$WM04_PATCH" ] \
+    && grep -Fq 'diff --git a/AGENTS.md b/AGENTS.md' "$WM04_PATCH" \
+    && grep -Fq 'diff --git a/docs/issue164-ecosystem-architecture.md b/docs/issue164-ecosystem-architecture.md' "$WM04_PATCH" \
+    && grep -Fq 'capability-home owner-surface routing' "$WM04_PATCH" \
+    && grep -Fq '| Audit/signature detection | repo-auditor |' "$WM04_PATCH" \
+    && grep -Fq '| Recommendation packaging | repo-upgrade-advisor |' "$WM04_PATCH" \
+    && grep -Fq '| Patch-pack materialization | repo-optimizer |' "$WM04_PATCH" \
+    && grep -Fq '| Shared repo-agent contract | repo-agent-core |' "$WM04_PATCH"; then
+    echo "  ✓ WM-04 patch materialized capability-home owner-surface table"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-04 patch missing capability-home owner-surface table"
+    [ -f "$WM04_PATCH" ] && cat "$WM04_PATCH"
     FAIL=$((FAIL + 1))
 fi
 
