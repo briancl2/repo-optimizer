@@ -105,6 +105,220 @@ if changed_files:
     patch_path.write_text("\n".join(patch_parts) + "\n", encoding="utf-8")
 PY
 
+python3 - "$REPO" "$FINDINGS" "$PATCH_DIR" <<'PY'
+from __future__ import annotations
+
+import difflib
+import re
+import sys
+from pathlib import Path
+
+repo = Path(sys.argv[1])
+findings = Path(sys.argv[2])
+patch_dir = Path(sys.argv[3])
+plan = findings.read_text(encoding="utf-8", errors="replace")
+
+
+def has_manifest_row(row_id: str) -> bool:
+    return bool(re.search(rf"(?:^|[|\n\r])\s*{re.escape(row_id)}\b", plan, re.IGNORECASE))
+
+
+def read_lines(path: Path) -> list[str] | None:
+    if not path.exists() or not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+
+def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]]) -> None:
+    parts: list[str] = []
+    for rel, old, new in changes:
+        if old == new:
+            continue
+        diff = list(
+            difflib.unified_diff(
+                old,
+                new,
+                fromfile=f"a/{rel}",
+                tofile=f"b/{rel}",
+                lineterm="",
+            )
+        )
+        if not diff:
+            continue
+        parts.append(f"diff --git a/{rel} b/{rel}")
+        parts.extend(diff)
+    if parts:
+        patch_path.write_text("\n".join(parts) + "\n", encoding="utf-8")
+
+
+def insert_after_heading(lines: list[str], block: list[str]) -> list[str]:
+    marker = block[0]
+    if marker in lines:
+        return lines
+    if lines and lines[0].startswith("#"):
+        return lines[:1] + [""] + block + lines[1:]
+    return block + [""] + lines
+
+
+def materialize_wm01() -> None:
+    if not has_manifest_row("WM-01"):
+        return
+
+    changes: list[tuple[str, list[str], list[str]]] = []
+    rel = "AGENTS.md"
+    path = repo / rel
+    old = read_lines(path)
+    if old is not None:
+        block = [
+            "## Issue #164 no-handback recommendation contract",
+            "",
+            "- Issue #164 recommendations must name a Goal-ready production episode, not a category or operator choice.",
+            "- Each recommendation must name the exact owner surface, first deliverable or PR shape, advancement rationale, out-of-scope boundaries, fallback if blocked, and validation scope.",
+            "- Category-only recommendations such as `do real delivery`, `work on repo-star`, or asking the operator to pick a repo are invalid unless paired with an exact owner surface and first deliverable.",
+        ]
+        new = insert_after_heading(old, block)
+        new = [
+            "Issue #164 recommendations must name a Goal-ready production episode with exact owner surface, first deliverable, advancement rationale, boundaries, fallback, and validation scope."
+            if "let the operator pick" in line and "Issue #164" in line
+            else line
+            for line in new
+        ]
+        changes.append((rel, old, new))
+
+    # Optional BMA owner-surface files. These are skipped when absent so target
+    # repositories remain read-only and patch generation stays deterministic.
+    optional_blocks = {
+        ".agents/skills/checking-alignment/SKILL.md": [
+            "## Issue #164 no-handback recommendation contract",
+            "",
+            "Raised-tempo Issue #164 recommendations must name a Goal-ready production episode rather than a category or operator choice.",
+            "Required fields: Goal objective, exact owner surface, first deliverable, advancement rationale, boundaries/out-of-scope, fallback if blocked, and validation scope.",
+        ],
+        "docs/issue164-ecosystem-architecture.md": [
+            "## No-handback recommendation contract",
+            "",
+            "Issue #164 recommendations are valid only when they name a Goal-ready production episode with exact owner surface, first deliverable, advancement rationale, boundaries, fallback if blocked, and validation scope.",
+        ],
+    }
+    for rel, block in optional_blocks.items():
+        old = read_lines(repo / rel)
+        if old is None:
+            continue
+        changes.append((rel, old, insert_after_heading(old, block)))
+
+    write_patch(patch_dir / "WM-01-no-handback-recommendation-contract.patch", changes)
+
+
+def materialize_wm02() -> None:
+    if not has_manifest_row("WM-02"):
+        return
+
+    changes: list[tuple[str, list[str], list[str]]] = []
+
+    rel = "scripts/work-close.sh"
+    old = read_lines(repo / rel)
+    if old is not None and not any("--github-native-closeout" in line for line in old):
+        new = list(old)
+        parse_block = [
+            'GITHUB_NATIVE_CLOSEOUT=""',
+            'while [ $# -gt 0 ]; do',
+            '    case "$1" in',
+            '        --github-native-closeout) GITHUB_NATIVE_CLOSEOUT="${2:?--github-native-closeout requires a rationale}"; shift 2 ;;',
+            '        *) shift ;;',
+            '    esac',
+            'done',
+            '',
+            'if [ -n "$GITHUB_NATIVE_CLOSEOUT" ] && [ "${#GITHUB_NATIVE_CLOSEOUT}" -lt 30 ]; then',
+            '    echo "ERROR: --github-native-closeout requires a concrete rationale (>=30 chars)." >&2',
+            '    exit 1',
+            'fi',
+            '',
+        ]
+        inserted = False
+        for idx, line in enumerate(new):
+            if line.strip() in {'shift', 'shift || true'}:
+                new = new[: idx + 1] + parse_block + new[idx + 1 :]
+                inserted = True
+                break
+        if not inserted:
+            insert_at = 2 if len(new) > 2 else len(new)
+            new = new[:insert_at] + parse_block + new[insert_at:]
+
+        bypass_block = [
+            'if [ -n "$GITHUB_NATIVE_CLOSEOUT" ]; then',
+            '    BYPASS_FILE="$WORK_DIR/score-session-bypass.json"',
+            '    python3 - "$BYPASS_FILE" "$WORK_DIR" "$GITHUB_NATIVE_CLOSEOUT" <<\'PYRECEIPT\'',
+            'import json, os, sys',
+            'from datetime import datetime, timezone',
+            'out, work_dir, rationale = sys.argv[1:]',
+            'receipt = {',
+            '    "schema_version": "1.0.0",',
+            '    "mode": "github_native_issue_pr",',
+            '    "status": "score_session_not_authoritative",',
+            '    "work_dir": os.path.relpath(work_dir, os.getcwd()),',
+            '    "skipped_script": "scripts/score-session.sh",',
+            '    "rationale": rationale,',
+            '    "non_claims": [',
+            '        "Does not prove GitHub issue closure by itself.",',
+            '        "Does not apply to non-GitHub or session-local work.",',
+            '        "Does not change score-session thresholds."',
+            '    ],',
+            '    "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),',
+            '}',
+            'with open(out, "w", encoding="utf-8") as fh:',
+            '    json.dump(receipt, fh, indent=2, sort_keys=True)',
+            '    fh.write("\\n")',
+            'PYRECEIPT',
+            '    echo "  Session grader skipped: GitHub-native issue/PR closure authority."',
+            'elif [ -f scripts/score-session.sh ]; then',
+        ]
+        replaced = False
+        for idx, line in enumerate(new):
+            if line.strip() == 'if [ -f scripts/score-session.sh ]; then':
+                new = new[:idx] + bypass_block + new[idx + 1 :]
+                replaced = True
+                break
+        if not replaced:
+            new.extend([""] + bypass_block + [
+                '    bash scripts/score-session.sh "$WORK_DIR" "$(basename "$WORK_DIR")"',
+                'fi',
+            ])
+        changes.append((rel, old, new))
+
+    rel = "Makefile"
+    old = read_lines(repo / rel)
+    if old is not None and not any("--github-native-closeout" in line for line in old):
+        new = list(old)
+        help_line = '\t@echo "  bash scripts/work-close.sh <work-dir> --github-native-closeout \\\"...\\\""'
+        inserted = False
+        for idx, line in enumerate(new):
+            if "make work-close" in line:
+                new.insert(idx + 1, help_line)
+                inserted = True
+                break
+        if not inserted:
+            new.append(help_line)
+        changes.append((rel, old, new))
+
+    rel = "docs/agent-operations.md"
+    old = read_lines(repo / rel)
+    if old is not None and not any("score-session-bypass.json" in line for line in old):
+        new = [
+            line.replace(
+                "runs the session grader",
+                "runs the session grader by default and writes `score-session-bypass.json` for explicit GitHub-native issue/PR closeout",
+            )
+            for line in old
+        ]
+        changes.append((rel, old, new))
+
+    write_patch(patch_dir / "WM-02-github-native-closeout-bypass.patch", changes)
+
+
+materialize_wm01()
+materialize_wm02()
+PY
+
 # Post-process any existing patches
 PATCH_COUNT=0
 for patch in "$PATCH_DIR"/*.patch; do

@@ -43,9 +43,35 @@ AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
 trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
-mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts"
+mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/docs"
 printf '%s\n' '#!/bin/bash' '# pre-commit fixture' 'echo check' > "$TARGET_REPO/scripts/pre-commit-hook.sh"
 printf '%s\n' '#!/bin/bash' '# local review fixture' 'echo review' > "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts/local_review.sh"
+cat > "$TARGET_REPO/AGENTS.md" <<'EOF'
+# Agent Instructions
+
+When asked for Issue #164 recommendations, offer a category such as "do real delivery" and let the operator pick the repo.
+EOF
+cat > "$TARGET_REPO/Makefile" <<'EOF'
+help:
+	@echo "make work-close WORK=<dir>"
+EOF
+cat > "$TARGET_REPO/docs/agent-operations.md" <<'EOF'
+# Agent Operations
+
+| Script | Purpose |
+|---|---|
+| `scripts/work-close.sh` | Work contract finalizer; runs the session grader |
+EOF
+cat > "$TARGET_REPO/scripts/work-close.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+WORK_DIR="${1:?work dir required}"
+shift || true
+if [ -f scripts/score-session.sh ]; then
+    bash scripts/score-session.sh "$WORK_DIR" "$(basename "$WORK_DIR")"
+fi
+echo "=== Done ==="
+EOF
 git -C "$TARGET_REPO" init -q
 git -C "$TARGET_REPO" config user.email "test@example.com"
 git -C "$TARGET_REPO" config user.name "Test User"
@@ -61,6 +87,8 @@ cat > "$FINDINGS" <<'EOF'
 | Patch # | Findings | Files touched |
 |---|---|---:|
 | P4 | S-05 + S-06 + S-07 (bundled shell hardening) | 2 |
+| WM-01 | no-handback recommendation contract | 3 |
+| WM-02 | GitHub-native closeout bypass / closure authority clarification | 3 |
 EOF
 
 if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$FINDINGS" "$OUTPUT_DIR" >/dev/null; then
@@ -90,6 +118,45 @@ if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$OUTPUT_DIR/PATCH
     PASS=$((PASS + 1))
 else
     echo "  ✗ generated P4 patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+WM01_PATCH="$OUTPUT_DIR/PATCH_PACK/WM-01-no-handback-recommendation-contract.patch"
+if [ -s "$WM01_PATCH" ] \
+    && grep -Fq 'diff --git a/AGENTS.md b/AGENTS.md' "$WM01_PATCH" \
+    && grep -Fq 'Goal-ready production episode' "$WM01_PATCH" \
+    && grep -Fq 'owner surface' "$WM01_PATCH" \
+    && grep -Fq 'first deliverable' "$WM01_PATCH" \
+    && grep -Fq 'validation scope' "$WM01_PATCH" \
+    && grep -Fq -- '-When asked for Issue #164 recommendations' "$WM01_PATCH"; then
+    echo "  ✓ WM-01 patch materialized no-handback recommendation contract"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-01 patch missing no-handback recommendation contract"
+    [ -f "$WM01_PATCH" ] && cat "$WM01_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+WM02_PATCH="$OUTPUT_DIR/PATCH_PACK/WM-02-github-native-closeout-bypass.patch"
+if [ -s "$WM02_PATCH" ] \
+    && grep -Fq 'diff --git a/scripts/work-close.sh b/scripts/work-close.sh' "$WM02_PATCH" \
+    && grep -Fq -- '--github-native-closeout' "$WM02_PATCH" \
+    && grep -Fq 'score-session-bypass.json' "$WM02_PATCH" \
+    && grep -Fq 'score_session_not_authoritative' "$WM02_PATCH" \
+    && grep -Fq 'GitHub-native issue/PR closure authority' "$WM02_PATCH"; then
+    echo "  ✓ WM-02 patch materialized GitHub-native closeout bypass contract"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-02 patch missing GitHub-native closeout bypass contract"
+    [ -f "$WM02_PATCH" ] && cat "$WM02_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$OUTPUT_DIR/PATCH_PACK" >/dev/null; then
+    echo "  ✓ all generated patches pass git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ at least one generated patch failed git apply --check"
     FAIL=$((FAIL + 1))
 fi
 
