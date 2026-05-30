@@ -49,6 +49,12 @@ Write OPTIMIZATION_PLAN.md with:
    receipts are present.
 8. **Metadata** — Timestamp, optimizer version, SCORECARD input
 
+When synthesis mentions core-five validation, reciprocal proving grounds, or
+patch manifests, state the owner-repo mutation boundary explicitly: validation
+is read-only evidence, `PATCH_PACK/` is a patch-files-only handoff, and
+downstream owner-repo mutation stays out of scope unless a named owner issue/PR
+authorizes it.
+
 Summarize command evidence instead of copying raw stdout/stderr transcripts into
 `OPTIMIZATION_PLAN.md`. Raw logs belong in `.jsonl`, stdout, or runtime receipt
 artifacts; cite only the relevant command, outcome, and artifact path.
@@ -56,3 +62,7 @@ artifacts; cite only the relevant command, outcome, and artifact path.
 If repo-auditor inventory is absent or partial, summarize it as insufficient
 cleanup evidence rather than authorization. Do not claim cleanup is safe to
 apply; repo-optimizer recommends only and target repositories are not mutated.
+
+Do not translate proving-ground success into downstream adoption claims. A live
+read-only reciprocal check can show that guidance transfers, but it cannot by
+itself authorize owner branches, PRs, checks, merges, or direct target writes.

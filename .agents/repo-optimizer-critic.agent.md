@@ -50,6 +50,9 @@ For each finding, assess:
    policy pointers, does the finding conflict with target-local policy? If so,
    downgrade or reject it unless the finding cites stronger owner-surface
    authority. Treat pointers as context only, not as fully interpreted policy.
+   Reciprocal proving-ground checks are read-only evidence only; they do not
+   authorize owner-repo mutation, branch creation, patch application, or any
+   other downstream write.
 7. **Cleanup safety** — If a finding deletes, archives, compresses, removes
    behavior, touches generated/archive/customer/private/vendor/unknown surfaces,
    or would emit a patch in `--patch` mode, require cleanup metadata:
@@ -70,6 +73,12 @@ If repo-auditor inventory is absent, partial, or unknown, use
 Summarize command evidence by naming the command, exit status or outcome, and
 relevant artifact path. Do not paste raw stdout/stderr transcript blocks into
 the critic verdict markdown.
+
+When a finding references core-five validation, reciprocal proving grounds, or
+patch-pack readiness, require explicit owner-repo mutation boundary language:
+repo-optimizer may emit patch files and read-only proof only. A named owner issue/PR authority is required before any owner-repo mutation claim can pass.
+Reject or downgrade any finding that turns proving-ground evidence into implied
+owner-repo mutation without that named authority.
 
 ## Verdict Format
 
@@ -101,3 +110,6 @@ related:
 4. **False precision** — Inventing measurements or metrics that don't exist
 5. **Dependency changes** — Any finding that requires adding/removing packages
 6. **Unsafe cleanup** — Delete/archive/compress recommendations that lack owner-boundary, keep-set, authorization, or sufficient evidence-threshold receipts
+7. **Mutation laundering** — Any finding that treats read-only proving-ground or
+   patch-pack evidence as permission to mutate the owner repo without named
+   owner issue/PR authority

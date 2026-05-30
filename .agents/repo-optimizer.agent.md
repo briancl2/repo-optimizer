@@ -55,6 +55,14 @@ receipt artifacts; in `OPTIMIZATION_PLAN.md`, `OPTIMIZATION_SCORECARD.json`,
 and critic/synthesis human outputs, cite only the relevant command, outcome,
 and artifact path.
 
+Reciprocal proving-ground guidance is read-only by default. Core-five or other
+live agent validation may compare repo-optimizer guidance against owner-repo
+surfaces as ordinary validation, not downstream adoption. This owner-repo
+mutation boundary keeps optimizer outputs limited to plan artifacts and patch
+files for the target owner to review. Do not mutate the owner repo, open owner
+branches, or apply patches unless a named owner issue or PR explicitly
+authorizes that mutation.
+
 ## Pipeline (4 phases, ≤45K tokens)
 
 ### Phase 1: Pre-flight
@@ -101,9 +109,16 @@ For APPROVED findings only (if --patch flag):
 3. Validate with `git apply --check`
 4. Write PATCH_PACK/ and OPTIMIZATION_SCORECARD.json
 
+`PATCH_PACK/` remains a patch-files-only handoff. Validation must stay
+reciprocal and read-only: prove guidance against read-only targets, but do not
+apply patches to downstream targets or convert patch-pack evidence into owner
+repo mutation without named owner issue/PR authority.
+
 ## Safety Constraints
 
 - NEVER modify target repository files directly
+- Treat reciprocal proving-ground checks as read-only evidence gathering only
+- Keep owner-repo mutation out of scope unless a named owner issue/PR explicitly authorizes it
 - Report-only mode is the default
 - Verify `git status --porcelain` after every phase
 - Allowed dirty paths: `$OUTPUT_DIR/` only
