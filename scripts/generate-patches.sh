@@ -109,14 +109,18 @@ python3 - "$REPO" "$FINDINGS" "$PATCH_DIR" <<'PY'
 from __future__ import annotations
 
 import difflib
+import json
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 repo = Path(sys.argv[1])
 findings = Path(sys.argv[2])
 patch_dir = Path(sys.argv[3])
 plan = findings.read_text(encoding="utf-8", errors="replace")
+repo_root = repo.resolve()
+overflow_blockers: list[dict[str, object]] = []
 
 
 def has_manifest_row(row_id: str) -> bool:
@@ -124,16 +128,69 @@ def has_manifest_row(row_id: str) -> bool:
 
 
 def read_lines(path: Path) -> list[str] | None:
-    if not path.exists() or not path.is_file():
+    if path.is_symlink():
         return None
-    return path.read_text(encoding="utf-8", errors="replace").splitlines()
+    try:
+        resolved = path.resolve(strict=True)
+    except (FileNotFoundError, OSError, RuntimeError):
+        return None
+    if not resolved.is_file():
+        return None
+    try:
+        resolved.relative_to(repo_root)
+    except ValueError:
+        return None
+    return resolved.read_text(encoding="utf-8", errors="replace").splitlines()
 
 
-def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]]) -> None:
+def record_patch_blocker(row_id: str, patch_name: str, code: str, reason: str) -> None:
+    overflow_blockers.append(
+        {
+            "row_id": row_id,
+            "patch": patch_name,
+            "findings": "",
+            "files_touched": "",
+            "blocker_code": code,
+            "reason": reason,
+        }
+    )
+
+
+def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]], row_id: str) -> None:
+    material_changes = [(rel, old, new) for rel, old, new in changes if old != new]
+    if not material_changes:
+        return
+
+    if len(material_changes) > 6:
+        record_patch_blocker(
+            row_id,
+            patch_path.name,
+            "patch_file_limit_exceeded",
+            f"Materializer for {row_id} would touch {len(material_changes)} files, above the 6-file patch limit.",
+        )
+        return
+
+    net_lines = sum(abs(len(new) - len(old)) for _, old, new in material_changes)
+    if net_lines > 160:
+        record_patch_blocker(
+            row_id,
+            patch_path.name,
+            "patch_line_limit_exceeded",
+            f"Materializer for {row_id} would change {net_lines} net lines, above the 160-line patch limit.",
+        )
+        return
+
+    if len(list(patch_dir.glob("*.patch"))) >= 5:
+        record_patch_blocker(
+            row_id,
+            patch_path.name,
+            "patch_run_limit_exceeded",
+            "This run already emitted the maximum 5 patch files; this row remains blocked for a later run.",
+        )
+        return
+
     parts: list[str] = []
-    for rel, old, new in changes:
-        if old == new:
-            continue
+    for rel, old, new in material_changes:
         diff = list(
             difflib.unified_diff(
                 old,
@@ -151,6 +208,96 @@ def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]
         patch_path.write_text("\n".join(parts) + "\n", encoding="utf-8")
 
 
+def flush_patch_blockers() -> None:
+    if not overflow_blockers:
+        return
+    out_path = patch_dir.parent / "PATCHABILITY_BLOCKERS.json"
+    payload = {
+        "schema_version": "1.0.0",
+        "artifact": "PATCHABILITY_BLOCKERS",
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source_manifest": str(findings),
+        "patch_dir": str(patch_dir),
+        "patches_generated": len(list(patch_dir.glob("*.patch"))),
+        "blocker_count": len(overflow_blockers),
+        "blockers": overflow_blockers,
+        "bounded_non_claims": [
+            "This artifact records manifest rows blocked by patch-pack safety limits.",
+            "It does not authorize target repository mutation or auto-apply behavior.",
+        ],
+    }
+    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def safe_rel_path(value: str) -> str | None:
+    rel = value.strip().strip("`'\"")
+    if not rel or rel.startswith("/") or rel.startswith("../") or "/../" in rel:
+        return None
+    return rel
+
+
+def manifest_row_text(row_id: str) -> str:
+    in_manifest = False
+    for raw in plan.splitlines():
+        stripped = raw.strip()
+        if re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+            in_manifest = True
+            continue
+        if in_manifest and stripped.startswith("## ") and not re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+            break
+        if in_manifest and stripped.startswith("|") and re.search(rf"\|\s*{re.escape(row_id)}\b", stripped, re.IGNORECASE):
+            return raw
+    return ""
+
+
+def extract_paths(text: str, pattern: str) -> list[str]:
+    seen: set[str] = set()
+    paths: list[str] = []
+    for match in re.finditer(pattern, text):
+        rel = safe_rel_path(match.group(1))
+        if rel is None or rel in seen:
+            continue
+        seen.add(rel)
+        paths.append(rel)
+    return paths
+
+
+def harden_shell_lines(lines: list[str]) -> list[str]:
+    if not lines:
+        return lines
+
+    updated = list(lines)
+    if not re.search(r"\bbash\b", updated[0]):
+        return lines
+
+    if updated[0] == "#!/bin/bash":
+        updated[0] = "#!/usr/bin/env bash"
+
+    if updated[0].startswith("#!") and "set -euo pipefail" not in updated[:5]:
+        updated.insert(1, "set -euo pipefail")
+
+    return updated
+
+
+def skill_name_from_path(rel: str) -> str:
+    parent = Path(rel).parent.name or "skill"
+    slug = re.sub(r"[^a-z0-9]+", "-", parent.lower()).strip("-")
+    return slug or "skill"
+
+
+def skill_heading(lines: list[str], fallback: str) -> str:
+    for line in lines[:20]:
+        if line.startswith("# "):
+            heading = line[2:].strip()
+            if heading:
+                return heading
+    return fallback.replace("-", " ").title()
+
+
+def yaml_double_quoted(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def insert_after_heading(lines: list[str], block: list[str]) -> list[str]:
     marker = block[0]
     if marker in lines:
@@ -158,6 +305,54 @@ def insert_after_heading(lines: list[str], block: list[str]) -> list[str]:
     if lines and lines[0].startswith("#"):
         return lines[:1] + [""] + block + lines[1:]
     return block + [""] + lines
+
+
+def materialize_pp01() -> None:
+    if not has_manifest_row("PP-1"):
+        return
+
+    candidates = extract_paths(manifest_row_text("PP-1"), r"([A-Za-z0-9_./-]+/SKILL\.md)")
+    changes: list[tuple[str, list[str], list[str]]] = []
+    for rel in candidates:
+        old = read_lines(repo / rel)
+        if old is None or (old and old[0].strip() == "---"):
+            continue
+
+        name = skill_name_from_path(rel)
+        heading = skill_heading(old, name)
+        frontmatter = [
+            "---",
+            f"name: {name}",
+            f"description: {yaml_double_quoted(heading)}",
+            "license: MIT",
+            "---",
+            "",
+        ]
+        changes.append((rel, old, frontmatter + old))
+
+    write_patch(patch_dir / "PP-1-skill-frontmatter.patch", changes, "PP-1")
+
+
+def materialize_pp04() -> None:
+    if not has_manifest_row("PP-4"):
+        return
+
+    candidates = [
+        rel
+        for rel in extract_paths(manifest_row_text("PP-4"), r"([A-Za-z0-9_./-]+\.sh)")
+        if "hook" in Path(rel).name.lower()
+    ]
+
+    changes: list[tuple[str, list[str], list[str]]] = []
+    for rel in candidates:
+        old = read_lines(repo / rel)
+        if old is None:
+            continue
+        new = harden_shell_lines(old)
+        if old != new:
+            changes.append((rel, old, new))
+
+    write_patch(patch_dir / "PP-4-hook-safety-flags.patch", changes, "PP-4")
 
 
 def materialize_wm01() -> None:
@@ -206,7 +401,7 @@ def materialize_wm01() -> None:
             continue
         changes.append((rel, old, insert_after_heading(old, block)))
 
-    write_patch(patch_dir / "WM-01-no-handback-recommendation-contract.patch", changes)
+    write_patch(patch_dir / "WM-01-no-handback-recommendation-contract.patch", changes, "WM-01")
 
 
 def materialize_wm02() -> None:
@@ -312,7 +507,7 @@ def materialize_wm02() -> None:
         ]
         changes.append((rel, old, new))
 
-    write_patch(patch_dir / "WM-02-github-native-closeout-bypass.patch", changes)
+    write_patch(patch_dir / "WM-02-github-native-closeout-bypass.patch", changes, "WM-02")
 
 
 def materialize_wm03() -> None:
@@ -338,7 +533,7 @@ def materialize_wm03() -> None:
     if old is not None:
         changes.append((rel, old, insert_after_heading(old, block)))
 
-    write_patch(patch_dir / "WM-03-core-five-proving-ground-guidance.patch", changes)
+    write_patch(patch_dir / "WM-03-core-five-proving-ground-guidance.patch", changes, "WM-03")
 
 
 def materialize_wm04() -> None:
@@ -368,13 +563,16 @@ def materialize_wm04() -> None:
     if old is not None:
         changes.append((rel, old, insert_after_heading(old, block)))
 
-    write_patch(patch_dir / "WM-04-capability-home-owner-surface-table.patch", changes)
+    write_patch(patch_dir / "WM-04-capability-home-owner-surface-table.patch", changes, "WM-04")
 
 
+materialize_pp01()
+materialize_pp04()
 materialize_wm01()
 materialize_wm02()
 materialize_wm03()
 materialize_wm04()
+flush_patch_blockers()
 PY
 
 # Post-process any existing patches
@@ -403,7 +601,8 @@ for patch in "$PATCH_DIR"/*.patch; do
 done
 
 if [ "$PATCH_COUNT" -eq 0 ]; then
-    python3 - "$FINDINGS" "$PATCH_DIR" "$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json" <<'PY'
+    if [ ! -s "$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json" ]; then
+        python3 - "$FINDINGS" "$PATCH_DIR" "$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json" <<'PY'
 from __future__ import annotations
 
 import json
@@ -466,7 +665,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     supported = bool(
-        row_id in {"P4", "WM-01", "WM-02", "WM-03", "WM-04"}
+        row_id in {"P4", "PP-1", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04"}
         or re.search(r"\bS-05\b", row_text)
         and re.search(r"\bS-06\b", row_text)
         and re.search(r"\bS-07\b", row_text)
@@ -517,6 +716,7 @@ payload = {
 }
 out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
+    fi
     echo "  Patchability blockers → $OUTPUT_DIR/PATCHABILITY_BLOCKERS.json"
     echo "  No patches found in $PATCH_DIR/"
 fi
