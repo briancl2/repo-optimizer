@@ -30,7 +30,7 @@ help:
 	@echo "  make collect-live-agent-receipts FIXTURES=<path> ADAPTER=<codex|copilot|generic> OUTPUT_DIR=<dir>  Collect live receipts"
 	@echo "  make patch-check                         Validate existing patches"
 	@echo "  make test                                Run all tests"
-	@echo "  make validate                            Validate bundle integrity"
+	@echo "  make validate OUTPUT_DIR=<dir>           Validate generated optimizer bundle integrity"
 	@echo "  make review                              Code review staged changes"
 	@echo "  make check                               Pre-commit gate (shellcheck + inventory)"
 	@echo "  make work DESC=\"...\"                     Open work contract"
@@ -128,10 +128,28 @@ test:
 	@bash tests/test-self-management.sh
 	@bash tests/test-grader-golden.sh
 	@bash tests/test-work-close-github-native.sh
+	@bash tests/test-validate-target-ux.sh
 	@echo ""
 	@echo "=== All tests passed ==="
 
 validate:
+	@if [ ! -d "$(OUTPUT_DIR)" ]; then \
+		echo "ERROR: make validate validates a generated optimizer output bundle, but OUTPUT_DIR=$(OUTPUT_DIR) does not exist."; \
+		echo ""; \
+		echo "For source-only or workflow-only repo changes, run: make check && make test"; \
+		echo "For bundle validation, first run make optimize or pass OUTPUT_DIR=<existing-bundle-dir>."; \
+		exit 2; \
+	fi
+	@if [ ! -s "$(OUTPUT_DIR)/OPTIMIZATION_PLAN.md" ] || [ ! -s "$(OUTPUT_DIR)/OPTIMIZATION_SCORECARD.json" ]; then \
+		echo "ERROR: make validate validates a generated optimizer output bundle, but OUTPUT_DIR=$(OUTPUT_DIR) is incomplete."; \
+		echo "Missing required bundle files:"; \
+		[ -s "$(OUTPUT_DIR)/OPTIMIZATION_PLAN.md" ] || echo "  - OPTIMIZATION_PLAN.md"; \
+		[ -s "$(OUTPUT_DIR)/OPTIMIZATION_SCORECARD.json" ] || echo "  - OPTIMIZATION_SCORECARD.json"; \
+		echo ""; \
+		echo "For source-only or workflow-only repo changes, run: make check && make test"; \
+		echo "For bundle validation, first run make optimize or pass OUTPUT_DIR=<existing-bundle-dir>."; \
+		exit 2; \
+	fi
 	@bash .agents/skills/bundle-integrity/scripts/validate-bundle.sh $(OUTPUT_DIR)
 
 install-hooks:
