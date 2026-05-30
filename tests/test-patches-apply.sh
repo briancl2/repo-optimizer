@@ -38,14 +38,46 @@ else
 fi
 
 TARGET_REPO="$(mktemp -d)"
+EXTERNAL_FIXTURE="$(mktemp -d)"
 OUTPUT_DIR="$(mktemp -d)"
+PP_OUTPUT="$(mktemp -d)"
+CAP_OUTPUT="$(mktemp -d)"
+LIMIT_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
-mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/docs"
+mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/docs"
+for n in 1 2 3 4 5 6 7; do
+    mkdir -p "$TARGET_REPO/.agents/skills/too-many-$n"
+    printf '%s\n' "# Too Many $n" "" "Skill fixture $n." > "$TARGET_REPO/.agents/skills/too-many-$n/SKILL.md"
+done
 printf '%s\n' '#!/bin/bash' '# pre-commit fixture' 'echo check' > "$TARGET_REPO/scripts/pre-commit-hook.sh"
 printf '%s\n' '#!/bin/bash' '# local review fixture' 'echo review' > "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts/local_review.sh"
+printf '%s\n' '#!/bin/bash' '# hook fixture' 'echo hook' > "$TARGET_REPO/scripts/post-merge-hook.sh"
+printf '%s\n' '#!/bin/sh' '# non-bash hook fixture' 'echo hook' > "$TARGET_REPO/scripts/nonbash-hook.sh"
+printf '%s\n' '#!/bin/bash' '# utility fixture' 'echo utility' > "$TARGET_REPO/scripts/utility.sh"
+cat > "$TARGET_REPO/.agents/skills/template-validation/SKILL.md" <<'EOF'
+# Template Validation
+
+Validate templates without frontmatter.
+EOF
+cat > "$TARGET_REPO/.agents/skills/out-of-row/SKILL.md" <<'EOF'
+# Out Of Row
+
+This skill is mentioned outside the PP-1 manifest row.
+EOF
+printf '%s\n' '# Escaped Skill' > "$EXTERNAL_FIXTURE/escaped-skill.md"
+ln -s "$EXTERNAL_FIXTURE/escaped-skill.md" "$TARGET_REPO/.agents/skills/escaped/SKILL.md"
+cat > "$TARGET_REPO/.agents/skills/already-ready/SKILL.md" <<'EOF'
+---
+name: already-ready
+description: "Already has frontmatter."
+license: MIT
+---
+
+# Already Ready
+EOF
 cat > "$TARGET_REPO/AGENTS.md" <<'EOF'
 # Agent Instructions
 
@@ -167,6 +199,155 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+PP_FINDINGS="$PP_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$PP_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| PP-1 | add YAML frontmatter to `.agents/skills/template-validation/SKILL.md`; skip `.agents/skills/already-ready/SKILL.md`; reject `.agents/skills/escaped/SKILL.md` | 3 |
+| PP-4 | hook safety flags for `scripts/post-merge-hook.sh`, skip `scripts/nonbash-hook.sh`, and ignore `scripts/utility.sh` | 3 |
+
+## Notes
+
+Mentioning `.agents/skills/out-of-row/SKILL.md` and `scripts/utility.sh` outside the matching row must not pull them into PP patches.
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$PP_FINDINGS" "$PP_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for PP-1/PP-4 pilot manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for PP-1/PP-4 pilot manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+PP1_PATCH="$PP_OUTPUT/PATCH_PACK/PP-1-skill-frontmatter.patch"
+if [ -s "$PP1_PATCH" ] \
+    && grep -Fq 'diff --git a/.agents/skills/template-validation/SKILL.md b/.agents/skills/template-validation/SKILL.md' "$PP1_PATCH" \
+    && grep -Fq '+---' "$PP1_PATCH" \
+    && grep -Fq '+name: template-validation' "$PP1_PATCH" \
+    && grep -Fq '+description: "Template Validation"' "$PP1_PATCH" \
+    && grep -Fq '+license: MIT' "$PP1_PATCH" \
+    && ! grep -Fq 'already-ready/SKILL.md' "$PP1_PATCH" \
+    && ! grep -Fq 'escaped/SKILL.md' "$PP1_PATCH" \
+    && ! grep -Fq 'out-of-row/SKILL.md' "$PP1_PATCH"; then
+    echo "  ✓ PP-1 patch materialized missing skill frontmatter only"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ PP-1 patch missing expected skill frontmatter materialization"
+    [ -f "$PP1_PATCH" ] && cat "$PP1_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+PP4_PATCH="$PP_OUTPUT/PATCH_PACK/PP-4-hook-safety-flags.patch"
+if [ -s "$PP4_PATCH" ] \
+    && grep -Fq 'diff --git a/scripts/post-merge-hook.sh b/scripts/post-merge-hook.sh' "$PP4_PATCH" \
+    && grep -Fq '+#!/usr/bin/env bash' "$PP4_PATCH" \
+    && grep -Fq '+set -euo pipefail' "$PP4_PATCH" \
+    && ! grep -Fq 'scripts/nonbash-hook.sh' "$PP4_PATCH" \
+    && ! grep -Fq 'scripts/utility.sh' "$PP4_PATCH"; then
+    echo "  ✓ PP-4 patch materialized hook safety flags"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ PP-4 patch missing expected hook safety flags"
+    [ -f "$PP4_PATCH" ] && cat "$PP4_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$PP_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ PP-1/PP-4 generated patches pass git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ PP-1/PP-4 generated patches failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+CAP_FINDINGS="$CAP_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$CAP_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| P4 | S-05 + S-06 + S-07 (bundled shell hardening) | 2 |
+| PP-1 | add YAML frontmatter to `.agents/skills/template-validation/SKILL.md` | 1 |
+| PP-4 | hook safety flags for `scripts/post-merge-hook.sh` | 1 |
+| WM-01 | no-handback recommendation contract | 3 |
+| WM-02 | GitHub-native closeout bypass / closure authority clarification | 3 |
+| WM-03 | core-five proving-ground guidance | 2 |
+| WM-04 | capability-home / owner-surface table | 2 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$CAP_FINDINGS" "$CAP_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for seven-row patch manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for seven-row patch manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+CAP_PATCH_COUNT="$(find "$CAP_OUTPUT/PATCH_PACK" -maxdepth 1 -name '*.patch' | wc -l | tr -d ' ')"
+if [ "$CAP_PATCH_COUNT" = "5" ] \
+    && [ -s "$CAP_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$CAP_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 5; assert d['blocker_count'] == 2; assert {row['row_id'] for row in d['blockers']} == {'WM-03','WM-04'}; assert {row['blocker_code'] for row in d['blockers']} == {'patch_run_limit_exceeded'}"; then
+    echo "  ✓ seven-row manifest caps output at five patches and blocks overflow rows"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ seven-row manifest did not enforce five-patch cap"
+    [ -f "$CAP_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$CAP_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$CAP_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ capped patch set passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ capped patch set failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+LIMIT_FINDINGS="$LIMIT_OUTPUT/OPTIMIZATION_PLAN.md"
+{
+    cat <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+EOF
+    printf '| PP-1 | add YAML frontmatter to '
+    for n in 1 2 3 4 5 6 7; do
+        if [ "$n" -gt 1 ]; then
+            printf ', '
+        fi
+        printf '`.agents/skills/too-many-%s/SKILL.md`' "$n"
+    done
+    printf ' | 7 |\n'
+} > "$LIMIT_FINDINGS"
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$LIMIT_FINDINGS" "$LIMIT_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for over-limit PP-1 manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for over-limit PP-1 manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ ! -e "$LIMIT_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$LIMIT_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$LIMIT_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; assert d['blockers'][0]['row_id'] == 'PP-1'; assert d['blockers'][0]['blocker_code'] == 'patch_file_limit_exceeded'"; then
+    echo "  ✓ over-limit PP-1 manifest preserves specific patchability blocker"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ over-limit PP-1 manifest lost specific patchability blocker"
+    [ -f "$LIMIT_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$LIMIT_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
 WM03_PATCH="$OUTPUT_DIR/PATCH_PACK/WM-03-core-five-proving-ground-guidance.patch"
 if [ -s "$WM03_PATCH" ] \
     && grep -Fq 'diff --git a/AGENTS.md b/AGENTS.md' "$WM03_PATCH" \
@@ -239,7 +420,7 @@ fi
 BLOCKED_OUTPUT="$(mktemp -d)"
 BLOCKED_AUDIT_INPUT="$(mktemp -d)"
 BLOCKED_PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
 BLOCKED_FINDINGS="$BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
 cat > "$BLOCKED_FINDINGS" <<'EOF'
 # Optimization Plan
