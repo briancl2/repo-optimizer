@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0.0",
+  "artifact": "PATCHABILITY_BLOCKERS",
+  "generated_at": "2026-05-30T00:00:00Z",
+  "source_manifest": "OPTIMIZATION_PLAN.md",
+  "patch_dir": "PATCH_PACK",
+  "patches_generated": 0,
+  "blocker_count": 5,
+  "blockers": [
+    {
+      "row_id": "TP-01",
+      "findings": "Transcript chunking boundary normalization",
+      "files_touched": 2,
+      "blocker_code": "unsupported_manifest_row",
+      "reason": "No deterministic patch materializer is implemented for TP-01."
+    },
+    {
+      "row_id": "TP-02",
+      "findings": "Speaker diarization fallback contract",
+      "files_touched": 3,
+      "blocker_code": "unsupported_manifest_row",
+      "reason": "No deterministic patch materializer is implemented for TP-02."
+    },
+    {
+      "row_id": "TP-03",
+      "findings": "OCR retry budget guidance",
+      "files_touched": 2,
+      "blocker_code": "unsupported_manifest_row",
+      "reason": "No deterministic patch materializer is implemented for TP-03."
+    },
+    {
+      "row_id": "TP-04",
+      "findings": "Metadata provenance receipt plumbing",
+      "files_touched": 4,
+      "blocker_code": "unsupported_manifest_row",
+      "reason": "No deterministic patch materializer is implemented for TP-04."
+    },
+    {
+      "row_id": "TP-05",
+      "findings": "Read-only pilot reporting guardrails",
+      "files_touched": 2,
+      "blocker_code": "unsupported_manifest_row",
+      "reason": "No deterministic patch materializer is implemented for TP-05."
+    }
+  ],
+  "bounded_non_claims": [
+    "This artifact explains why patch mode emitted zero patch files.",
+    "It does not authorize target repository mutation or auto-apply behavior."
+  ]
+}

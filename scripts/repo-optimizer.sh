@@ -1187,6 +1187,7 @@ PATCH_COUNT=0
 if [ -d "$OUTPUT_DIR/PATCH_PACK" ]; then
     PATCH_COUNT=$(find "$OUTPUT_DIR/PATCH_PACK" -name '*.patch' -type f 2>/dev/null | wc -l | tr -d ' ')
 fi
+PATCHABILITY_BLOCKERS="$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json"
 
 if [ "$PATCH_COUNT" -gt 0 ]; then
     for patch in "$OUTPUT_DIR"/PATCH_PACK/*.patch; do
@@ -1200,6 +1201,8 @@ fi
 if [ "$PATCH_MODE" = "true" ]; then
     if [ "$PATCH_COUNT" -gt 0 ]; then
         PATCH_STATUS="patches_present"
+    elif [ -s "$PATCHABILITY_BLOCKERS" ]; then
+        PATCH_STATUS="fail_closed_patchability_blocked"
     elif [ "$PATCH_STATUS" = "not_requested" ]; then
         if [ "$DISCOVERY_OK" -eq 0 ]; then
             PATCH_STATUS="fail_closed_no_discovery_payloads"
@@ -1215,6 +1218,10 @@ fi
 
 if [ "$COMMAND_BLOCKED" = "true" ]; then
     append_runtime_note "COMMAND_BLOCKED detected in Copilot-backed phases"
+fi
+if [ "$PATCH_MODE" = "true" ] && [ "$PATCH_COUNT" -eq 0 ] && [ -s "$PATCHABILITY_BLOCKERS" ]; then
+    PATCHABILITY_COUNT=$(python3 -c "import json; print(json.load(open('$PATCHABILITY_BLOCKERS')).get('blocker_count', 0))" 2>/dev/null || echo "0")
+    append_runtime_note "patchability blockers written to PATCHABILITY_BLOCKERS.json ($PATCHABILITY_COUNT blocker(s))"
 fi
 if [ "$PATCH_MODE" = "true" ] && [ "$PATCH_COUNT" -eq 0 ]; then
     append_runtime_note "patch mode requested but no patch artifacts were produced"

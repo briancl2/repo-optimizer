@@ -43,6 +43,7 @@ check_file "OPTIMIZATION_SCORECARD.json" "yes"
 echo ""
 echo "--- Optional Files ---"
 check_file "manifest.json" "no"
+check_file "PATCHABILITY_BLOCKERS.json" "no"
 
 # Check patches if PATCH_PACK exists
 if [ -d "$OUTPUT_DIR/PATCH_PACK" ]; then
@@ -70,6 +71,31 @@ if [ -d "$OUTPUT_DIR/PATCH_PACK" ]; then
         PASS=$((PASS + 1))
     done
     echo "  Patches: $PATCH_VALID/$PATCH_COUNT valid"
+fi
+
+if [ -s "$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json" ]; then
+    echo ""
+    echo "--- Patchability ---"
+    if python3 - "$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+assert payload.get("artifact") == "PATCHABILITY_BLOCKERS"
+assert isinstance(payload.get("blockers"), list)
+assert int(payload.get("blocker_count", -1)) == len(payload["blockers"])
+print(f"  Patchability blockers: {payload['blocker_count']}")
+for blocker in payload["blockers"][:5]:
+    print(f"  - {blocker.get('row_id', 'unknown')}: {blocker.get('blocker_code', 'unknown')}")
+PY
+    then
+        PASS=$((PASS + 1))
+    else
+        echo "  ✗ PATCHABILITY_BLOCKERS.json — INVALID patchability structure"
+        FAIL=$((FAIL + 1))
+    fi
 fi
 
 # Validate JSON artifacts

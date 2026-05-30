@@ -403,6 +403,121 @@ for patch in "$PATCH_DIR"/*.patch; do
 done
 
 if [ "$PATCH_COUNT" -eq 0 ]; then
+    python3 - "$FINDINGS" "$PATCH_DIR" "$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json" <<'PY'
+from __future__ import annotations
+
+import json
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+findings = Path(sys.argv[1])
+patch_dir = Path(sys.argv[2])
+out_path = Path(sys.argv[3])
+plan = findings.read_text(encoding="utf-8", errors="replace")
+
+
+def is_separator(cells: list[str]) -> bool:
+    return all(re.fullmatch(r":?-{3,}:?", cell.strip() or "-") for cell in cells)
+
+
+def manifest_rows(text: str) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    headers: list[str] | None = None
+    in_manifest = False
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+            in_manifest = True
+            headers = None
+            continue
+        if in_manifest and stripped.startswith("## ") and not re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+            break
+        if not in_manifest or not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) < 2 or is_separator(cells):
+            continue
+        if headers is None:
+            headers = [cell.lower() for cell in cells]
+            continue
+        row_id = cells[0]
+        patch_label = cells[1] if len(cells) > 1 else row_id
+        findings_value = cells[2] if len(cells) > 2 and headers[1] in {"patch", "patch name"} else cells[1]
+        files_touched = ""
+        for idx, header in enumerate(headers):
+            if "files" in header and idx < len(cells):
+                files_touched = cells[idx]
+                break
+        rows.append(
+            {
+                "row_id": row_id,
+                "patch": patch_label,
+                "findings": findings_value,
+                "files_touched": files_touched,
+                "raw_row": raw,
+            }
+        )
+    return rows
+
+
+def blocker_for(row: dict[str, object]) -> dict[str, object]:
+    row_text = " ".join(str(value) for value in row.values())
+    row_id = str(row.get("row_id", "unknown"))
+    supported = bool(
+        row_id in {"P4", "WM-01", "WM-02", "WM-03", "WM-04"}
+        or re.search(r"\bS-05\b", row_text)
+        and re.search(r"\bS-06\b", row_text)
+        and re.search(r"\bS-07\b", row_text)
+    )
+    code = "supported_materializer_no_output" if supported else "unsupported_manifest_row"
+    reason = (
+        f"A deterministic materializer matched {row_id}, but the target had no apply-checkable change."
+        if supported
+        else f"No deterministic patch materializer is implemented for manifest row {row_id}."
+    )
+    return {
+        "row_id": row_id,
+        "patch": row.get("patch", ""),
+        "findings": row.get("findings", ""),
+        "files_touched": row.get("files_touched", ""),
+        "blocker_code": code,
+        "reason": reason,
+    }
+
+
+rows = manifest_rows(plan)
+blockers = [blocker_for(row) for row in rows]
+if not blockers:
+    blockers = [
+        {
+            "row_id": "manifest",
+            "patch": "",
+            "findings": "",
+            "files_touched": "",
+            "blocker_code": "manifest_rows_not_found",
+            "reason": "No parseable Patch Manifest table rows were found in the optimization plan.",
+        }
+    ]
+
+payload = {
+    "schema_version": "1.0.0",
+    "artifact": "PATCHABILITY_BLOCKERS",
+    "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "source_manifest": str(findings),
+    "patch_dir": str(patch_dir),
+    "patches_generated": 0,
+    "blocker_count": len(blockers),
+    "blockers": blockers,
+    "bounded_non_claims": [
+        "This artifact explains why patch mode emitted zero patch files.",
+        "It does not authorize target repository mutation or auto-apply behavior.",
+    ],
+}
+out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+    echo "  Patchability blockers → $OUTPUT_DIR/PATCHABILITY_BLOCKERS.json"
     echo "  No patches found in $PATCH_DIR/"
 fi
 
