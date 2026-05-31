@@ -41,13 +41,16 @@ TARGET_REPO="$(mktemp -d)"
 EXTERNAL_FIXTURE="$(mktemp -d)"
 OUTPUT_DIR="$(mktemp -d)"
 PP_OUTPUT="$(mktemp -d)"
+PP3_OUTPUT="$(mktemp -d)"
 CAP_OUTPUT="$(mktemp -d)"
 LIMIT_OUTPUT="$(mktemp -d)"
+MIXED_OUTPUT="$(mktemp -d)"
+STALE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
-mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/docs"
+mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
     mkdir -p "$TARGET_REPO/.agents/skills/too-many-$n"
     printf '%s\n' "# Too Many $n" "" "Skill fixture $n." > "$TARGET_REPO/.agents/skills/too-many-$n/SKILL.md"
@@ -77,6 +80,15 @@ license: MIT
 ---
 
 # Already Ready
+EOF
+cat > "$TARGET_REPO/.agents/skills/metadata-target/SKILL.md" <<'EOF'
+---
+name: metadata-target
+description: "Metadata target."
+license: MIT
+---
+
+# Metadata Target
 EOF
 cat > "$TARGET_REPO/AGENTS.md" <<'EOF'
 # Agent Instructions
@@ -264,6 +276,49 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+PP3_FINDINGS="$PP3_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$PP3_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| PP-3 | additive `tools` / `stop_rules` metadata rows for `.agents/skills/metadata-target/SKILL.md` after excluding the rejected model-bump portion | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$PP3_FINDINGS" "$PP3_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for PP-3 metadata manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for PP-3 metadata manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+PP3_PATCH="$PP3_OUTPUT/PATCH_PACK/PP-3-additive-skill-metadata.patch"
+if [ -s "$PP3_PATCH" ] \
+    && grep -Fq 'diff --git a/.agents/skills/metadata-target/SKILL.md b/.agents/skills/metadata-target/SKILL.md' "$PP3_PATCH" \
+    && grep -Fq '+tools:' "$PP3_PATCH" \
+    && grep -Fq '+  - repo-native checks' "$PP3_PATCH" \
+    && grep -Fq '+stop_rules:' "$PP3_PATCH" \
+    && grep -Fq '+  - no target mutation without owner issue/PR authorization' "$PP3_PATCH" \
+    && ! grep -Fq '+model' "$PP3_PATCH"; then
+    echo "  ✓ PP-3 patch materialized additive metadata without model changes"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ PP-3 patch missing additive metadata contract"
+    [ -f "$PP3_PATCH" ] && cat "$PP3_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$PP3_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ PP-3 generated patch passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ PP-3 generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
 CAP_FINDINGS="$CAP_OUTPUT/OPTIMIZATION_PLAN.md"
 cat > "$CAP_FINDINGS" <<'EOF'
 # Optimization Plan
@@ -348,6 +403,83 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+MIXED_FINDINGS="$MIXED_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$MIXED_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| SH-1 | S-05 + S-06 + S-07 bundled shell hardening alias | 2 |
+| PP-1 | add YAML frontmatter to `.agents/skills/template-validation/SKILL.md` | 1 |
+| PP-2 | extract duplicated domain-context text and replace with references | 3 |
+| PP-5 | scorecard-delta helper plus caller updates | 4 |
+| TP-99 | target-specific future work with no generic materializer | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$MIXED_FINDINGS" "$MIXED_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for mixed patch/blocker manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for mixed patch/blocker manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$MIXED_OUTPUT/PATCH_PACK/P4-shell-hardening.patch" ] \
+    && [ -s "$MIXED_OUTPUT/PATCH_PACK/PP-1-skill-frontmatter.patch" ] \
+    && [ -s "$MIXED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$MIXED_OUTPUT/PATCHABILITY_BLOCKERS.json')); codes={row['row_id']: row['blocker_code'] for row in d['blockers']}; assert d['patches_generated'] == 2; assert codes == {'PP-2':'unsupported_semantic_refactor','PP-5':'unsupported_helper_plus_caller_update','TP-99':'unsupported_manifest_row'}"; then
+    echo "  ✓ mixed manifest preserves patch output plus explicit blocker reasons"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ mixed manifest did not preserve explicit blocker reasons"
+    [ -f "$MIXED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$MIXED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+STALE_FINDINGS="$STALE_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$STALE_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| PP-1 | add YAML frontmatter to `.agents/skills/template-validation/SKILL.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$STALE_FINDINGS" "$STALE_OUTPUT" >/dev/null \
+    && [ -s "$STALE_OUTPUT/PATCH_PACK/PP-1-skill-frontmatter.patch" ]; then
+    echo "  ✓ stale-output fixture seeded an initial patch"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ stale-output fixture failed to seed an initial patch"
+    FAIL=$((FAIL + 1))
+fi
+
+cat > "$STALE_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| TP-01 | unsupported transcript-only patch row | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$STALE_FINDINGS" "$STALE_OUTPUT" >/dev/null \
+    && [ ! -e "$STALE_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$STALE_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$STALE_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; assert d['blockers'][0]['row_id'] == 'TP-01'"; then
+    echo "  ✓ reused output directory clears stale patches before blocker generation"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ reused output directory retained stale patch artifacts"
+    find "$STALE_OUTPUT" -maxdepth 3 -type f -print
+    FAIL=$((FAIL + 1))
+fi
+
 WM03_PATCH="$OUTPUT_DIR/PATCH_PACK/WM-03-core-five-proving-ground-guidance.patch"
 if [ -s "$WM03_PATCH" ] \
     && grep -Fq 'diff --git a/AGENTS.md b/AGENTS.md' "$WM03_PATCH" \
@@ -420,7 +552,7 @@ fi
 BLOCKED_OUTPUT="$(mktemp -d)"
 BLOCKED_AUDIT_INPUT="$(mktemp -d)"
 BLOCKED_PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
 BLOCKED_FINDINGS="$BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
 cat > "$BLOCKED_FINDINGS" <<'EOF'
 # Optimization Plan
