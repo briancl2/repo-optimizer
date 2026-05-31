@@ -279,7 +279,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         code, reason = special_reasons[row_id]
     else:
         supported = bool(
-            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04"}
+            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01"}
             or re.search(r"\bS-05\b", row_text)
             and re.search(r"\bS-06\b", row_text)
             and re.search(r"\bS-07\b", row_text)
@@ -1040,6 +1040,53 @@ def materialize_wm04() -> None:
     write_patch(patch_dir / "WM-04-capability-home-owner-surface-table.patch", changes, "WM-04")
 
 
+def materialize_hs01() -> None:
+    if not has_manifest_row("HS-01"):
+        return
+
+    candidates = manifest_paths("HS-01", r"[A-Za-z0-9_./-]+(?:\.md|\.sh|/SKILL\.md)")
+    changes: list[tuple[str, list[str], list[str]]] = []
+    for rel in candidates:
+        old = read_lines(repo / rel)
+        if old is None:
+            continue
+        new = list(old)
+        changed = False
+        blocked = False
+        for idx, line in enumerate(old):
+            if not re.search(r"(^|[;&|({\s])status\s*=\s*\$\?", line):
+                continue
+            window = "\n".join(old[max(0, idx - 4) : min(len(old), idx + 6)])
+            if not re.search(
+                r"\b(hermes|foreground|validate-hermes-foreground-output|zsh|launch contract)\b",
+                window,
+                re.IGNORECASE,
+            ):
+                record_patch_blocker(
+                    "HS-01",
+                    "HS-01-hermes-status-variable.patch",
+                    "hs01_ambiguous_status_assignment",
+                    f"{rel} contains status=$? without nearby Hermes/foreground/zsh launch context.",
+                )
+                blocked = True
+                break
+            new[idx] = re.sub(r"(^|[;&|({\s])status(\s*=\s*\$\?)", r"\1hermes_status\2", line)
+            changed = True
+            for follow_idx in range(idx + 1, min(len(old), idx + 8)):
+                if "validate-hermes-foreground-output" in new[follow_idx] or "--status-code" in new[follow_idx]:
+                    new[follow_idx] = (
+                        new[follow_idx]
+                        .replace('"$status"', '"$hermes_status"')
+                        .replace("${status}", "${hermes_status}")
+                    )
+        if blocked:
+            continue
+        if changed:
+            changes.append((rel, old, new))
+
+    write_patch(patch_dir / "HS-01-hermes-status-variable.patch", changes, "HS-01")
+
+
 materialize_pp01()
 materialize_pp03()
 materialize_pp04()
@@ -1047,6 +1094,7 @@ materialize_wm01()
 materialize_wm02()
 materialize_wm03()
 materialize_wm04()
+materialize_hs01()
 flush_manifest_blockers()
 PY
 
@@ -1144,7 +1192,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     supported = bool(
-        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04"}
+        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01"}
         or re.search(r"\bS-05\b", row_text)
         and re.search(r"\bS-06\b", row_text)
         and re.search(r"\bS-07\b", row_text)

@@ -47,11 +47,13 @@ LIMIT_OUTPUT="$(mktemp -d)"
 MIXED_OUTPUT="$(mktemp -d)"
 STALE_OUTPUT="$(mktemp -d)"
 REAL_OUTPUT="$(mktemp -d)"
+HS_OUTPUT="$(mktemp -d)"
+HS_BLOCKED_OUTPUT="$(mktemp -d)"
 PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -106,6 +108,23 @@ cat > "$TARGET_REPO/scripts/multi-sub-hook.sh" <<'EOF'
 BODY="$1"
 STAMP=$(date +%s) BODY_WITHOUT_TRAILERS=$(printf '%s\n' "$BODY" | grep -vE '^(Spec-ID|Spec-Exempt):')
 printf '%s:%s\n' "$STAMP" "$BODY_WITHOUT_TRAILERS"
+EOF
+cat > "$TARGET_REPO/docs/hermes-launch.md" <<'EOF'
+# Hermes Launch
+
+Hermes foreground wrapper:
+
+```bash
+timeout 900 hermes chat --provider copilot -m gpt-5.5 -q prompt -Q
+status=$?
+python3 scripts/validate-hermes-foreground-output.py --status-code "$status"
+```
+EOF
+cat > "$TARGET_REPO/scripts/generic-status.sh" <<'EOF'
+#!/usr/bin/env bash
+run_generic_tool
+status=$?
+echo "$status"
 EOF
 cat > "$TARGET_REPO/.agents/skills/template-validation/SKILL.md" <<'EOF'
 # Template Validation
@@ -784,6 +803,77 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+HS_FINDINGS="$HS_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$HS_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| HS-01 | replace reserved Hermes launch `status=$?` in `docs/hermes-launch.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$HS_FINDINGS" "$HS_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for HS-01 Hermes status materializer"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for HS-01 Hermes status materializer"
+    FAIL=$((FAIL + 1))
+fi
+
+HS_PATCH="$HS_OUTPUT/PATCH_PACK/HS-01-hermes-status-variable.patch"
+if [ -s "$HS_PATCH" ] \
+    && grep -Fq 'diff --git a/docs/hermes-launch.md b/docs/hermes-launch.md' "$HS_PATCH" \
+    && grep -Fq '+hermes_status=$?' "$HS_PATCH" \
+    && grep -Fq -- '--status-code "$hermes_status"' "$HS_PATCH" \
+    && ! grep -Fq '+status=$?' "$HS_PATCH"; then
+    echo "  ✓ HS-01 patch materialized safe Hermes status variable rewrite"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HS-01 patch missing safe Hermes status variable rewrite"
+    [ -f "$HS_PATCH" ] && cat "$HS_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$HS_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ HS-01 generated patch passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HS-01 generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+HS_BLOCKED_FINDINGS="$HS_BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$HS_BLOCKED_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| HS-01 | generic reserved status rewrite in `scripts/generic-status.sh` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$HS_BLOCKED_FINDINGS" "$HS_BLOCKED_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for ambiguous HS-01 manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for ambiguous HS-01 manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ ! -e "$HS_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$HS_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$HS_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; assert d['blockers'][0]['row_id'] == 'HS-01'; assert d['blockers'][0]['blocker_code'] == 'hs01_ambiguous_status_assignment'"; then
+    echo "  ✓ HS-01 ambiguous status rewrite emits PATCHABILITY_BLOCKERS.json"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HS-01 ambiguous status rewrite did not emit expected blocker"
+    [ -f "$HS_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$HS_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
 cat > "$AUDIT_INPUT/SCORECARD.json" <<'EOF'
 {
   "composite": 81,
@@ -823,7 +913,7 @@ fi
 BLOCKED_OUTPUT="$(mktemp -d)"
 BLOCKED_AUDIT_INPUT="$(mktemp -d)"
 BLOCKED_PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
 BLOCKED_FINDINGS="$BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
 cat > "$BLOCKED_FINDINGS" <<'EOF'
 # Optimization Plan
