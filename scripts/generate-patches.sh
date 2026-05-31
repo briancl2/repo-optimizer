@@ -521,10 +521,175 @@ def harden_shell_lines(lines: list[str]) -> list[str]:
     if updated[0] == "#!/bin/bash":
         updated[0] = "#!/usr/bin/env bash"
 
+    updated = [
+        "set -euo pipefail" if re.fullmatch(r"\s*set\s+-uo\s+pipefail\s*", line) else line
+        for line in updated
+    ]
+
     if updated[0].startswith("#!") and "set -euo pipefail" not in updated[:5]:
         updated.insert(1, "set -euo pipefail")
 
+    updated = add_strict_mode_zero_match_guards(updated)
+    updated = repair_prepush_new_branch_file_count(updated)
     return updated
+
+
+def add_strict_mode_zero_match_guards(lines: list[str]) -> list[str]:
+    updated: list[str] = []
+    for line in lines:
+        stripped = line.rstrip()
+        if (
+            "$(" in stripped
+            and "grep -vE" in stripped
+            and "|| true" not in stripped
+            and stripped.count("$(") == 1
+            and stripped.endswith(")")
+        ):
+            base_indent = stripped[: len(stripped) - len(stripped.lstrip())]
+            substitution_start = stripped.index("$(")
+            prefix = stripped[:substitution_start]
+            inner = stripped[substitution_start + 2 : -1].strip()
+            guard_indent = base_indent + "    "
+            updated.extend(
+                [
+                    prefix + "$(",
+                    guard_indent + inner + " || {",
+                    guard_indent + "    status=$?",
+                    guard_indent + '    [ "$status" -eq 1 ] || exit "$status"',
+                    guard_indent + "}",
+                    base_indent + ")",
+                ]
+            )
+            continue
+        updated.append(line)
+    return updated
+
+
+def repair_prepush_new_branch_file_count(lines: list[str]) -> list[str]:
+    zero_sha = "0" * 40
+    has_new_branch_range = any(line.strip() == 'RANGE="$LOCAL_SHA"' for line in lines) and any(
+        line.strip() == 'RANGE="$REMOTE_SHA..$LOCAL_SHA"' for line in lines
+    )
+    has_zero_branch = any("REMOTE_SHA" in line and zero_sha in line for line in lines)
+    has_common_file_count = any(is_unsafe_prepush_common_file_count(line.strip()) for line in lines)
+    if not (has_zero_branch and has_new_branch_range and has_common_file_count):
+        return lines
+
+    has_new_branch_file_count = any(
+        'git diff-tree --no-commit-id --name-only -r --root "$LOCAL_SHA"' in line for line in lines
+    )
+    has_common_diff_hint = any(is_unsafe_prepush_common_diff_hint(line.strip()) for line in lines)
+    has_new_branch_diff_hint = any(
+        line.strip().startswith('DIFF_HINT="git show --name-only --oneline $LOCAL_SHA') for line in lines
+    )
+    updated: list[str] = []
+    in_zero_branch = False
+    in_else_branch = False
+
+    for line in lines:
+        stripped = line.strip()
+        indent = line[: len(line) - len(line.lstrip())]
+        if "REMOTE_SHA" in stripped and zero_sha in stripped and stripped.startswith("if "):
+            in_zero_branch = True
+            in_else_branch = False
+            updated.append(line)
+            continue
+        if in_zero_branch and stripped == "else":
+            in_zero_branch = False
+            in_else_branch = True
+            updated.append(line)
+            continue
+        if in_else_branch and stripped == "fi":
+            in_else_branch = False
+            updated.append(line)
+            continue
+
+        if in_zero_branch and stripped == 'RANGE="$LOCAL_SHA"':
+            updated.append(line)
+            if not has_new_branch_file_count:
+                updated.append(
+                    indent
+                    + 'FILE_COUNT=$(git diff-tree --no-commit-id --name-only -r --root "$LOCAL_SHA" 2>/dev/null | wc -l | tr -d \' \')'
+                )
+            if has_common_diff_hint and not has_new_branch_diff_hint:
+                updated.append(indent + 'DIFF_HINT="git show --name-only --oneline $LOCAL_SHA | head -200"')
+            continue
+
+        if in_else_branch and stripped == 'RANGE="$REMOTE_SHA..$LOCAL_SHA"':
+            updated.append(line)
+            updated.append(indent + 'FILE_COUNT=$(git diff --name-only "$RANGE" 2>/dev/null | wc -l | tr -d \' \')')
+            if has_common_diff_hint:
+                updated.append(indent + 'DIFF_HINT="git diff $RANGE | head -200"')
+            continue
+
+        if is_unsafe_prepush_common_file_count(stripped):
+            continue
+        if has_common_diff_hint and stripped.startswith('DIFF_HINT="git diff $RANGE'):
+            continue
+        if has_common_diff_hint and "Manual diff: git diff $REMOTE_SHA..$LOCAL_SHA | head -200" in stripped:
+            match = re.search(r'echo\s+"(?P<prefix>\s*)Manual diff:', stripped)
+            prefix = match.group("prefix") if match else ""
+            updated.append(indent + f'echo "{prefix}Manual diff: $DIFF_HINT"')
+            continue
+
+        updated.append(line)
+
+    return updated
+
+
+def is_unsafe_prepush_common_file_count(stripped: str) -> bool:
+    return stripped.startswith('FILE_COUNT=$(git diff --name-only "$RANGE"') or (
+        stripped.startswith("FILE_COUNT=$(git diff --name-only ")
+        and '"$REMOTE_SHA".."$LOCAL_SHA"' in stripped
+    )
+
+
+def is_unsafe_prepush_common_diff_hint(stripped: str) -> bool:
+    return stripped.startswith('DIFF_HINT="git diff $RANGE') or (
+        "Manual diff: git diff $REMOTE_SHA..$LOCAL_SHA | head -200" in stripped
+    )
+
+
+def pp04_semantic_blockers(rel: str, lines: list[str]) -> list[tuple[str, str]]:
+    blockers: list[tuple[str, str]] = []
+    for line in lines:
+        if "$(" in line and "grep -vE" in line and not grep_v_substitution_is_zero_match_safe(line):
+            blockers.append(
+                (
+                    "pp4_strict_grep_filter_unsafe",
+                    f"{rel} still has a grep -vE command substitution that can exit 1 under set -euo pipefail.",
+                )
+            )
+    zero_sha = "0" * 40
+    if (
+        any("REMOTE_SHA" in line and zero_sha in line for line in lines)
+        and any(is_unsafe_prepush_common_file_count(line.strip()) for line in lines)
+        and not any('git diff-tree --no-commit-id --name-only -r --root "$LOCAL_SHA"' in line for line in lines)
+    ):
+        blockers.append(
+            (
+                "pp4_new_branch_prepush_unsafe",
+                f"{rel} still counts new-branch pre-push files through git diff \"$RANGE\" instead of a --root diff-tree path.",
+            )
+        )
+    if (
+        any("REMOTE_SHA" in line and zero_sha in line for line in lines)
+        and any(is_unsafe_prepush_common_diff_hint(line.strip()) for line in lines)
+        and not any(line.strip().startswith('DIFF_HINT="git show --name-only --oneline $LOCAL_SHA') for line in lines)
+    ):
+        blockers.append(
+            (
+                "pp4_new_branch_prepush_hint_unsafe",
+                f"{rel} still shows an invalid all-zero remote SHA manual diff hint for new-branch pushes.",
+            )
+        )
+    return blockers
+
+
+def grep_v_substitution_is_zero_match_safe(line: str) -> bool:
+    if "grep -vE" not in line:
+        return True
+    return line.count("$(") == 1 and "|| {" in line and "[ \"$status\" -eq 1 ]" in line
 
 
 def skill_name_from_path(rel: str) -> str:
@@ -653,6 +818,11 @@ def materialize_pp04() -> None:
         if old is None:
             continue
         new = harden_shell_lines(old)
+        semantic_blockers = pp04_semantic_blockers(rel, new)
+        if semantic_blockers:
+            for code, reason in semantic_blockers:
+                record_patch_blocker("PP-4", "PP-4-hook-safety-flags.patch", code, reason)
+            continue
         if old != new:
             changes.append((rel, old, new))
 
