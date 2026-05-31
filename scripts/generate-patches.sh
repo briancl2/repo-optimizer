@@ -279,7 +279,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         code, reason = special_reasons[row_id]
     else:
         supported = bool(
-            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01"}
+            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01"}
             or re.search(r"\bS-05\b", row_text)
             and re.search(r"\bS-06\b", row_text)
             and re.search(r"\bS-07\b", row_text)
@@ -1087,6 +1087,95 @@ def materialize_hs01() -> None:
     write_patch(patch_dir / "HS-01-hermes-status-variable.patch", changes, "HS-01")
 
 
+def manifest_capability(row_id: str) -> str | None:
+    row_text = manifest_row_text(row_id)
+    for value in re.findall(r"`([^`]+)`", row_text):
+        if resolve_path_fragment(value) is None:
+            capability = value.strip().replace("|", "/")
+            if capability:
+                return capability
+    match = re.search(r"\bcapability\s*:\s*([^|]+)", row_text, re.IGNORECASE)
+    if match:
+        capability = match.group(1).strip().strip("`'\"").replace("|", "/")
+        if capability:
+            return capability
+    return None
+
+
+def default_capability_reconciliation_block(capability: str) -> list[str]:
+    return [
+        "## Default Capability Reconciliation",
+        "",
+        "| Capability | Source requirement | Local proof | Owner surface | Fallback | Validation |",
+        "|---|---|---|---|---|---|",
+        f"| {capability} | Upstream-main proof required before production default adoption | Local same-version proof required | Named owner surface required | Keep prior fallback or fail closed until proof passes | Repo-native checks plus read-only detector sweep |",
+    ]
+
+
+def upsert_reconciliation_block(lines: list[str], block: list[str]) -> list[str]:
+    marker = block[0]
+    for idx, line in enumerate(lines):
+        if line.strip().lower() != marker.lower():
+            continue
+        end = idx + 1
+        while end < len(lines):
+            if lines[end].startswith("## ") and end > idx:
+                break
+            end += 1
+        return lines[:idx] + block + [""] + lines[end:]
+    return insert_after_heading(lines, block)
+
+
+def materialize_cr01() -> None:
+    if not has_manifest_row("CR-01"):
+        return
+
+    row_id = "CR-01"
+    patch_name = "CR-01-default-capability-reconciliation.patch"
+    candidates = manifest_paths(row_id, r"[A-Za-z0-9_./-]+(?:\.md|\.txt|\.json|\.yaml|\.yml|/SKILL\.md)")
+    if not candidates:
+        record_patch_blocker(
+            row_id,
+            patch_name,
+            "cr01_missing_named_file",
+            "CR-01 requires one explicitly named target file in the patch manifest row.",
+        )
+        return
+    if len(candidates) > 1:
+        record_patch_blocker(
+            row_id,
+            patch_name,
+            "cr01_ambiguous_named_files",
+            "CR-01 requires exactly one target file so capability reconciliation does not become a broad rewrite.",
+        )
+        return
+
+    capability = manifest_capability(row_id)
+    if capability is None:
+        record_patch_blocker(
+            row_id,
+            patch_name,
+            "cr01_missing_named_capability",
+            "CR-01 requires an explicitly named capability such as `Hermes -z` in the patch manifest row.",
+        )
+        return
+
+    rel = candidates[0]
+    old = read_lines(repo / rel)
+    if old is None:
+        record_patch_blocker(
+            row_id,
+            patch_name,
+            "cr01_target_file_unreadable",
+            f"CR-01 target file is missing, unsafe, symlinked, or outside the repository: {rel}",
+        )
+        return
+
+    block = default_capability_reconciliation_block(capability)
+    new = upsert_reconciliation_block(old, block)
+    write_patch(patch_dir / patch_name, [(rel, old, new)], row_id)
+
+
 materialize_pp01()
 materialize_pp03()
 materialize_pp04()
@@ -1095,6 +1184,7 @@ materialize_wm02()
 materialize_wm03()
 materialize_wm04()
 materialize_hs01()
+materialize_cr01()
 flush_manifest_blockers()
 PY
 
@@ -1192,7 +1282,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     supported = bool(
-        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01"}
+        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01"}
         or re.search(r"\bS-05\b", row_text)
         and re.search(r"\bS-06\b", row_text)
         and re.search(r"\bS-07\b", row_text)
