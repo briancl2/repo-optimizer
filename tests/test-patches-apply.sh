@@ -49,11 +49,13 @@ STALE_OUTPUT="$(mktemp -d)"
 REAL_OUTPUT="$(mktemp -d)"
 HS_OUTPUT="$(mktemp -d)"
 HS_BLOCKED_OUTPUT="$(mktemp -d)"
+CR_OUTPUT="$(mktemp -d)"
+CR_BLOCKED_OUTPUT="$(mktemp -d)"
 PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -119,6 +121,12 @@ timeout 900 hermes chat --provider copilot -m gpt-5.5 -q prompt -Q
 status=$?
 python3 scripts/validate-hermes-foreground-output.py --status-code "$status"
 ```
+EOF
+cat > "$TARGET_REPO/docs/capability-guidance.md" <<'EOF'
+# Capability Guidance
+
+The Hermes launch guidance describes default behavior but does not yet carry a
+capability reconciliation record.
 EOF
 cat > "$TARGET_REPO/scripts/generic-status.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -871,6 +879,76 @@ if [ ! -e "$HS_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
 else
     echo "  ✗ HS-01 ambiguous status rewrite did not emit expected blocker"
     [ -f "$HS_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$HS_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+CR_FINDINGS="$CR_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$CR_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| CR-01 | capability reconciliation for capability `Hermes -z` in `docs/capability-guidance.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$CR_FINDINGS" "$CR_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for CR-01 capability reconciliation materializer"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for CR-01 capability reconciliation materializer"
+    FAIL=$((FAIL + 1))
+fi
+
+CR_PATCH="$CR_OUTPUT/PATCH_PACK/CR-01-default-capability-reconciliation.patch"
+if [ -s "$CR_PATCH" ] \
+    && grep -Fq 'diff --git a/docs/capability-guidance.md b/docs/capability-guidance.md' "$CR_PATCH" \
+    && grep -Fq 'Default Capability Reconciliation' "$CR_PATCH" \
+    && grep -Fq '| Hermes -z | Upstream-main proof required before production default adoption | Local same-version proof required | Named owner surface required |' "$CR_PATCH"; then
+    echo "  ✓ CR-01 patch materialized default capability reconciliation block"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ CR-01 patch missing default capability reconciliation block"
+    [ -f "$CR_PATCH" ] && cat "$CR_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$CR_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ CR-01 generated patch passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ CR-01 generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+CR_BLOCKED_FINDINGS="$CR_BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$CR_BLOCKED_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| CR-01 | capability reconciliation for `docs/capability-guidance.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$CR_BLOCKED_FINDINGS" "$CR_BLOCKED_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for blocked CR-01 manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for blocked CR-01 manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ ! -e "$CR_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$CR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$CR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; assert d['blockers'][0]['row_id'] == 'CR-01'; assert d['blockers'][0]['blocker_code'] == 'cr01_missing_named_capability'"; then
+    echo "  ✓ CR-01 missing capability emits PATCHABILITY_BLOCKERS.json"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ CR-01 missing capability did not emit expected blocker"
+    [ -f "$CR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$CR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
     FAIL=$((FAIL + 1))
 fi
 
