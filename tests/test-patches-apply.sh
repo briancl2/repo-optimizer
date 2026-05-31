@@ -47,9 +47,11 @@ LIMIT_OUTPUT="$(mktemp -d)"
 MIXED_OUTPUT="$(mktemp -d)"
 STALE_OUTPUT="$(mktemp -d)"
 REAL_OUTPUT="$(mktemp -d)"
+PP4_RUNTIME_REPO="$(mktemp -d)"
+PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -61,8 +63,50 @@ printf '%s\n' '#!/bin/bash' '# local review fixture' 'echo review' > "$TARGET_RE
 printf '%s\n' '#!/bin/bash' '# hook fixture' 'echo hook' > "$TARGET_REPO/scripts/post-merge-hook.sh"
 printf '%s\n' '#!/bin/sh' '# non-bash hook fixture' 'echo hook' > "$TARGET_REPO/scripts/nonbash-hook.sh"
 printf '%s\n' '#!/bin/bash' '# utility fixture' 'echo utility' > "$TARGET_REPO/scripts/utility.sh"
-printf '%s\n' '#!/bin/bash' '# commit hook fixture' 'echo "$1"' > "$TARGET_REPO/scripts/commit-msg-hook.sh"
-printf '%s\n' '#!/bin/bash' 'set -uo pipefail' '# pre-push fixture' 'echo push' > "$TARGET_REPO/scripts/pre-push-hook.sh"
+cat > "$TARGET_REPO/scripts/commit-msg-hook.sh" <<'EOF'
+#!/bin/bash
+# commit hook fixture
+MSG_FILE="$1"
+SUBJECT=$(head -1 "$MSG_FILE")
+if echo "$SUBJECT" | grep -qE '(Spec-ID|Spec-Exempt):'; then
+  TRAILER=$(echo "$SUBJECT" | grep -oE '(Spec-ID|Spec-Exempt): ?[^ ].*$')
+  CLEAN_SUBJECT=$(echo "$SUBJECT" | sed -E 's/ *(Spec-ID|Spec-Exempt): ?[^ ].*$//')
+  BODY=$(tail -n +2 "$MSG_FILE")
+  { echo "$CLEAN_SUBJECT"; echo ""; echo "$TRAILER"; } > "$MSG_FILE"
+  if [ -n "$BODY" ]; then
+    BODY_WITHOUT_TRAILERS=$(printf '%s\n' "$BODY" | grep -vE '^(Spec-ID|Spec-Exempt):')
+    if [ -n "$BODY_WITHOUT_TRAILERS" ]; then
+      printf '%s\n' "$BODY_WITHOUT_TRAILERS" >> "$MSG_FILE"
+    fi
+  fi
+fi
+EOF
+cat > "$TARGET_REPO/scripts/pre-push-hook.sh" <<'EOF'
+#!/bin/bash
+set -uo pipefail
+# pre-push fixture
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+    if [ "$LOCAL_SHA" = "0000000000000000000000000000000000000000" ]; then
+        continue
+    fi
+    if [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
+        RANGE="$LOCAL_SHA"
+    else
+        RANGE="$REMOTE_SHA..$LOCAL_SHA"
+    fi
+    COMMIT_COUNT=$(git rev-list --count "$RANGE" 2>/dev/null || echo "0")
+    FILE_COUNT=$(git diff --name-only "$REMOTE_SHA".."$LOCAL_SHA" 2>/dev/null | wc -l | tr -d ' ')
+    echo "Pushing $COMMIT_COUNT commit(s) with $FILE_COUNT file(s) changed."
+    echo "Manual diff: git diff $REMOTE_SHA..$LOCAL_SHA | head -200"
+done
+EOF
+cat > "$TARGET_REPO/scripts/multi-sub-hook.sh" <<'EOF'
+#!/bin/bash
+# multi-substitution hook fixture
+BODY="$1"
+STAMP=$(date +%s) BODY_WITHOUT_TRAILERS=$(printf '%s\n' "$BODY" | grep -vE '^(Spec-ID|Spec-Exempt):')
+printf '%s:%s\n' "$STAMP" "$BODY_WITHOUT_TRAILERS"
+EOF
 cat > "$TARGET_REPO/.agents/skills/template-validation/SKILL.md" <<'EOF'
 # Template Validation
 
@@ -454,7 +498,15 @@ if [ "$(grep -c '^diff --git' "$REAL_PP1_PATCH" 2>/dev/null || true)" = "3" ] \
     && ! grep -Fq '+model' "$REAL_PP3_SKILL_PATCH" "$REAL_PP3_AGENT_PATCH" \
     && ! grep -Fq '+name:' "$REAL_PP3_SKILL_PATCH" "$REAL_PP3_AGENT_PATCH" \
     && grep -Fq 'diff --git a/.agents/skills/quality-benchmark/SKILL.md b/.agents/skills/quality-benchmark/SKILL.md' "$REAL_PP1_PATCH" \
-    && grep -Fq 'diff --git a/scripts/pre-push-hook.sh b/scripts/pre-push-hook.sh' "$REAL_PP4_PATCH"; then
+    && grep -Fq 'diff --git a/scripts/pre-push-hook.sh b/scripts/pre-push-hook.sh' "$REAL_PP4_PATCH" \
+    && grep -Fq 'diff --git a/scripts/commit-msg-hook.sh b/scripts/commit-msg-hook.sh' "$REAL_PP4_PATCH" \
+    && grep -Fq '+    BODY_WITHOUT_TRAILERS=$(' "$REAL_PP4_PATCH" \
+    && grep -Fq '+        printf' "$REAL_PP4_PATCH" \
+    && grep -Fq 'grep -vE' "$REAL_PP4_PATCH" \
+    && grep -Fq '|| {' "$REAL_PP4_PATCH" \
+    && grep -Fq '[ "$status" -eq 1 ] || exit "$status"' "$REAL_PP4_PATCH" \
+    && grep -Fq '+        FILE_COUNT=$(git diff-tree --no-commit-id --name-only -r --root "$LOCAL_SHA" 2>/dev/null | wc -l | tr -d '\'' '\'')' "$REAL_PP4_PATCH" \
+    && grep -Fq '+        DIFF_HINT="git show --name-only --oneline $LOCAL_SHA | head -200"' "$REAL_PP4_PATCH"; then
     echo "  ✓ actual-style manifest resolves finding references into safe split patches"
     PASS=$((PASS + 1))
 else
@@ -478,6 +530,63 @@ if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$REAL_OUTPUT/PATC
     PASS=$((PASS + 1))
 else
     echo "  ✗ actual-style generated patches failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+cp -R "$TARGET_REPO/." "$PP4_RUNTIME_REPO/"
+if git -C "$PP4_RUNTIME_REPO" apply "$REAL_PP4_PATCH"; then
+    MSG_FILE="$PP4_RUNTIME_REPO/COMMIT_EDITMSG"
+    printf '%s\n\n%s\n' "Repair hook Spec-Exempt: inline trailer" "Spec-Exempt: existing body trailer" > "$MSG_FILE"
+    if bash "$PP4_RUNTIME_REPO/scripts/commit-msg-hook.sh" "$MSG_FILE" \
+        && [ "$(cat "$MSG_FILE")" = "$(printf '%s\n\n%s' "Repair hook" "Spec-Exempt: inline trailer")" ]; then
+        echo "  ✓ PP-4 semantic oracle preserves commit-msg all-trailer body case"
+        PASS=$((PASS + 1))
+    else
+        echo "  ✗ PP-4 semantic oracle failed commit-msg all-trailer body case"
+        cat "$MSG_FILE"
+        FAIL=$((FAIL + 1))
+    fi
+
+    LOCAL_SHA="$(git -C "$PP4_RUNTIME_REPO" rev-parse HEAD)"
+    ZERO_SHA="0000000000000000000000000000000000000000"
+    PRE_PUSH_OUT="$PP4_RUNTIME_REPO/pre-push.out"
+    if printf 'refs/heads/feature %s refs/heads/feature %s\n' "$LOCAL_SHA" "$ZERO_SHA" \
+        | (cd "$PP4_RUNTIME_REPO" && bash scripts/pre-push-hook.sh origin git@example.invalid:test/repo.git) >"$PRE_PUSH_OUT" \
+        && grep -Fq "Pushing 1 commit(s) with" "$PRE_PUSH_OUT" \
+        && grep -Fq "Manual diff: git show --name-only --oneline $LOCAL_SHA | head -200" "$PRE_PUSH_OUT"; then
+        echo "  ✓ PP-4 semantic oracle preserves new-branch pre-push case"
+        PASS=$((PASS + 1))
+    else
+        echo "  ✗ PP-4 semantic oracle failed new-branch pre-push case"
+        cat "$PRE_PUSH_OUT" 2>/dev/null || true
+        FAIL=$((FAIL + 1))
+    fi
+else
+    echo "  ✗ PP-4 semantic runtime patch failed to apply"
+    FAIL=$((FAIL + 2))
+fi
+
+PP4_UNSAFE_FINDINGS="$PP4_UNSAFE_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$PP4_UNSAFE_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch | Approved finding(s) bundled | Files touched (est.) | Net lines (est.) | Class |
+|---|---|---:|---:|---|
+| PP-4 | hook safety flags for `scripts/multi-sub-hook.sh` | 1 | ~2 | Additive |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$PP4_UNSAFE_FINDINGS" "$PP4_UNSAFE_OUTPUT" >/dev/null \
+    && [ ! -s "$PP4_UNSAFE_OUTPUT/PATCH_PACK/PP-4-hook-safety-flags.patch" ] \
+    && [ -s "$PP4_UNSAFE_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$PP4_UNSAFE_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; assert d['blockers'][0]['row_id'] == 'PP-4'; assert d['blockers'][0]['blocker_code'] == 'pp4_strict_grep_filter_unsafe'"; then
+    echo "  ✓ PP-4 semantic oracle blocks ambiguous multi-substitution grep filters"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ PP-4 semantic oracle failed to block ambiguous multi-substitution grep filter"
+    find "$PP4_UNSAFE_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$PP4_UNSAFE_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$PP4_UNSAFE_OUTPUT/PATCHABILITY_BLOCKERS.json"
     FAIL=$((FAIL + 1))
 fi
 
