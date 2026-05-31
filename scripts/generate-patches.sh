@@ -15,6 +15,8 @@ OUTPUT_DIR="${3:?Usage: generate-patches.sh <repo_path> <findings_file> <output_
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PATCH_DIR="$OUTPUT_DIR/PATCH_PACK"
 mkdir -p "$PATCH_DIR"
+find "$PATCH_DIR" -maxdepth 1 -type f -name '*.patch' -delete
+rm -f "$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json"
 
 echo "=== Patch Generation ==="
 echo "  Repo: $REPO"
@@ -121,6 +123,9 @@ patch_dir = Path(sys.argv[3])
 plan = findings.read_text(encoding="utf-8", errors="replace")
 repo_root = repo.resolve()
 overflow_blockers: list[dict[str, object]] = []
+written_row_ids: set[str] = set()
+if (patch_dir / "P4-shell-hardening.patch").exists():
+    written_row_ids.add("P4")
 
 
 def has_manifest_row(row_id: str) -> bool:
@@ -206,10 +211,122 @@ def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]
         parts.extend(diff)
     if parts:
         patch_path.write_text("\n".join(parts) + "\n", encoding="utf-8")
+        written_row_ids.add(row_id)
 
 
-def flush_patch_blockers() -> None:
-    if not overflow_blockers:
+def is_separator(cells: list[str]) -> bool:
+    return all(re.fullmatch(r":?-{3,}:?", cell.strip() or "-") for cell in cells)
+
+
+def manifest_rows(text: str) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    headers: list[str] | None = None
+    in_manifest = False
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+            in_manifest = True
+            headers = None
+            continue
+        if in_manifest and stripped.startswith("## ") and not re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+            break
+        if not in_manifest or not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) < 2 or is_separator(cells):
+            continue
+        if headers is None:
+            headers = [cell.lower() for cell in cells]
+            continue
+        row_id = cells[0]
+        patch_label = cells[1] if len(cells) > 1 else row_id
+        findings_value = cells[2] if len(cells) > 2 and headers[1] in {"patch", "patch name"} else cells[1]
+        files_touched = ""
+        for idx, header in enumerate(headers):
+            if "files" in header and idx < len(cells):
+                files_touched = cells[idx]
+                break
+        rows.append(
+            {
+                "row_id": row_id,
+                "patch": patch_label,
+                "findings": findings_value,
+                "files_touched": files_touched,
+                "raw_row": raw,
+            }
+        )
+    return rows
+
+
+def blocker_for(row: dict[str, object]) -> dict[str, object]:
+    row_text = " ".join(str(value) for value in row.values())
+    row_id = str(row.get("row_id", "unknown"))
+    special_reasons = {
+        "PP-2": (
+            "unsupported_semantic_refactor",
+            "PP-2 requires semantic extraction/deduplication across target documentation and must remain blocked until a target owner issue names the exact keep/reference set.",
+        ),
+        "PP-5": (
+            "unsupported_helper_plus_caller_update",
+            "PP-5 requires adding a helper plus updating its callers, which is not safe as a generic patch materializer without target-owner implementation authority.",
+        ),
+    }
+    if row_id in special_reasons:
+        code, reason = special_reasons[row_id]
+    else:
+        supported = bool(
+            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04"}
+            or re.search(r"\bS-05\b", row_text)
+            and re.search(r"\bS-06\b", row_text)
+            and re.search(r"\bS-07\b", row_text)
+        )
+        code = "supported_materializer_no_output" if supported else "unsupported_manifest_row"
+        reason = (
+            f"A deterministic materializer matched {row_id}, but the target had no apply-checkable change."
+            if supported
+            else f"No deterministic patch materializer is implemented for manifest row {row_id}."
+        )
+    return {
+        "row_id": row_id,
+        "patch": row.get("patch", ""),
+        "findings": row.get("findings", ""),
+        "files_touched": row.get("files_touched", ""),
+        "blocker_code": code,
+        "reason": reason,
+    }
+
+
+def flush_manifest_blockers() -> None:
+    rows = manifest_rows(plan)
+    if "P4" in written_row_ids:
+        for row in rows:
+            row_text = " ".join(str(value) for value in row.values())
+            if (
+                re.search(r"\bS-05\b", row_text)
+                and re.search(r"\bS-06\b", row_text)
+                and re.search(r"\bS-07\b", row_text)
+            ):
+                written_row_ids.add(str(row.get("row_id", "unknown")))
+    blockers = list(overflow_blockers)
+    blocked_row_ids = {str(blocker.get("row_id", "")) for blocker in blockers}
+    for row in rows:
+        row_id = str(row.get("row_id", "unknown"))
+        if row_id in written_row_ids or row_id in blocked_row_ids:
+            continue
+        blockers.append(blocker_for(row))
+        blocked_row_ids.add(row_id)
+    if not rows and not blockers:
+        blockers = [
+            {
+                "row_id": "manifest",
+                "patch": "",
+                "findings": "",
+                "files_touched": "",
+                "blocker_code": "manifest_rows_not_found",
+                "reason": "No parseable Patch Manifest table rows were found in the optimization plan.",
+            }
+        ]
+    if not blockers:
         return
     out_path = patch_dir.parent / "PATCHABILITY_BLOCKERS.json"
     payload = {
@@ -219,10 +336,10 @@ def flush_patch_blockers() -> None:
         "source_manifest": str(findings),
         "patch_dir": str(patch_dir),
         "patches_generated": len(list(patch_dir.glob("*.patch"))),
-        "blocker_count": len(overflow_blockers),
-        "blockers": overflow_blockers,
+        "blocker_count": len(blockers),
+        "blockers": blockers,
         "bounded_non_claims": [
-            "This artifact records manifest rows blocked by patch-pack safety limits.",
+            "This artifact records manifest rows blocked by patch-pack safety limits or unsupported materializer scope.",
             "It does not authorize target repository mutation or auto-apply behavior.",
         ],
     }
@@ -298,6 +415,40 @@ def yaml_double_quoted(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def frontmatter_end(lines: list[str]) -> int | None:
+    if not lines or lines[0].strip() != "---":
+        return None
+    for idx, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            return idx
+    return None
+
+
+def has_frontmatter_key(lines: list[str], end_idx: int, key: str) -> bool:
+    pattern = re.compile(rf"^{re.escape(key)}\s*:")
+    return any(pattern.search(line) for line in lines[1:end_idx])
+
+
+def add_skill_metadata(lines: list[str]) -> list[str]:
+    end_idx = frontmatter_end(lines)
+    if end_idx is None:
+        return lines
+
+    additions: list[str] = []
+    if not has_frontmatter_key(lines, end_idx, "tools"):
+        additions.extend(["tools:", "  - repo-native checks"])
+    if not has_frontmatter_key(lines, end_idx, "stop_rules"):
+        additions.extend(
+            [
+                "stop_rules:",
+                "  - no target mutation without owner issue/PR authorization",
+            ]
+        )
+    if not additions:
+        return lines
+    return lines[:end_idx] + additions + lines[end_idx:]
+
+
 def insert_after_heading(lines: list[str], block: list[str]) -> list[str]:
     marker = block[0]
     if marker in lines:
@@ -331,6 +482,23 @@ def materialize_pp01() -> None:
         changes.append((rel, old, frontmatter + old))
 
     write_patch(patch_dir / "PP-1-skill-frontmatter.patch", changes, "PP-1")
+
+
+def materialize_pp03() -> None:
+    if not has_manifest_row("PP-3"):
+        return
+
+    candidates = extract_paths(manifest_row_text("PP-3"), r"([A-Za-z0-9_./-]+/SKILL\.md)")
+    changes: list[tuple[str, list[str], list[str]]] = []
+    for rel in candidates:
+        old = read_lines(repo / rel)
+        if old is None:
+            continue
+        new = add_skill_metadata(old)
+        if old != new:
+            changes.append((rel, old, new))
+
+    write_patch(patch_dir / "PP-3-additive-skill-metadata.patch", changes, "PP-3")
 
 
 def materialize_pp04() -> None:
@@ -567,12 +735,13 @@ def materialize_wm04() -> None:
 
 
 materialize_pp01()
+materialize_pp03()
 materialize_pp04()
 materialize_wm01()
 materialize_wm02()
 materialize_wm03()
 materialize_wm04()
-flush_patch_blockers()
+flush_manifest_blockers()
 PY
 
 # Post-process any existing patches
