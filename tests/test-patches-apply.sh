@@ -46,11 +46,12 @@ CAP_OUTPUT="$(mktemp -d)"
 LIMIT_OUTPUT="$(mktemp -d)"
 MIXED_OUTPUT="$(mktemp -d)"
 STALE_OUTPUT="$(mktemp -d)"
+REAL_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
-mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/docs"
+mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
     mkdir -p "$TARGET_REPO/.agents/skills/too-many-$n"
     printf '%s\n' "# Too Many $n" "" "Skill fixture $n." > "$TARGET_REPO/.agents/skills/too-many-$n/SKILL.md"
@@ -60,10 +61,27 @@ printf '%s\n' '#!/bin/bash' '# local review fixture' 'echo review' > "$TARGET_RE
 printf '%s\n' '#!/bin/bash' '# hook fixture' 'echo hook' > "$TARGET_REPO/scripts/post-merge-hook.sh"
 printf '%s\n' '#!/bin/sh' '# non-bash hook fixture' 'echo hook' > "$TARGET_REPO/scripts/nonbash-hook.sh"
 printf '%s\n' '#!/bin/bash' '# utility fixture' 'echo utility' > "$TARGET_REPO/scripts/utility.sh"
+printf '%s\n' '#!/bin/bash' '# commit hook fixture' 'echo "$1"' > "$TARGET_REPO/scripts/commit-msg-hook.sh"
+printf '%s\n' '#!/bin/bash' 'set -uo pipefail' '# pre-push fixture' 'echo push' > "$TARGET_REPO/scripts/pre-push-hook.sh"
 cat > "$TARGET_REPO/.agents/skills/template-validation/SKILL.md" <<'EOF'
 # Template Validation
 
 Validate templates without frontmatter.
+EOF
+cat > "$TARGET_REPO/.agents/skills/anti-pattern-check/SKILL.md" <<'EOF'
+# Anti Pattern Check
+
+Find common anti-patterns.
+EOF
+cat > "$TARGET_REPO/.agents/skills/quality-benchmark/SKILL.md" <<'EOF'
+# Quality Benchmark
+
+Run quality benchmark checks.
+EOF
+cat > "$TARGET_REPO/.agents/skills/transcript-processing/SKILL.md" <<'EOF'
+# Transcript Processing
+
+Process transcript files.
 EOF
 cat > "$TARGET_REPO/.agents/skills/out-of-row/SKILL.md" <<'EOF'
 # Out Of Row
@@ -89,6 +107,59 @@ license: MIT
 ---
 
 # Metadata Target
+EOF
+cat > "$TARGET_REPO/.agents/skills/glitch-detection/SKILL.md" <<'EOF'
+---
+name: glitch-detection
+description: "Detect glitches."
+license: MIT
+---
+
+# Glitch Detection
+EOF
+cat > "$TARGET_REPO/.agents/skills/reviewing-code-locally/SKILL.md" <<'EOF'
+---
+name: reviewing-code-locally
+description: "Review code locally."
+license: MIT
+---
+
+# Reviewing Code Locally
+EOF
+cat > "$TARGET_REPO/.agents/transcript-critic.agent.md" <<'EOF'
+---
+name: transcript-critic
+description: "Review transcript output."
+model: claude-sonnet-4.5
+tools: [read, search]
+---
+
+# Transcript Critic
+EOF
+cat > "$TARGET_REPO/.github/agents/speckit.taskstoissues.agent.md" <<'EOF'
+---
+description: Convert tasks to GitHub issues.
+tools: ['github/github-mcp-server/issue_write']
+---
+
+# Speckit Tasks To Issues
+EOF
+cat > "$TARGET_REPO/.github/agents/speckit.tasks.agent.md" <<'EOF'
+---
+description: Generate tasks.
+handoffs:
+  - label: Analyze
+    agent: speckit.analyze
+---
+
+# Speckit Tasks
+EOF
+cat > "$TARGET_REPO/.github/agents/speckit.checklist.agent.md" <<'EOF'
+---
+description: Generate checklist.
+---
+
+# Speckit Checklist
 EOF
 cat > "$TARGET_REPO/AGENTS.md" <<'EOF'
 # Agent Instructions
@@ -316,6 +387,97 @@ if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$PP3_OUTPUT/PATCH
     PASS=$((PASS + 1))
 else
     echo "  ✗ PP-3 generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+REAL_FINDINGS="$REAL_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$REAL_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## 2. Approved Findings (prioritized)
+
+| Pri | Rank · Domain | Finding | Target path(s) | Primary dim. lift | Action class |
+|---:|---|---|---|---|---|
+| P0 | Std #1 / Standardization | Add YAML frontmatter to `anti-pattern-check/SKILL.md` | `.agents/skills/anti-pattern-check/SKILL.md` | D3 skill_maturity | Additive |
+| P0 | Std #2 / Standardization | Add YAML frontmatter to `quality-benchmark/SKILL.md` | `.agents/skills/quality-benchmark/SKILL.md` | D3 skill_maturity | Additive |
+| P0 | Std #3 / Standardization | Add YAML frontmatter to `transcript-processing/SKILL.md` | `.agents/skills/transcript-processing/SKILL.md` | D3 skill_maturity | Additive |
+| P2 | Std #4-bis / Standardization | Add `stop_rules` to `transcript-critic.agent.md` frontmatter | `.agents/transcript-critic.agent.md` | D3 skill_maturity | Additive |
+| P2 | Std #12 / Standardization | Add `set -euo pipefail` to `commit-msg-hook.sh` | `scripts/commit-msg-hook.sh` | D1/D5 | Additive |
+| P2 | Std #13 / Standardization | Add `-e` to `set -uo pipefail` in `pre-push-hook.sh` | `scripts/pre-push-hook.sh` | D1/D5 | Additive |
+
+## 3. Downgraded Findings
+
+| Rank · Domain | Original ask | Downgrade |
+|---|---|---|
+| Std #5 / Standardization | Add `model` + `tools` + `stop_rules` to `template-validation/SKILL.md` | Add only `tools` + `stop_rules`; omit `model` |
+| Std #6 / Standardization | Same as #5 for `glitch-detection/SKILL.md` | Same downgrade |
+| Std #7 / Standardization | Same as #5 for `reviewing-code-locally/SKILL.md` | Same downgrade |
+| Std #8 / Standardization | Add `name`/`model`/`tools`/`stop_rules` to `speckit.taskstoissues.agent.md` | Add `name` + `tools` + `stop_rules` only |
+| Std #9 / Standardization | Same as #8 for `speckit.tasks.agent.md` | Same downgrade |
+| Std #10 / Standardization | Same as #8 for `speckit.checklist.agent.md` | Same downgrade |
+
+## 4. Rejected Findings
+
+Transparency record; not eligible for the patch manifest.
+
+| Rank · Domain | Reason for rejection |
+|---|---|
+| Std #11 / Standardization | Hardening a deliberate no-op script would be metric chasing. |
+
+## 5. Patch Manifest (PATCH=true mode)
+
+| Patch | Approved finding(s) bundled | Files touched (est.) | Net lines (est.) | Class |
+|---|---|---:|---:|---|
+| PP-1 | Std #1, #2, #3 — add YAML frontmatter to three SKILL.md files | 3 | ~30 | Additive |
+| PP-2 | F2 — extract duplicated `Domain Context` block + reference from 3 speckit agents | 4 | ~50 | Non-destructive extraction |
+| PP-3 | Std #4-bis, Std #5/6/7 (downgraded additive parts: `tools`+`stop_rules`), Std #8/9/10 (`name`+`tools`+`stop_rules`) | ≤6 (split if needed) | ≤120 | Additive |
+| PP-4 | Std #12, Std #13 — hook safety flags (`set -euo pipefail`, `-e`) | 2 | ~4 | Additive |
+| PP-5 | EX-05 — `scorecard-delta-extractor` helper + caller updates | ≤3 | ~40 | Helper extraction |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$REAL_FINDINGS" "$REAL_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for actual-style finding-reference manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for actual-style finding-reference manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+REAL_PP1_PATCH="$REAL_OUTPUT/PATCH_PACK/PP-1-skill-frontmatter.patch"
+REAL_PP3_SKILL_PATCH="$REAL_OUTPUT/PATCH_PACK/PP-3-additive-skill-metadata.patch"
+REAL_PP3_AGENT_PATCH="$REAL_OUTPUT/PATCH_PACK/PP-3-additive-agent-metadata.patch"
+REAL_PP4_PATCH="$REAL_OUTPUT/PATCH_PACK/PP-4-hook-safety-flags.patch"
+if [ "$(grep -c '^diff --git' "$REAL_PP1_PATCH" 2>/dev/null || true)" = "3" ] \
+    && [ "$(grep -c '^diff --git' "$REAL_PP3_SKILL_PATCH" 2>/dev/null || true)" = "2" ] \
+    && [ "$(grep -c '^diff --git' "$REAL_PP3_AGENT_PATCH" 2>/dev/null || true)" = "4" ] \
+    && [ "$(grep -c '^diff --git' "$REAL_PP4_PATCH" 2>/dev/null || true)" = "2" ] \
+    && ! grep -Fq '+model' "$REAL_PP3_SKILL_PATCH" "$REAL_PP3_AGENT_PATCH" \
+    && ! grep -Fq '+name:' "$REAL_PP3_SKILL_PATCH" "$REAL_PP3_AGENT_PATCH" \
+    && grep -Fq 'diff --git a/.agents/skills/quality-benchmark/SKILL.md b/.agents/skills/quality-benchmark/SKILL.md' "$REAL_PP1_PATCH" \
+    && grep -Fq 'diff --git a/scripts/pre-push-hook.sh b/scripts/pre-push-hook.sh' "$REAL_PP4_PATCH"; then
+    echo "  ✓ actual-style manifest resolves finding references into safe split patches"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ actual-style manifest did not produce expected safe split patches"
+    find "$REAL_OUTPUT" -maxdepth 3 -type f -print
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$REAL_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$REAL_OUTPUT/PATCHABILITY_BLOCKERS.json')); codes={row['row_id']: row['blocker_code'] for row in d['blockers']}; assert d['patches_generated'] == 4; assert codes == {'PP-2':'unsupported_semantic_refactor','PP-5':'unsupported_helper_plus_caller_update'}"; then
+    echo "  ✓ actual-style manifest keeps only explicit unsupported-row blockers"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ actual-style manifest blocker output was not limited to PP-2/PP-5"
+    [ -f "$REAL_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$REAL_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$REAL_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ actual-style generated patches pass git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ actual-style generated patches failed git apply --check"
     FAIL=$((FAIL + 1))
 fi
 
@@ -552,7 +714,7 @@ fi
 BLOCKED_OUTPUT="$(mktemp -d)"
 BLOCKED_AUDIT_INPUT="$(mktemp -d)"
 BLOCKED_PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
 BLOCKED_FINDINGS="$BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
 cat > "$BLOCKED_FINDINGS" <<'EOF'
 # Optimization Plan
