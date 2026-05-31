@@ -218,17 +218,21 @@ def is_separator(cells: list[str]) -> bool:
     return all(re.fullmatch(r":?-{3,}:?", cell.strip() or "-") for cell in cells)
 
 
+def is_patch_manifest_heading(text: str) -> bool:
+    return bool(re.match(r"^#{1,6}\s*(?:\d+\.\s*)?Patch Manifest\b", text, re.IGNORECASE))
+
+
 def manifest_rows(text: str) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     headers: list[str] | None = None
     in_manifest = False
     for raw in text.splitlines():
         stripped = raw.strip()
-        if re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+        if is_patch_manifest_heading(stripped):
             in_manifest = True
             headers = None
             continue
-        if in_manifest and stripped.startswith("## ") and not re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+        if in_manifest and stripped.startswith("## ") and not is_patch_manifest_heading(stripped):
             break
         if not in_manifest or not stripped.startswith("|"):
             continue
@@ -353,14 +357,25 @@ def safe_rel_path(value: str) -> str | None:
     return rel
 
 
+def dedupe_paths(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
+
+
 def manifest_row_text(row_id: str) -> str:
     in_manifest = False
     for raw in plan.splitlines():
         stripped = raw.strip()
-        if re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+        if is_patch_manifest_heading(stripped):
             in_manifest = True
             continue
-        if in_manifest and stripped.startswith("## ") and not re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+        if in_manifest and stripped.startswith("## ") and not is_patch_manifest_heading(stripped):
             break
         if in_manifest and stripped.startswith("|") and re.search(rf"\|\s*{re.escape(row_id)}\b", stripped, re.IGNORECASE):
             return raw
@@ -377,6 +392,122 @@ def extract_paths(text: str, pattern: str) -> list[str]:
         seen.add(rel)
         paths.append(rel)
     return paths
+
+
+def finding_refs(text: str) -> list[str]:
+    refs: list[str] = []
+    current_prefix: str | None = None
+    pattern = re.compile(
+        r"(?<!\w)(?:(Std|Decomp)\s*#(\d+(?:-bis)?(?:/\d+(?:-bis)?)*)|(EX)-(\d+)|(F)(\d+)|#(\d+(?:-bis)?))",
+        re.IGNORECASE,
+    )
+    for match in pattern.finditer(text):
+        if match.group(1):
+            current_prefix = match.group(1).title()
+            for part in match.group(2).split("/"):
+                refs.append(f"{current_prefix} #{part.lower()}")
+            continue
+        if match.group(3):
+            current_prefix = "EX"
+            refs.append(f"EX-{int(match.group(4)):02d}")
+            continue
+        if match.group(5):
+            current_prefix = "F"
+            refs.append(f"F{int(match.group(6))}")
+            continue
+        if match.group(7) and current_prefix:
+            suffix = match.group(7).lower()
+            if current_prefix == "EX":
+                refs.append(f"EX-{int(suffix):02d}" if suffix.isdigit() else f"EX-{suffix}")
+            elif current_prefix == "F":
+                refs.append(f"F{int(suffix)}" if suffix.isdigit() else f"F{suffix}")
+            else:
+                refs.append(f"{current_prefix} #{suffix}")
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for ref in refs:
+        key = ref.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(ref)
+    return ordered
+
+
+def resolve_path_fragment(fragment: str) -> str | None:
+    rel = safe_rel_path(fragment)
+    if rel is None:
+        return None
+    if not ("/" in rel or rel.endswith((".md", ".sh", ".py", ".json", ".yaml", ".yml", ".toml"))):
+        return None
+
+    direct = repo / rel
+    if direct.exists():
+        return rel
+
+    suffix = rel.lstrip("./")
+    matches: list[str] = []
+    for candidate in repo.rglob(Path(suffix).name):
+        try:
+            resolved = candidate.resolve(strict=True)
+        except (FileNotFoundError, OSError, RuntimeError):
+            continue
+        if ".git" in candidate.parts or not resolved.is_file():
+            continue
+        try:
+            candidate_rel = str(resolved.relative_to(repo_root))
+        except ValueError:
+            continue
+        if candidate_rel.endswith(suffix):
+            matches.append(candidate_rel)
+    unique = sorted(set(matches))
+    return unique[0] if len(unique) == 1 else None
+
+
+def code_span_paths(text: str) -> list[str]:
+    resolved: list[str] = []
+    for match in re.finditer(r"`([^`]+)`", text):
+        value = resolve_path_fragment(match.group(1))
+        if value is not None:
+            resolved.append(value)
+    return dedupe_paths(resolved)
+
+
+_finding_path_index: dict[str, list[str]] | None = None
+
+
+def finding_path_index() -> dict[str, list[str]]:
+    global _finding_path_index
+    if _finding_path_index is not None:
+        return _finding_path_index
+
+    index: dict[str, list[str]] = {}
+    for raw in plan.splitlines():
+        stripped = raw.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) < 2 or is_separator(cells):
+            continue
+        row_paths = code_span_paths(raw)
+        if not row_paths:
+            continue
+        for ref in finding_refs(raw):
+            key = ref.lower()
+            index.setdefault(key, [])
+            index[key] = dedupe_paths(index[key] + row_paths)
+
+    _finding_path_index = index
+    return index
+
+
+def manifest_paths(row_id: str, pattern: str) -> list[str]:
+    row_text = manifest_row_text(row_id)
+    paths = extract_paths(row_text, f"({pattern})")
+    index = finding_path_index()
+    for ref in finding_refs(row_text):
+        paths.extend(index.get(ref.lower(), []))
+    return dedupe_paths([path for path in paths if re.fullmatch(pattern, path)])
 
 
 def harden_shell_lines(lines: list[str]) -> list[str]:
@@ -462,7 +593,7 @@ def materialize_pp01() -> None:
     if not has_manifest_row("PP-1"):
         return
 
-    candidates = extract_paths(manifest_row_text("PP-1"), r"([A-Za-z0-9_./-]+/SKILL\.md)")
+    candidates = manifest_paths("PP-1", r"[A-Za-z0-9_./-]+/SKILL\.md")
     changes: list[tuple[str, list[str], list[str]]] = []
     for rel in candidates:
         old = read_lines(repo / rel)
@@ -488,17 +619,22 @@ def materialize_pp03() -> None:
     if not has_manifest_row("PP-3"):
         return
 
-    candidates = extract_paths(manifest_row_text("PP-3"), r"([A-Za-z0-9_./-]+/SKILL\.md)")
-    changes: list[tuple[str, list[str], list[str]]] = []
+    candidates = manifest_paths("PP-3", r"[A-Za-z0-9_./-]+(?:/SKILL\.md|\.agent\.md)")
+    skill_changes: list[tuple[str, list[str], list[str]]] = []
+    agent_changes: list[tuple[str, list[str], list[str]]] = []
     for rel in candidates:
         old = read_lines(repo / rel)
         if old is None:
             continue
         new = add_skill_metadata(old)
         if old != new:
-            changes.append((rel, old, new))
+            if rel.endswith("/SKILL.md"):
+                skill_changes.append((rel, old, new))
+            else:
+                agent_changes.append((rel, old, new))
 
-    write_patch(patch_dir / "PP-3-additive-skill-metadata.patch", changes, "PP-3")
+    write_patch(patch_dir / "PP-3-additive-skill-metadata.patch", skill_changes, "PP-3")
+    write_patch(patch_dir / "PP-3-additive-agent-metadata.patch", agent_changes, "PP-3")
 
 
 def materialize_pp04() -> None:
@@ -507,7 +643,7 @@ def materialize_pp04() -> None:
 
     candidates = [
         rel
-        for rel in extract_paths(manifest_row_text("PP-4"), r"([A-Za-z0-9_./-]+\.sh)")
+        for rel in manifest_paths("PP-4", r"[A-Za-z0-9_./-]+\.sh")
         if "hook" in Path(rel).name.lower()
     ]
 
@@ -790,17 +926,21 @@ def is_separator(cells: list[str]) -> bool:
     return all(re.fullmatch(r":?-{3,}:?", cell.strip() or "-") for cell in cells)
 
 
+def is_patch_manifest_heading(text: str) -> bool:
+    return bool(re.match(r"^#{1,6}\s*(?:\d+\.\s*)?Patch Manifest\b", text, re.IGNORECASE))
+
+
 def manifest_rows(text: str) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     headers: list[str] | None = None
     in_manifest = False
     for raw in text.splitlines():
         stripped = raw.strip()
-        if re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+        if is_patch_manifest_heading(stripped):
             in_manifest = True
             headers = None
             continue
-        if in_manifest and stripped.startswith("## ") and not re.search(r"patch\s+manifest", stripped, re.IGNORECASE):
+        if in_manifest and stripped.startswith("## ") and not is_patch_manifest_heading(stripped):
             break
         if not in_manifest or not stripped.startswith("|"):
             continue
@@ -834,7 +974,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     supported = bool(
-        row_id in {"P4", "PP-1", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04"}
+        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04"}
         or re.search(r"\bS-05\b", row_text)
         and re.search(r"\bS-06\b", row_text)
         and re.search(r"\bS-07\b", row_text)
