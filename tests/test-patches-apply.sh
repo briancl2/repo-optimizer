@@ -51,11 +51,13 @@ HS_OUTPUT="$(mktemp -d)"
 HS_BLOCKED_OUTPUT="$(mktemp -d)"
 CR_OUTPUT="$(mktemp -d)"
 CR_BLOCKED_OUTPUT="$(mktemp -d)"
+HFR_OUTPUT="$(mktemp -d)"
+HFR_BLOCKED_OUTPUT="$(mktemp -d)"
 PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -127,6 +129,18 @@ cat > "$TARGET_REPO/docs/capability-guidance.md" <<'EOF'
 
 The Hermes launch guidance describes default behavior but does not yet carry a
 capability reconciliation record.
+EOF
+cat > "$TARGET_REPO/docs/hermes-receipts.md" <<'EOF'
+# Hermes Receipt Guidance
+
+Use foreground Hermes commands for bounded local runs.
+EOF
+cat > "$TARGET_REPO/docs/hermes-receipts-grounded.md" <<'EOF'
+# Grounded Hermes Receipt Guidance
+
+## HERMES_FOREGROUND_RUN_RECEIPT
+
+- Capture foreground Hermes command, exit status, stdout/stderr receipt path, and validation command.
 EOF
 cat > "$TARGET_REPO/scripts/generic-status.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -268,6 +282,8 @@ git -C "$TARGET_REPO" config user.email "test@example.com"
 git -C "$TARGET_REPO" config user.name "Test User"
 git -C "$TARGET_REPO" add .
 git -C "$TARGET_REPO" commit -q -m "init patch target"
+mkdir -p "$TARGET_REPO/.git/hooks"
+printf '%s\n' '# internal Hermes receipt fixture' > "$TARGET_REPO/.git/hooks/hermes.md"
 
 FINDINGS="$OUTPUT_DIR/OPTIMIZATION_PLAN.md"
 cat > "$FINDINGS" <<'EOF'
@@ -952,6 +968,131 @@ if [ ! -e "$CR_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
 else
     echo "  ✗ CR-01 missing capability did not emit expected blocker"
     [ -f "$CR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$CR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+HFR_FINDINGS="$HFR_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$HFR_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| HFR-01 | Hermes foreground receipt adoption guidance in `docs/hermes-receipts.md` | 1 |
+| HFR-01 | Hermes foreground receipt adoption guidance in `.agents/skills/metadata-target/SKILL.md` | 1 |
+| HFR-01 | duplicate Hermes foreground receipt adoption guidance in `docs/hermes-receipts.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$HFR_FINDINGS" "$HFR_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for HFR-01 Hermes foreground receipt materializer"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for HFR-01 Hermes foreground receipt materializer"
+    FAIL=$((FAIL + 1))
+fi
+
+HFR_PATCH="$HFR_OUTPUT/PATCH_PACK/HFR-01-hermes-foreground-run-receipt.patch"
+if [ -s "$HFR_PATCH" ] \
+    && grep -Fq 'diff --git a/docs/hermes-receipts.md b/docs/hermes-receipts.md' "$HFR_PATCH" \
+    && grep -Fq 'diff --git a/.agents/skills/metadata-target/SKILL.md b/.agents/skills/metadata-target/SKILL.md' "$HFR_PATCH" \
+    && grep -Fq '+## HERMES_FOREGROUND_RUN_RECEIPT' "$HFR_PATCH" \
+    && grep -Fq 'foreground Hermes command' "$HFR_PATCH" \
+    && grep -Fq 'exit status' "$HFR_PATCH" \
+    && grep -Fq 'validation command' "$HFR_PATCH" \
+    && ! grep -Fq 'controller' "$HFR_PATCH" \
+    && ! grep -Fq 'scheduler' "$HFR_PATCH" \
+    && ! grep -Fq 'daemon' "$HFR_PATCH" \
+    && ! grep -Fq 'autofix loop' "$HFR_PATCH"; then
+    echo "  ✓ HFR-01 patch materialized compact foreground receipt guidance only"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HFR-01 patch missing compact foreground receipt guidance"
+    [ -f "$HFR_PATCH" ] && cat "$HFR_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if python3 - "$HFR_PATCH" <<'PY'
+import sys
+
+patch = open(sys.argv[1], encoding="utf-8").read()
+marker = "diff --git a/.agents/skills/metadata-target/SKILL.md b/.agents/skills/metadata-target/SKILL.md"
+section = patch.split(marker, 1)[1].split("\ndiff --git ", 1)[0]
+frontmatter = section.index("\n ---\n")
+heading = section.index("\n # Metadata Target")
+receipt = section.index("\n+## HERMES_FOREGROUND_RUN_RECEIPT")
+assert frontmatter < heading < receipt
+assert "\n+---\n" not in section
+PY
+then
+    echo "  ✓ HFR-01 preserves YAML frontmatter before receipt guidance"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HFR-01 did not preserve YAML frontmatter before receipt guidance"
+    [ -f "$HFR_PATCH" ] && cat "$HFR_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$HFR_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ HFR-01 generated patch passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HFR-01 generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$HFR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$HFR_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 1; assert d['blocker_count'] == 1; assert d['blockers'][0]['blocker_code'] == 'hfr01_duplicate_target_file'"; then
+    echo "  ✓ HFR-01 duplicate target row emits deterministic blocker"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HFR-01 duplicate target row did not emit expected blocker"
+    [ -f "$HFR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$HFR_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if git -C "$TARGET_REPO" diff --quiet; then
+    echo "  ✓ HFR-01 materializer left target repo unmodified"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HFR-01 materializer mutated target repo"
+    git -C "$TARGET_REPO" diff --stat
+    FAIL=$((FAIL + 1))
+fi
+
+HFR_BLOCKED_FINDINGS="$HFR_BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$HFR_BLOCKED_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| HFR-01 | Hermes foreground receipt adoption guidance in `docs/hermes-receipts.md` and `docs/hermes-receipts-grounded.md` | 2 |
+| HFR-01 | broad Hermes foreground receipt adoption guidance in `docs/hermes-receipts.md` | 2 |
+| HFR-01 | Hermes foreground receipt adoption guidance | 1 |
+| HFR-01 | Hermes foreground receipt adoption guidance in `.agents/skills/escaped/SKILL.md` | 1 |
+| HFR-01 | Hermes foreground receipt adoption guidance in `docs/hermes-receipts-grounded.md` | 1 |
+| HFR-01 | Hermes foreground receipt adoption guidance in `../../escape.md` | 1 |
+| HFR-01 | Hermes foreground receipt adoption guidance in `.git/hooks/hermes.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$HFR_BLOCKED_FINDINGS" "$HFR_BLOCKED_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for blocked HFR-01 manifests"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for blocked HFR-01 manifests"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ ! -e "$HFR_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); codes=[row['blocker_code'] for row in d['blockers']]; assert d['patches_generated'] == 0; assert d['blocker_count'] == 7; assert codes == ['hfr01_ambiguous_named_files','hfr01_broad_row_scope','hfr01_missing_named_file','hfr01_symlinked_target_file','hfr01_already_grounded','hfr01_unsafe_named_file','hfr01_unsafe_named_file']"; then
+    echo "  ✓ HFR-01 unsafe rows emit PATCHABILITY_BLOCKERS.json"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HFR-01 unsafe rows did not emit expected blockers"
+    [ -f "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
     FAIL=$((FAIL + 1))
 fi
 

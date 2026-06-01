@@ -279,7 +279,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         code, reason = special_reasons[row_id]
     else:
         supported = bool(
-            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01"}
+            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01"}
             or re.search(r"\bS-05\b", row_text)
             and re.search(r"\bS-06\b", row_text)
             and re.search(r"\bS-07\b", row_text)
@@ -355,6 +355,10 @@ def safe_rel_path(value: str) -> str | None:
     if not rel or rel.startswith("/") or rel.startswith("../") or "/../" in rel:
         return None
     return rel
+
+
+def has_git_path_component(rel: str) -> bool:
+    return any(part == ".git" for part in Path(rel).parts)
 
 
 def dedupe_paths(values: list[str]) -> list[str]:
@@ -752,6 +756,21 @@ def insert_after_heading(lines: list[str], block: list[str]) -> list[str]:
     if lines and lines[0].startswith("#"):
         return lines[:1] + [""] + block + lines[1:]
     return block + [""] + lines
+
+
+def insert_after_frontmatter_or_heading(lines: list[str], block: list[str]) -> list[str]:
+    marker = block[0]
+    if marker in lines:
+        return lines
+    end_idx = frontmatter_end(lines)
+    if end_idx is not None:
+        insert_idx = end_idx + 1
+        while insert_idx < len(lines) and lines[insert_idx] == "":
+            insert_idx += 1
+        if insert_idx < len(lines) and lines[insert_idx].startswith("#"):
+            return lines[: insert_idx + 1] + [""] + block + lines[insert_idx + 1 :]
+        return lines[: end_idx + 1] + [""] + block + lines[end_idx + 1 :]
+    return insert_after_heading(lines, block)
 
 
 def materialize_pp01() -> None:
@@ -1176,6 +1195,156 @@ def materialize_cr01() -> None:
     write_patch(patch_dir / patch_name, [(rel, old, new)], row_id)
 
 
+def hfr01_receipt_block() -> list[str]:
+    return [
+        "## HERMES_FOREGROUND_RUN_RECEIPT",
+        "",
+        "- For explicit Hermes foreground runs, retain the foreground Hermes command, exit status, stdout/stderr receipt path, and validation command.",
+        "- Treat the receipt as adoption evidence only for the named run; it does not authorize target mutation or unattended execution.",
+    ]
+
+
+def hfr01_has_receipt_guidance(lines: list[str]) -> bool:
+    text = "\n".join(lines).lower()
+    return "hermes_foreground_run_receipt" in text or (
+        "foreground hermes" in text
+        and "exit status" in text
+        and "receipt" in text
+        and "validation command" in text
+    )
+
+
+def hfr01_manifest_rows() -> list[dict[str, object]]:
+    return [row for row in manifest_rows(plan) if str(row.get("row_id", "")) == "HFR-01"]
+
+
+def hfr01_paths_for_row(row: dict[str, object]) -> list[str | None]:
+    text = str(row.get("raw_row", ""))
+    paths: list[str | None] = []
+    for match in re.finditer(r"`([^`]+)`", text):
+        value = match.group(1)
+        rel = safe_rel_path(value)
+        if rel is None or has_git_path_component(rel):
+            paths.append(None)
+            continue
+        if re.fullmatch(r"[A-Za-z0-9_./-]+(?:\.md|\.txt|/SKILL\.md)", rel):
+            paths.append(rel)
+    return paths
+
+
+def hfr01_record(row: dict[str, object], patch_name: str, code: str, reason: str) -> None:
+    overflow_blockers.append(
+        {
+            "row_id": str(row.get("row_id", "HFR-01")),
+            "patch": row.get("patch", ""),
+            "findings": row.get("findings", ""),
+            "files_touched": row.get("files_touched", ""),
+            "blocker_code": code,
+            "reason": reason,
+        }
+    )
+
+
+def materialize_hfr01() -> None:
+    rows = hfr01_manifest_rows()
+    if not rows:
+        return
+
+    patch_name = "HFR-01-hermes-foreground-run-receipt.patch"
+    changes: list[tuple[str, list[str], list[str]]] = []
+    emitted_or_blocked = False
+    processed_targets: set[str] = set()
+    for row in rows:
+        paths = hfr01_paths_for_row(row)
+        files_touched = str(row.get("files_touched", "")).strip()
+        if any(path is None for path in paths):
+            hfr01_record(
+                row,
+                patch_name,
+                "hfr01_unsafe_named_file",
+                "HFR-01 requires a safe repository-relative named target file; absolute paths or parent traversal are not patchable.",
+            )
+            emitted_or_blocked = True
+            continue
+        concrete_paths = [path for path in paths if path is not None]
+        if not concrete_paths:
+            hfr01_record(
+                row,
+                patch_name,
+                "hfr01_missing_named_file",
+                "HFR-01 requires exactly one safe named target file in the manifest row.",
+            )
+            emitted_or_blocked = True
+            continue
+        if len(dedupe_paths(concrete_paths)) != 1:
+            hfr01_record(
+                row,
+                patch_name,
+                "hfr01_ambiguous_named_files",
+                "HFR-01 requires exactly one target file so foreground receipt adoption does not become a broad rewrite.",
+            )
+            emitted_or_blocked = True
+            continue
+        if files_touched != "1":
+            hfr01_record(
+                row,
+                patch_name,
+                "hfr01_broad_row_scope",
+                "HFR-01 requires a patch manifest row scoped to exactly one file; broad rows are not patchable.",
+            )
+            emitted_or_blocked = True
+            continue
+
+        rel = concrete_paths[0]
+        if rel in processed_targets:
+            hfr01_record(
+                row,
+                patch_name,
+                "hfr01_duplicate_target_file",
+                f"HFR-01 target file already has a materialized receipt patch in this run: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        path = repo / rel
+        if path.is_symlink():
+            hfr01_record(
+                row,
+                patch_name,
+                "hfr01_symlinked_target_file",
+                f"HFR-01 target file is symlinked and is not safe for deterministic patch materialization: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        old = read_lines(path)
+        if old is None:
+            hfr01_record(
+                row,
+                patch_name,
+                "hfr01_target_file_unreadable",
+                f"HFR-01 target file is missing, broad, unsafe, or outside the repository: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        if hfr01_has_receipt_guidance(old):
+            hfr01_record(
+                row,
+                patch_name,
+                "hfr01_already_grounded",
+                f"HFR-01 target file already contains Hermes foreground receipt guidance: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        new = insert_after_frontmatter_or_heading(old, hfr01_receipt_block())
+        changes.append((rel, old, new))
+        processed_targets.add(rel)
+        emitted_or_blocked = True
+
+    if changes:
+        write_patch(patch_dir / patch_name, changes, "HFR-01")
+    elif emitted_or_blocked:
+        written_row_ids.add("HFR-01")
+
+
 materialize_pp01()
 materialize_pp03()
 materialize_pp04()
@@ -1185,6 +1354,7 @@ materialize_wm03()
 materialize_wm04()
 materialize_hs01()
 materialize_cr01()
+materialize_hfr01()
 flush_manifest_blockers()
 PY
 
@@ -1282,7 +1452,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     supported = bool(
-        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01"}
+        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01"}
         or re.search(r"\bS-05\b", row_text)
         and re.search(r"\bS-06\b", row_text)
         and re.search(r"\bS-07\b", row_text)
