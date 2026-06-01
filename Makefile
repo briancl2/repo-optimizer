@@ -1,9 +1,11 @@
-.PHONY: review optimize transfer-oracle benchmark-optimization-workloads normalize-agent-run-receipts build-live-paired-corpus collect-live-agent-receipts patch-check test validate help install-hooks check work work-close health spec-init
+.PHONY: review optimize transfer-oracle benchmark-optimization-workloads normalize-agent-run-receipts build-live-paired-corpus collect-live-agent-receipts cr01-replay patch-check test validate help install-hooks check work work-close health spec-init
 
 TARGET ?= .
 AUDIT ?= audit_output
 OUTPUT_DIR ?= optimizer_output
 PATCH ?= false
+CR01_TARGET_FILE ?= docs/capability-guidance.md
+CR01_CAPABILITY ?= Hermes -z
 DECISIONS ?=
 CAPABILITY_FAMILY ?=
 HOTSPOT_ID ?=
@@ -28,6 +30,8 @@ help:
 	@echo "  make normalize-agent-run-receipts RECEIPTS=<raw> OUTPUT_DIR=<dir>  Normalize Codex/Copilot/VS Code/generic evidence"
 	@echo "  make build-live-paired-corpus FIXTURES=<path> RECEIPTS=<path> OUTPUT_DIR=<dir>  Build provider-neutral live corpus"
 	@echo "  make collect-live-agent-receipts FIXTURES=<path> ADAPTER=<codex|copilot|generic> OUTPUT_DIR=<dir>  Collect live receipts"
+	@echo "  make cr01-replay TARGET=<path> OUTPUT_DIR=<dir> CR01_TARGET_FILE=<path> CR01_CAPABILITY=<name>"
+	@echo "                                            Replay bounded CR-01 patch-pack read-only"
 	@echo "  make patch-check                         Validate existing patches"
 	@echo "  make test                                Run all tests"
 	@echo "  make validate OUTPUT_DIR=<dir>           Validate generated optimizer bundle integrity"
@@ -108,6 +112,9 @@ collect-live-agent-receipts:
 		--variants "$(VARIANTS)" $(if $(COMMAND_TEMPLATE),--command-template "$(COMMAND_TEMPLATE)",)
 	@echo "=== Live receipts written to $(OUTPUT_DIR)/AGENT_RUN_RECEIPTS.json ==="
 
+cr01-replay:
+	@bash scripts/replay-cr01-patch-pack.sh "$(TARGET)" "$(OUTPUT_DIR)" "$(CR01_TARGET_FILE)" "$(CR01_CAPABILITY)"
+
 patch-check:
 	@bash scripts/validate-patches.sh "$(TARGET)" "$(OUTPUT_DIR)/PATCH_PACK"
 
@@ -119,6 +126,7 @@ test:
 	@bash tests/test-audit-admission.sh
 	@bash tests/test-phase-output-classifier.sh
 	@bash tests/test-transfer-oracle-consumer.sh
+	@bash tests/test-cr01-replay.sh
 	@bash tests/test-patches-apply.sh
 	@bash tests/test-preflight-tiers.sh
 	@bash tests/test-target-policy-context.sh
