@@ -384,7 +384,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         code, reason = special_reasons[row_id]
     else:
         supported = bool(
-            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01"}
+            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "LR-01"}
             or re.search(r"\bS-05\b", row_text)
             and re.search(r"\bS-06\b", row_text)
             and re.search(r"\bS-07\b", row_text)
@@ -1575,6 +1575,182 @@ def materialize_hfr01() -> None:
         written_row_ids.add("HFR-01")
 
 
+def lr01_learning_recovery_block() -> list[str]:
+    return [
+        "## Learning / Recovery",
+        "",
+        "- Decision changed: TBD by owner when this recovery record is filled.",
+        "- GitHub surface: link the owner issue, PR, or failure issue that changed the route.",
+        "- Raw evidence: cite the command receipt, CI run, session excerpt, or owner artifact used for the decision.",
+        "- Optional GBrain slug: record the decision-changing slug when captured; otherwise write `none`.",
+        "- No-capture reason: explain why no GBrain capture was warranted for routine or duplicate learning.",
+        "- Reusable learning text: state the reusable lesson only when it changes future decisions.",
+        "- Owner action: name the owner surface and first deliverable or blocker issue.",
+        "- Bounded non-claims: This block does not authorize background memory, schedulers, queues, daemons, controllers, autofix loops, or target mutation.",
+    ]
+
+
+def lr01_has_learning_recovery_block(lines: list[str]) -> bool:
+    text = "\n".join(lines).lower()
+    return "## learning / recovery" in text or (
+        "decision changed" in text
+        and "github surface" in text
+        and "raw evidence" in text
+        and ("gbrain slug" in text or "no-capture reason" in text)
+        and "owner action" in text
+        and "bounded non-claims" in text
+    )
+
+
+def lr01_manifest_rows() -> list[dict[str, object]]:
+    return [row for row in manifest_rows(plan) if str(row.get("row_id", "")) == "LR-01"]
+
+
+def lr01_paths_for_row(row: dict[str, object]) -> list[str | None]:
+    text = str(row.get("raw_row", ""))
+    paths: list[str | None] = []
+    for match in re.finditer(r"`([^`]+)`", text):
+        value = match.group(1)
+        rel = safe_rel_path(value)
+        if rel is None or has_git_path_component(rel):
+            paths.append(None)
+            continue
+        if re.fullmatch(r"[A-Za-z0-9_./-]+(?:\.md|\.txt|/SKILL\.md)", rel):
+            paths.append(rel)
+    return paths
+
+
+def lr01_record(row: dict[str, object], patch_name: str, code: str, reason: str) -> None:
+    blocker = {
+        "row_id": str(row.get("row_id", "LR-01")),
+        "patch": row.get("patch", ""),
+        "findings": row.get("findings", ""),
+        "files_touched": row.get("files_touched", ""),
+        "blocker_code": code,
+        "reason": reason,
+    }
+    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+    if scan_context:
+        blocker["scan_context"] = scan_context
+        claims = scan_limited_non_claim(scan_context)
+        if claims:
+            blocker["bounded_non_claims"] = claims
+    overflow_blockers.append(blocker)
+
+
+def materialize_lr01() -> None:
+    rows = lr01_manifest_rows()
+    if not rows:
+        return
+
+    patch_name = "LR-01-foreground-learning-recovery-block.patch"
+    changes: list[tuple[str, list[str], list[str]]] = []
+    metadata_rows: list[dict[str, object]] = []
+    emitted_or_blocked = False
+    processed_targets: set[str] = set()
+    for row in rows:
+        paths = lr01_paths_for_row(row)
+        files_touched = str(row.get("files_touched", "")).strip()
+        if any(path is None for path in paths):
+            lr01_record(
+                row,
+                patch_name,
+                "lr01_unsafe_named_file",
+                "LR-01 requires a safe repository-relative named target file; absolute paths, .git paths, or parent traversal are not patchable.",
+            )
+            emitted_or_blocked = True
+            continue
+        concrete_paths = [path for path in paths if path is not None]
+        if not concrete_paths:
+            lr01_record(
+                row,
+                patch_name,
+                "lr01_missing_named_file",
+                "LR-01 requires exactly one safe named target file in the manifest row.",
+            )
+            emitted_or_blocked = True
+            continue
+        if len(dedupe_paths(concrete_paths)) != 1:
+            lr01_record(
+                row,
+                patch_name,
+                "lr01_ambiguous_named_files",
+                "LR-01 requires exactly one target file so foreground learning recovery does not become a broad rewrite.",
+            )
+            emitted_or_blocked = True
+            continue
+        if files_touched != "1":
+            lr01_record(
+                row,
+                patch_name,
+                "lr01_broad_row_scope",
+                "LR-01 requires a patch manifest row scoped to exactly one file; broad rows are not patchable.",
+            )
+            emitted_or_blocked = True
+            continue
+
+        rel = concrete_paths[0]
+        if rel in processed_targets:
+            lr01_record(
+                row,
+                patch_name,
+                "lr01_duplicate_target_file",
+                f"LR-01 target file already has a materialized learning recovery block in this run: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        path = repo / rel
+        if path.is_symlink():
+            lr01_record(
+                row,
+                patch_name,
+                "lr01_symlinked_target_file",
+                f"LR-01 target file is symlinked and is not safe for deterministic patch materialization: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        old = read_lines(path)
+        if old is None:
+            lr01_record(
+                row,
+                patch_name,
+                "lr01_target_file_unreadable",
+                f"LR-01 target file is missing, broad, unsafe, or outside the repository: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        if lr01_has_learning_recovery_block(old):
+            lr01_record(
+                row,
+                patch_name,
+                "lr01_already_grounded",
+                f"LR-01 target file already contains foreground Learning / Recovery guidance: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        new = insert_after_frontmatter_or_heading(old, lr01_learning_recovery_block())
+        changes.append((rel, old, new))
+        scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+        if scan_context:
+            metadata_rows.append(
+                {
+                    "row_id": str(row.get("row_id", "LR-01")),
+                    "patch": patch_name,
+                    "target_file": rel,
+                    "scan_context": scan_context,
+                    "bounded_non_claims": scan_limited_non_claim(scan_context),
+                }
+            )
+        processed_targets.add(rel)
+        emitted_or_blocked = True
+
+    if changes:
+        if write_patch(patch_dir / patch_name, changes, "LR-01"):
+            patch_metadata.extend(metadata_rows)
+    elif emitted_or_blocked:
+        written_row_ids.add("LR-01")
+
+
 def flush_patch_metadata() -> None:
     if not patch_metadata:
         return
@@ -1604,6 +1780,7 @@ materialize_wm04()
 materialize_hs01()
 materialize_cr01()
 materialize_hfr01()
+materialize_lr01()
 flush_patch_metadata()
 flush_manifest_blockers()
 PY
@@ -1747,7 +1924,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     supported = bool(
-        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01"}
+        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "LR-01"}
         or re.search(r"\bS-05\b", row_text)
         and re.search(r"\bS-06\b", row_text)
         and re.search(r"\bS-07\b", row_text)

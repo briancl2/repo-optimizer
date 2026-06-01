@@ -53,6 +53,8 @@ CR_OUTPUT="$(mktemp -d)"
 CR_BLOCKED_OUTPUT="$(mktemp -d)"
 HFR_OUTPUT="$(mktemp -d)"
 HFR_BLOCKED_OUTPUT="$(mktemp -d)"
+LR_OUTPUT="$(mktemp -d)"
+LR_BLOCKED_OUTPUT="$(mktemp -d)"
 WM02_SAFE_REPO="$(mktemp -d)"
 WM02_SAFE_OUTPUT="$(mktemp -d)"
 WM02_CLEAN_OUTPUT="$(mktemp -d)"
@@ -64,7 +66,7 @@ PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -148,6 +150,25 @@ cat > "$TARGET_REPO/docs/hermes-receipts-grounded.md" <<'EOF'
 ## HERMES_FOREGROUND_RUN_RECEIPT
 
 - Capture foreground Hermes command, exit status, stdout/stderr receipt path, and validation command.
+EOF
+cat > "$TARGET_REPO/docs/learning-recovery.md" <<'EOF'
+# Learning Recovery Guidance
+
+Use foreground owner issues and PRs for recovery records.
+EOF
+cat > "$TARGET_REPO/docs/learning-recovery-grounded.md" <<'EOF'
+# Grounded Learning Recovery Guidance
+
+## Learning / Recovery
+
+- Decision changed: already recorded.
+- GitHub surface: issue or PR.
+- Raw evidence: command receipt.
+- Optional GBrain slug: none.
+- No-capture reason: duplicate.
+- Reusable learning text: existing guidance.
+- Owner action: owner issue.
+- Bounded non-claims: no background memory.
 EOF
 cat > "$TARGET_REPO/scripts/generic-status.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -1365,6 +1386,153 @@ if [ -s "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
 else
     echo "  ✗ HFR-01 blocker did not preserve inline scan_context"
     [ -f "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+LR_FINDINGS="$LR_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$LR_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| LR-01 | foreground learning recovery block in `docs/learning-recovery.md` scan_context={"scanner":"repo-auditor-as","scanned_files":88,"eligible_files":120,"scan_limit":100,"scan_limited":true} | 1 |
+| LR-01 | foreground learning recovery block in `.agents/skills/metadata-target/SKILL.md` | 1 |
+| LR-01 | duplicate foreground learning recovery block in `docs/learning-recovery.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$LR_FINDINGS" "$LR_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for LR-01 foreground learning materializer"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for LR-01 foreground learning materializer"
+    FAIL=$((FAIL + 1))
+fi
+
+LR_PATCH="$LR_OUTPUT/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch"
+if [ -s "$LR_PATCH" ] \
+    && grep -Fq 'diff --git a/docs/learning-recovery.md b/docs/learning-recovery.md' "$LR_PATCH" \
+    && grep -Fq 'diff --git a/.agents/skills/metadata-target/SKILL.md b/.agents/skills/metadata-target/SKILL.md' "$LR_PATCH" \
+    && grep -Fq '+## Learning / Recovery' "$LR_PATCH" \
+    && grep -Fq '+- Decision changed:' "$LR_PATCH" \
+    && grep -Fq '+- GitHub surface:' "$LR_PATCH" \
+    && grep -Fq '+- Raw evidence:' "$LR_PATCH" \
+    && grep -Fq '+- Optional GBrain slug:' "$LR_PATCH" \
+    && grep -Fq '+- No-capture reason:' "$LR_PATCH" \
+    && grep -Fq '+- Owner action:' "$LR_PATCH" \
+    && grep -Fq '+- Bounded non-claims:' "$LR_PATCH" \
+    && grep -Fq 'does not authorize background memory' "$LR_PATCH" \
+    && grep -Fq 'schedulers, queues, daemons, controllers' "$LR_PATCH"; then
+    echo "  ✓ LR-01 patch materialized compact foreground learning block only"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ LR-01 patch missing compact foreground learning block"
+    [ -f "$LR_PATCH" ] && cat "$LR_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if python3 - "$LR_PATCH" <<'PY'
+import sys
+
+patch = open(sys.argv[1], encoding="utf-8").read()
+marker = "diff --git a/.agents/skills/metadata-target/SKILL.md b/.agents/skills/metadata-target/SKILL.md"
+section = patch.split(marker, 1)[1].split("\ndiff --git ", 1)[0]
+frontmatter = section.index("\n ---\n")
+heading = section.index("\n # Metadata Target")
+learning = section.index("\n+## Learning / Recovery")
+assert frontmatter < heading < learning
+assert "\n+---\n" not in section
+PY
+then
+    echo "  ✓ LR-01 preserves YAML frontmatter before learning guidance"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ LR-01 did not preserve YAML frontmatter before learning guidance"
+    [ -f "$LR_PATCH" ] && cat "$LR_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$LR_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ LR-01 generated patch passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ LR-01 generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$LR_OUTPUT/PATCH_PACK_METADATA.json" ] \
+    && python3 -c "import json; d=json.load(open('$LR_OUTPUT/PATCH_PACK_METADATA.json')); rows=d['patches']; row=next(r for r in rows if r['target_file'] == 'docs/learning-recovery.md'); assert row['row_id'] == 'LR-01'; assert row['patch'] == 'LR-01-foreground-learning-recovery-block.patch'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scanned_files':88,'eligible_files':120,'scan_limit':100,'scan_limited':True}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ LR-01 patch-pack metadata preserves inline scan_context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ LR-01 patch-pack metadata did not preserve inline scan_context"
+    [ -f "$LR_OUTPUT/PATCH_PACK_METADATA.json" ] && cat "$LR_OUTPUT/PATCH_PACK_METADATA.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$LR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$LR_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 1; assert d['blocker_count'] == 1; assert d['blockers'][0]['blocker_code'] == 'lr01_duplicate_target_file'"; then
+    echo "  ✓ LR-01 duplicate target row emits deterministic blocker"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ LR-01 duplicate target row did not emit expected blocker"
+    [ -f "$LR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$LR_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if git -C "$TARGET_REPO" diff --quiet; then
+    echo "  ✓ LR-01 materializer left target repo unmodified"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ LR-01 materializer mutated target repo"
+    git -C "$TARGET_REPO" diff --stat
+    FAIL=$((FAIL + 1))
+fi
+
+LR_BLOCKED_FINDINGS="$LR_BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$LR_BLOCKED_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| LR-01 | foreground learning recovery block in `docs/learning-recovery.md` and `docs/learning-recovery-grounded.md` | 2 |
+| LR-01 | broad foreground learning recovery block in `docs/learning-recovery.md` | 2 |
+| LR-01 | foreground learning recovery block scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"missing-file"} | 1 |
+| LR-01 | foreground learning recovery block in `.agents/skills/escaped/SKILL.md` | 1 |
+| LR-01 | foreground learning recovery block in `docs/learning-recovery-grounded.md` | 1 |
+| LR-01 | foreground learning recovery block in `../../escape.md` | 1 |
+| LR-01 | foreground learning recovery block in `.git/hooks/learning.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$LR_BLOCKED_FINDINGS" "$LR_BLOCKED_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for blocked LR-01 manifests"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for blocked LR-01 manifests"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ ! -e "$LR_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); codes=[row['blocker_code'] for row in d['blockers']]; assert d['patches_generated'] == 0; assert d['blocker_count'] == 7; assert codes == ['lr01_ambiguous_named_files','lr01_broad_row_scope','lr01_missing_named_file','lr01_symlinked_target_file','lr01_already_grounded','lr01_unsafe_named_file','lr01_unsafe_named_file']"; then
+    echo "  ✓ LR-01 unsafe rows emit PATCHABILITY_BLOCKERS.json"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ LR-01 unsafe rows did not emit expected blockers"
+    [ -f "$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); row=next(r for r in d['blockers'] if r['blocker_code'] == 'lr01_missing_named_file'); assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'missing-file'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ LR-01 blocker preserves inline scan_context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ LR-01 blocker did not preserve inline scan_context"
+    [ -f "$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
     FAIL=$((FAIL + 1))
 fi
 
