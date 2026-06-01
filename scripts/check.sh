@@ -55,7 +55,7 @@ fi
 
 # ── Inventory match ───────────────────────────────────────────────────
 echo "-- inventory --"
-EXPECTED=14  # 12 prev + 2 C1/C4 (operation-guard.sh + score-operation.sh, Stage 11.2)
+EXPECTED=15  # 14 prev + bounded CR-01 replay wrapper
 COUNTED=$(find scripts -maxdepth 1 -name '*.sh' -type f | wc -l | tr -d ' ')
 if [ "$COUNTED" != "$EXPECTED" ]; then
     echo "  WARNING: expected $EXPECTED scripts, found $COUNTED"
