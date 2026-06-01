@@ -554,8 +554,8 @@ def add_strict_mode_zero_match_guards(lines: list[str]) -> list[str]:
                 [
                     prefix + "$(",
                     guard_indent + inner + " || {",
-                    guard_indent + "    status=$?",
-                    guard_indent + '    [ "$status" -eq 1 ] || exit "$status"',
+                    guard_indent + "    grep_status=$?",
+                    guard_indent + '    [ "$grep_status" -eq 1 ] || exit "$grep_status"',
                     guard_indent + "}",
                     base_indent + ")",
                 ]
@@ -1066,7 +1066,7 @@ def materialize_hs01() -> None:
                     "HS-01",
                     "HS-01-hermes-status-variable.patch",
                     "hs01_ambiguous_status_assignment",
-                    f"{rel} contains status=$? without nearby Hermes/foreground/zsh launch context.",
+                    f"{rel} contains a reserved lowercase status exit-code assignment without nearby Hermes/foreground/zsh launch context.",
                 )
                 blocked = True
                 break

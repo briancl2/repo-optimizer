@@ -531,7 +531,10 @@ if [ "$(grep -c '^diff --git' "$REAL_PP1_PATCH" 2>/dev/null || true)" = "3" ] \
     && grep -Fq '+        printf' "$REAL_PP4_PATCH" \
     && grep -Fq 'grep -vE' "$REAL_PP4_PATCH" \
     && grep -Fq '|| {' "$REAL_PP4_PATCH" \
-    && grep -Fq '[ "$status" -eq 1 ] || exit "$status"' "$REAL_PP4_PATCH" \
+    && grep -Fq 'grep_status=$?' "$REAL_PP4_PATCH" \
+    && grep -Fq '[ "$grep_status" -eq 1 ] || exit "$grep_status"' "$REAL_PP4_PATCH" \
+    && ! grep -Fq '    status=$?' "$REAL_PP4_PATCH" \
+    && ! grep -Fq '[ "$status" -eq 1 ] || exit "$status"' "$REAL_PP4_PATCH" \
     && grep -Fq '+        FILE_COUNT=$(git diff-tree --no-commit-id --name-only -r --root "$LOCAL_SHA" 2>/dev/null | wc -l | tr -d '\'' '\'')' "$REAL_PP4_PATCH" \
     && grep -Fq '+        DIFF_HINT="git show --name-only --oneline $LOCAL_SHA | head -200"' "$REAL_PP4_PATCH"; then
     echo "  ✓ actual-style manifest resolves finding references into safe split patches"
