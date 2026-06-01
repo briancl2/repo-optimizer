@@ -1062,8 +1062,40 @@ def wm02_score_session_site_index(lines: list[str]) -> int | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def wm02_row_is_clean_direct_campaign(row: dict[str, object]) -> bool:
+    text = " ".join(str(value).lower() for value in row.values())
+    clean_closure = (
+        "closure_regrowth=>none" in text
+        or "github_native_closure_regrowth_count" in text
+        and re.search(r"github_native_closure_regrowth_count[\"'=:\s]+0", text) is not None
+    )
+    bypassed = (
+        "bypassed=>" in text
+        or "github-native-closeout" in text
+        or "github_native_closeout_bypassed_count" in text
+    )
+    direct_campaign = (
+        "direct campaign" in text
+        or "issue #164" in text
+        or "issue164" in text
+        or "github-native closeout" in text
+    )
+    return clean_closure and bypassed and direct_campaign
+
+
 def materialize_wm02() -> None:
     if not has_manifest_row("WM-02"):
+        return
+
+    wm02_rows = manifest_rows_for("WM-02")
+    if wm02_rows and all(wm02_row_is_clean_direct_campaign(row) for row in wm02_rows):
+        record_patch_blocker(
+            "WM-02",
+            "WM-02-github-native-closeout-bypass.patch",
+            "wm02_clean_direct_campaign_closure_no_patch",
+            "WM-02 row describes clean direct campaign closure with GitHub-native closeout already bypassing local authority; no patch should be generated.",
+            wm02_rows,
+        )
         return
 
     changes: list[tuple[str, list[str], list[str]]] = []

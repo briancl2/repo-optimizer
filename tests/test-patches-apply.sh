@@ -55,6 +55,7 @@ HFR_OUTPUT="$(mktemp -d)"
 HFR_BLOCKED_OUTPUT="$(mktemp -d)"
 WM02_SAFE_REPO="$(mktemp -d)"
 WM02_SAFE_OUTPUT="$(mktemp -d)"
+WM02_CLEAN_OUTPUT="$(mktemp -d)"
 WM02_BLOCKED_REPO="$(mktemp -d)"
 WM02_BLOCKED_OUTPUT="$(mktemp -d)"
 WM02_NO_ANCHOR_REPO="$(mktemp -d)"
@@ -63,7 +64,7 @@ PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -481,6 +482,31 @@ if [ -s "$WM02_SAFE_OUTPUT/PATCH_PACK_METADATA.json" ] \
 else
     echo "  ✗ WM-02 patch-pack metadata did not preserve inline scan_context"
     [ -f "$WM02_SAFE_OUTPUT/PATCH_PACK_METADATA.json" ] && cat "$WM02_SAFE_OUTPUT/PATCH_PACK_METADATA.json"
+    FAIL=$((FAIL + 1))
+fi
+
+WM02_CLEAN_FINDINGS="$WM02_CLEAN_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$WM02_CLEAN_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| WM-02 | Direct Issue #164 campaign closure clean: closure_regrowth=>none and bypassed=>docs/issue164-direct-closure.md with github-native-closeout already present scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"wm02-clean"} | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$WM02_CLEAN_FINDINGS" "$WM02_CLEAN_OUTPUT" >/dev/null \
+    && [ ! -e "$WM02_CLEAN_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$WM02_CLEAN_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$WM02_CLEAN_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; row=d['blockers'][0]; assert row['row_id'] == 'WM-02'; assert row['blocker_code'] == 'wm02_clean_direct_campaign_closure_no_patch'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'wm02-clean'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ WM-02 clean direct campaign closure row emits no patch and preserves scan context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-02 clean direct campaign closure row generated a patch or lost no-op proof"
+    find "$WM02_CLEAN_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$WM02_CLEAN_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$WM02_CLEAN_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    [ -f "$WM02_CLEAN_OUTPUT/PATCH_PACK/WM-02-github-native-closeout-bypass.patch" ] && cat "$WM02_CLEAN_OUTPUT/PATCH_PACK/WM-02-github-native-closeout-bypass.patch"
     FAIL=$((FAIL + 1))
 fi
 
