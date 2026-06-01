@@ -53,11 +53,17 @@ CR_OUTPUT="$(mktemp -d)"
 CR_BLOCKED_OUTPUT="$(mktemp -d)"
 HFR_OUTPUT="$(mktemp -d)"
 HFR_BLOCKED_OUTPUT="$(mktemp -d)"
+WM02_SAFE_REPO="$(mktemp -d)"
+WM02_SAFE_OUTPUT="$(mktemp -d)"
+WM02_BLOCKED_REPO="$(mktemp -d)"
+WM02_BLOCKED_OUTPUT="$(mktemp -d)"
+WM02_NO_ANCHOR_REPO="$(mktemp -d)"
+WM02_NO_ANCHOR_OUTPUT="$(mktemp -d)"
 PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -271,7 +277,17 @@ cat > "$TARGET_REPO/scripts/work-close.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 WORK_DIR="${1:?work dir required}"
-shift || true
+shift
+
+# ── Parse flags ──────────────────────────────────────────────────────
+NO_NOVEL_FINDINGS=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --no-novel-findings) NO_NOVEL_FINDINGS="${2:?--no-novel-findings requires a rationale}"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
 if [ -f scripts/score-session.sh ]; then
     bash scripts/score-session.sh "$WORK_DIR" "$(basename "$WORK_DIR")"
 fi
@@ -352,7 +368,8 @@ if [ -s "$WM02_PATCH" ] \
     && grep -Fq -- '--github-native-closeout' "$WM02_PATCH" \
     && grep -Fq 'score-session-bypass.json' "$WM02_PATCH" \
     && grep -Fq 'score_session_not_authoritative' "$WM02_PATCH" \
-    && grep -Fq 'GitHub-native issue/PR closure authority' "$WM02_PATCH"; then
+    && grep -Fq 'GitHub-native issue/PR closure authority' "$WM02_PATCH" \
+    && ! grep -Fq '+    bash scripts/score-session.sh "$WORK_DIR" "$(basename "$WORK_DIR")"' "$WM02_PATCH"; then
     echo "  ✓ WM-02 patch materialized GitHub-native closeout bypass contract"
     PASS=$((PASS + 1))
 else
@@ -366,6 +383,205 @@ if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$OUTPUT_DIR/PATCH
     PASS=$((PASS + 1))
 else
     echo "  ✗ at least one generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+mkdir -p "$WM02_SAFE_REPO/scripts" "$WM02_SAFE_REPO/docs"
+cat > "$WM02_SAFE_REPO/scripts/work-close.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+WORK_DIR="${1:?work dir required}"
+shift
+
+# ── Parse flags ──────────────────────────────────────────────────────
+NO_NOVEL_FINDINGS=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --no-novel-findings) NO_NOVEL_FINDINGS="${2:?--no-novel-findings requires a rationale}"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+# ── Session grader (soft dependency) ─────────────────────────────────
+SESSION_ID=$(basename "$WORK_DIR")
+if [ -f scripts/score-session.sh ]; then
+    echo "  Running session grader..."
+    if bash scripts/score-session.sh "$WORK_DIR" "$SESSION_ID" 2>&1; then
+        echo "  Session grader complete."
+    else
+        echo "  WARNING: Session grader failed (non-blocking)."
+    fi
+fi
+echo "=== Done ==="
+EOF
+cat > "$WM02_SAFE_REPO/Makefile" <<'EOF'
+help:
+	@echo "make work-close WORK=<dir>"
+EOF
+cat > "$WM02_SAFE_REPO/docs/agent-operations.md" <<'EOF'
+# Agent Operations
+
+| Script | Purpose |
+|---|---|
+| `scripts/work-close.sh` | Work contract finalizer; runs the session grader |
+EOF
+git -C "$WM02_SAFE_REPO" init -q
+git -C "$WM02_SAFE_REPO" config user.email "test@example.com"
+git -C "$WM02_SAFE_REPO" config user.name "Test User"
+git -C "$WM02_SAFE_REPO" add .
+git -C "$WM02_SAFE_REPO" commit -q -m "init wm02 safe target"
+
+WM02_SAFE_FINDINGS="$WM02_SAFE_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$WM02_SAFE_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| WM-02 | GitHub-native closeout bypass / closure authority clarification scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"wm02"} | 3 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$WM02_SAFE_REPO" "$WM02_SAFE_FINDINGS" "$WM02_SAFE_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for safe BMA-shaped WM-02 fixture"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for safe BMA-shaped WM-02 fixture"
+    FAIL=$((FAIL + 1))
+fi
+
+WM02_SAFE_PATCH="$WM02_SAFE_OUTPUT/PATCH_PACK/WM-02-github-native-closeout-bypass.patch"
+if [ -s "$WM02_SAFE_PATCH" ] \
+    && grep -Fq 'diff --git a/scripts/work-close.sh b/scripts/work-close.sh' "$WM02_SAFE_PATCH" \
+    && grep -Fq '+GITHUB_NATIVE_CLOSEOUT=""' "$WM02_SAFE_PATCH" \
+    && grep -Fq '+        --github-native-closeout) GITHUB_NATIVE_CLOSEOUT="${2:?--github-native-closeout requires a rationale}"; shift 2 ;;' "$WM02_SAFE_PATCH" \
+    && grep -Fq '+if [ -n "$GITHUB_NATIVE_CLOSEOUT" ]; then' "$WM02_SAFE_PATCH" \
+    && grep -Fq '+elif [ -f scripts/score-session.sh ]; then' "$WM02_SAFE_PATCH" \
+    && ! grep -Fq '+    bash scripts/score-session.sh "$WORK_DIR" "$(basename "$WORK_DIR")"' "$WM02_SAFE_PATCH"; then
+    echo "  ✓ WM-02 safe fixture anchors parser and score-session bypass without EOF fallback"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-02 safe fixture did not produce semantically anchored patch"
+    [ -f "$WM02_SAFE_PATCH" ] && cat "$WM02_SAFE_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ WM-02 safe fixture patch passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-02 safe fixture patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$WM02_SAFE_OUTPUT/PATCH_PACK_METADATA.json" ] \
+    && python3 -c "import json; d=json.load(open('$WM02_SAFE_OUTPUT/PATCH_PACK_METADATA.json')); row=next(r for r in d['patches'] if r['row_id'] == 'WM-02'); assert row['patch'] == 'WM-02-github-native-closeout-bypass.patch'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'wm02'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ WM-02 patch-pack metadata preserves inline scan_context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-02 patch-pack metadata did not preserve inline scan_context"
+    [ -f "$WM02_SAFE_OUTPUT/PATCH_PACK_METADATA.json" ] && cat "$WM02_SAFE_OUTPUT/PATCH_PACK_METADATA.json"
+    FAIL=$((FAIL + 1))
+fi
+
+mkdir -p "$WM02_BLOCKED_REPO/scripts"
+cat > "$WM02_BLOCKED_REPO/scripts/work-close.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+WORK_DIR="${1:?work dir required}"
+shift || true
+if [ -f scripts/score-session.sh ]; then
+    bash scripts/score-session.sh "$WORK_DIR" "$(basename "$WORK_DIR")"
+fi
+if [ -f scripts/score-session.sh ]; then
+    bash scripts/score-session.sh "$WORK_DIR" "second"
+fi
+EOF
+cat > "$WM02_BLOCKED_REPO/Makefile" <<'EOF'
+help:
+	@echo "make work-close WORK=<dir>"
+EOF
+mkdir -p "$WM02_BLOCKED_REPO/docs"
+cat > "$WM02_BLOCKED_REPO/docs/agent-operations.md" <<'EOF'
+# Agent Operations
+
+`scripts/work-close.sh` runs the session grader.
+EOF
+git -C "$WM02_BLOCKED_REPO" init -q
+git -C "$WM02_BLOCKED_REPO" config user.email "test@example.com"
+git -C "$WM02_BLOCKED_REPO" config user.name "Test User"
+git -C "$WM02_BLOCKED_REPO" add .
+git -C "$WM02_BLOCKED_REPO" commit -q -m "init ambiguous wm02 target"
+
+WM02_BLOCKED_FINDINGS="$WM02_BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$WM02_BLOCKED_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| WM-02 | GitHub-native closeout bypass / closure authority clarification scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"wm02-blocked"} | 3 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_FINDINGS" "$WM02_BLOCKED_OUTPUT" >/dev/null \
+    && [ ! -e "$WM02_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$WM02_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$WM02_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; codes={b['blocker_code'] for b in d['blockers']}; assert 'wm02_parser_shape_ambiguous_or_absent' in codes; assert 'wm02_score_session_site_ambiguous_or_absent' in codes; row=next(b for b in d['blockers'] if b['blocker_code'] == 'wm02_score_session_site_ambiguous_or_absent'); assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'wm02-blocked'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ WM-02 ambiguous fixture emits explicit parser/site patchability blockers"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-02 ambiguous fixture did not emit expected blockers"
+    [ -f "$WM02_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$WM02_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    [ -f "$WM02_BLOCKED_OUTPUT/PATCH_PACK/WM-02-github-native-closeout-bypass.patch" ] && cat "$WM02_BLOCKED_OUTPUT/PATCH_PACK/WM-02-github-native-closeout-bypass.patch"
+    FAIL=$((FAIL + 1))
+fi
+
+mkdir -p "$WM02_NO_ANCHOR_REPO/scripts"
+cat > "$WM02_NO_ANCHOR_REPO/scripts/work-close.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+WORK_DIR="${1:?work dir required}"
+shift
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --no-novel-findings) echo "${2:?--no-novel-findings requires a rationale}" >/dev/null; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+if [ -f scripts/score-session.sh ]; then
+    bash scripts/score-session.sh "$WORK_DIR" "$(basename "$WORK_DIR")"
+fi
+EOF
+git -C "$WM02_NO_ANCHOR_REPO" init -q
+git -C "$WM02_NO_ANCHOR_REPO" config user.email "test@example.com"
+git -C "$WM02_NO_ANCHOR_REPO" config user.name "Test User"
+git -C "$WM02_NO_ANCHOR_REPO" add .
+git -C "$WM02_NO_ANCHOR_REPO" commit -q -m "init no-anchor wm02 target"
+
+WM02_NO_ANCHOR_FINDINGS="$WM02_NO_ANCHOR_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$WM02_NO_ANCHOR_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| WM-02 | GitHub-native closeout bypass / closure authority clarification scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"wm02-no-anchor"} | 3 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_FINDINGS" "$WM02_NO_ANCHOR_OUTPUT" >/dev/null \
+    && [ ! -e "$WM02_NO_ANCHOR_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$WM02_NO_ANCHOR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$WM02_NO_ANCHOR_OUTPUT/PATCHABILITY_BLOCKERS.json')); codes={b['blocker_code'] for b in d['blockers']}; assert 'wm02_parser_variable_anchor_absent' in codes; row=next(b for b in d['blockers'] if b['blocker_code'] == 'wm02_parser_variable_anchor_absent'); assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'wm02-no-anchor'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ WM-02 parser without nearby variable anchor fails closed"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ WM-02 parser without nearby variable anchor did not fail closed"
+    [ -f "$WM02_NO_ANCHOR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$WM02_NO_ANCHOR_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    [ -f "$WM02_NO_ANCHOR_OUTPUT/PATCH_PACK/WM-02-github-native-closeout-bypass.patch" ] && cat "$WM02_NO_ANCHOR_OUTPUT/PATCH_PACK/WM-02-github-native-closeout-bypass.patch"
     FAIL=$((FAIL + 1))
 fi
 
