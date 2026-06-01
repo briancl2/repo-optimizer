@@ -149,17 +149,37 @@ def read_lines(path: Path) -> list[str] | None:
     return resolved.read_text(encoding="utf-8", errors="replace").splitlines()
 
 
-def record_patch_blocker(row_id: str, patch_name: str, code: str, reason: str) -> None:
-    overflow_blockers.append(
+def record_patch_blocker(
+    row_id: str,
+    patch_name: str,
+    code: str,
+    reason: str,
+    source_rows: list[dict[str, object]] | None = None,
+) -> None:
+    rows = source_rows or [
         {
             "row_id": row_id,
             "patch": patch_name,
             "findings": "",
             "files_touched": "",
+        }
+    ]
+    for row in rows:
+        blocker = {
+            "row_id": str(row.get("row_id", row_id)),
+            "patch": row.get("patch", patch_name) or patch_name,
+            "findings": row.get("findings", ""),
+            "files_touched": row.get("files_touched", ""),
             "blocker_code": code,
             "reason": reason,
         }
-    )
+        scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+        if scan_context:
+            blocker["scan_context"] = scan_context
+            claims = scan_limited_non_claim(scan_context)
+            if claims:
+                blocker["bounded_non_claims"] = claims
+        overflow_blockers.append(blocker)
 
 
 def write_patch(
@@ -989,108 +1009,176 @@ def materialize_wm01() -> None:
     write_patch(patch_dir / "WM-01-no-handback-recommendation-contract.patch", changes, "WM-01", manifest_rows_for("WM-01"))
 
 
+def wm02_record_blocker(code: str, reason: str) -> None:
+    record_patch_blocker(
+        "WM-02",
+        "WM-02-github-native-closeout-bypass.patch",
+        code,
+        reason,
+        manifest_rows_for("WM-02"),
+    )
+
+
+def wm02_parser_insert_index(lines: list[str]) -> int | None:
+    matches: list[int] = []
+    for idx in range(len(lines) - 6):
+        window = [line.strip() for line in lines[idx : idx + 7]]
+        if (
+            window[0] == 'while [ $# -gt 0 ]; do'
+            and window[1] == 'case "$1" in'
+            and any('--no-novel-findings)' in item and 'shift 2' in item for item in window[2:5])
+            and any(item == '*) shift ;;' for item in window[2:6])
+            and 'esac' in window[4:6]
+            and 'done' in window[5:7]
+        ):
+            for insert_idx in range(idx + 2, min(idx + 6, len(lines))):
+                if lines[insert_idx].strip() == '*) shift ;;':
+                    matches.append(insert_idx)
+                    break
+    return matches[0] if len(matches) == 1 else None
+
+
+def wm02_parser_start_index(lines: list[str], insert_idx: int) -> int | None:
+    for idx in range(insert_idx, -1, -1):
+        if lines[idx].strip() == 'while [ $# -gt 0 ]; do':
+            return idx
+    return None
+
+
+def wm02_variable_insert_index(lines: list[str], parser_start_idx: int) -> int | None:
+    for idx in range(parser_start_idx - 1, max(-1, parser_start_idx - 8), -1):
+        if lines[idx].strip().endswith('=""'):
+            return idx
+    return None
+
+
+def wm02_score_session_site_index(lines: list[str]) -> int | None:
+    matches = [
+        idx
+        for idx, line in enumerate(lines)
+        if line.strip() == 'if [ -f scripts/score-session.sh ]; then'
+        and any('scripts/score-session.sh' in candidate for candidate in lines[idx + 1 : idx + 6])
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 def materialize_wm02() -> None:
     if not has_manifest_row("WM-02"):
         return
 
     changes: list[tuple[str, list[str], list[str]]] = []
+    core_blocked = False
 
     rel = "scripts/work-close.sh"
     old = read_lines(repo / rel)
-    if old is not None and not any("--github-native-closeout" in line for line in old):
+    if old is None:
+        core_blocked = True
+        wm02_record_blocker(
+            "wm02_work_close_unreadable",
+            "WM-02 requires a readable, in-repository scripts/work-close.sh target file.",
+        )
+    elif not any("--github-native-closeout" in line for line in old):
         new = list(old)
-        parse_block = [
-            'GITHUB_NATIVE_CLOSEOUT=""',
-            'while [ $# -gt 0 ]; do',
-            '    case "$1" in',
-            '        --github-native-closeout) GITHUB_NATIVE_CLOSEOUT="${2:?--github-native-closeout requires a rationale}"; shift 2 ;;',
-            '        *) shift ;;',
-            '    esac',
-            'done',
-            '',
-            'if [ -n "$GITHUB_NATIVE_CLOSEOUT" ] && [ "${#GITHUB_NATIVE_CLOSEOUT}" -lt 30 ]; then',
-            '    echo "ERROR: --github-native-closeout requires a concrete rationale (>=30 chars)." >&2',
-            '    exit 1',
-            'fi',
-            '',
-        ]
-        inserted = False
-        for idx, line in enumerate(new):
-            if line.strip() in {'shift', 'shift || true'}:
-                new = new[: idx + 1] + parse_block + new[idx + 1 :]
-                inserted = True
-                break
-        if not inserted:
-            insert_at = 2 if len(new) > 2 else len(new)
-            new = new[:insert_at] + parse_block + new[insert_at:]
-
-        bypass_block = [
-            'if [ -n "$GITHUB_NATIVE_CLOSEOUT" ]; then',
-            '    BYPASS_FILE="$WORK_DIR/score-session-bypass.json"',
-            '    python3 - "$BYPASS_FILE" "$WORK_DIR" "$GITHUB_NATIVE_CLOSEOUT" <<\'PYRECEIPT\'',
-            'import json, os, sys',
-            'from datetime import datetime, timezone',
-            'out, work_dir, rationale = sys.argv[1:]',
-            'receipt = {',
-            '    "schema_version": "1.0.0",',
-            '    "mode": "github_native_issue_pr",',
-            '    "status": "score_session_not_authoritative",',
-            '    "work_dir": os.path.relpath(work_dir, os.getcwd()),',
-            '    "skipped_script": "scripts/score-session.sh",',
-            '    "rationale": rationale,',
-            '    "non_claims": [',
-            '        "Does not prove GitHub issue closure by itself.",',
-            '        "Does not apply to non-GitHub or session-local work.",',
-            '        "Does not change score-session thresholds."',
-            '    ],',
-            '    "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),',
-            '}',
-            'with open(out, "w", encoding="utf-8") as fh:',
-            '    json.dump(receipt, fh, indent=2, sort_keys=True)',
-            '    fh.write("\\n")',
-            'PYRECEIPT',
-            '    echo "  Session grader skipped: GitHub-native issue/PR closure authority."',
-            'elif [ -f scripts/score-session.sh ]; then',
-        ]
-        replaced = False
-        for idx, line in enumerate(new):
-            if line.strip() == 'if [ -f scripts/score-session.sh ]; then':
-                new = new[:idx] + bypass_block + new[idx + 1 :]
-                replaced = True
-                break
-        if not replaced:
-            new.extend([""] + bypass_block + [
-                '    bash scripts/score-session.sh "$WORK_DIR" "$(basename "$WORK_DIR")"',
-                'fi',
-            ])
-        changes.append((rel, old, new))
-
-    rel = "Makefile"
-    old = read_lines(repo / rel)
-    if old is not None and not any("--github-native-closeout" in line for line in old):
-        new = list(old)
-        help_line = '\t@echo "  bash scripts/work-close.sh <work-dir> --github-native-closeout \\\"...\\\""'
-        inserted = False
-        for idx, line in enumerate(new):
-            if "make work-close" in line:
-                new.insert(idx + 1, help_line)
-                inserted = True
-                break
-        if not inserted:
-            new.append(help_line)
-        changes.append((rel, old, new))
-
-    rel = "docs/agent-operations.md"
-    old = read_lines(repo / rel)
-    if old is not None and not any("score-session-bypass.json" in line for line in old):
-        new = [
-            line.replace(
-                "runs the session grader",
-                "runs the session grader by default and writes `score-session-bypass.json` for explicit GitHub-native issue/PR closeout",
+        parser_insert_at = wm02_parser_insert_index(new)
+        parser_start_at = wm02_parser_start_index(new, parser_insert_at) if parser_insert_at is not None else None
+        variable_insert_at = wm02_variable_insert_index(new, parser_start_at) if parser_start_at is not None else None
+        score_site_at = wm02_score_session_site_index(new)
+        if parser_insert_at is None:
+            core_blocked = True
+            wm02_record_blocker(
+                "wm02_parser_shape_ambiguous_or_absent",
+                "WM-02 requires exactly one existing scripts/work-close.sh flag parser with the expected while/case shape before inserting --github-native-closeout.",
             )
-            for line in old
-        ]
-        changes.append((rel, old, new))
+        elif variable_insert_at is None:
+            core_blocked = True
+            wm02_record_blocker(
+                "wm02_parser_variable_anchor_absent",
+                "WM-02 requires a nearby existing flag variable initializer before the work-close flag parser so --github-native-closeout state is not inserted above the script preamble.",
+            )
+        if score_site_at is None:
+            core_blocked = True
+            wm02_record_blocker(
+                "wm02_score_session_site_ambiguous_or_absent",
+                "WM-02 requires exactly one existing scripts/score-session.sh invocation guard before inserting the bypass branch.",
+            )
+        if parser_insert_at is not None and variable_insert_at is not None and score_site_at is not None:
+            parse_insert = [
+                'GITHUB_NATIVE_CLOSEOUT=""',
+                '        --github-native-closeout) GITHUB_NATIVE_CLOSEOUT="${2:?--github-native-closeout requires a rationale}"; shift 2 ;;',
+            ]
+            new.insert(variable_insert_at, parse_insert[0])
+            case_insert_at = parser_insert_at + (1 if variable_insert_at <= parser_insert_at else 0)
+            new.insert(case_insert_at, parse_insert[1])
+            validation_block = [
+                '',
+                'if [ -n "$GITHUB_NATIVE_CLOSEOUT" ] && [ "${#GITHUB_NATIVE_CLOSEOUT}" -lt 30 ]; then',
+                '    echo "ERROR: --github-native-closeout requires a concrete rationale (>=30 chars)." >&2',
+                '    exit 1',
+                'fi',
+            ]
+            parser_done_idx = next(idx for idx in range(case_insert_at, len(new)) if new[idx].strip() == 'done')
+            new = new[: parser_done_idx + 1] + validation_block + new[parser_done_idx + 1 :]
+
+            bypass_block = [
+                'if [ -n "$GITHUB_NATIVE_CLOSEOUT" ]; then',
+                '    BYPASS_FILE="$WORK_DIR/score-session-bypass.json"',
+                '    python3 - "$BYPASS_FILE" "$WORK_DIR" "$GITHUB_NATIVE_CLOSEOUT" <<\'PYRECEIPT\'',
+                'import json, os, sys',
+                'from datetime import datetime, timezone',
+                'out, work_dir, rationale = sys.argv[1:]',
+                'receipt = {',
+                '    "schema_version": "1.0.0",',
+                '    "mode": "github_native_issue_pr",',
+                '    "status": "score_session_not_authoritative",',
+                '    "work_dir": os.path.relpath(work_dir, os.getcwd()),',
+                '    "skipped_script": "scripts/score-session.sh",',
+                '    "rationale": rationale,',
+                '    "non_claims": [',
+                '        "Does not prove GitHub issue closure by itself.",',
+                '        "Does not apply to non-GitHub or session-local work.",',
+                '        "Does not change score-session thresholds."',
+                '    ],',
+                '    "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),',
+                '}',
+                'with open(out, "w", encoding="utf-8") as fh:',
+                '    json.dump(receipt, fh, indent=2, sort_keys=True)',
+                '    fh.write("\\n")',
+                'PYRECEIPT',
+                '    echo "  Session grader skipped: GitHub-native issue/PR closure authority."',
+                'elif [ -f scripts/score-session.sh ]; then',
+            ]
+            score_site_at = wm02_score_session_site_index(new)
+            if score_site_at is not None:
+                new = new[:score_site_at] + bypass_block + new[score_site_at + 1 :]
+                changes.append((rel, old, new))
+
+    if not core_blocked:
+        rel = "Makefile"
+        old = read_lines(repo / rel)
+        if old is not None and not any("--github-native-closeout" in line for line in old):
+            new = list(old)
+            help_line = '\t@echo "  bash scripts/work-close.sh <work-dir> --github-native-closeout \\\"...\\\""'
+            inserted = False
+            for idx, line in enumerate(new):
+                if "make work-close" in line:
+                    new.insert(idx + 1, help_line)
+                    inserted = True
+                    break
+            if not inserted:
+                new.append(help_line)
+            changes.append((rel, old, new))
+
+        rel = "docs/agent-operations.md"
+        old = read_lines(repo / rel)
+        if old is not None and not any("score-session-bypass.json" in line for line in old):
+            new = [
+                line.replace(
+                    "runs the session grader",
+                    "runs the session grader by default and writes `score-session-bypass.json` for explicit GitHub-native issue/PR closeout",
+                )
+                for line in old
+            ]
+            changes.append((rel, old, new))
 
     write_patch(patch_dir / "WM-02-github-native-closeout-bypass.patch", changes, "WM-02", manifest_rows_for("WM-02"))
 
