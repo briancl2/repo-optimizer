@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PATCH_DIR="$OUTPUT_DIR/PATCH_PACK"
 mkdir -p "$PATCH_DIR"
 find "$PATCH_DIR" -maxdepth 1 -type f -name '*.patch' -delete
-rm -f "$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json"
+rm -f "$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json" "$OUTPUT_DIR/PATCH_PACK_METADATA.json"
 
 echo "=== Patch Generation ==="
 echo "  Repo: $REPO"
@@ -123,6 +123,7 @@ patch_dir = Path(sys.argv[3])
 plan = findings.read_text(encoding="utf-8", errors="replace")
 repo_root = repo.resolve()
 overflow_blockers: list[dict[str, object]] = []
+patch_metadata: list[dict[str, object]] = []
 written_row_ids: set[str] = set()
 if (patch_dir / "P4-shell-hardening.patch").exists():
     written_row_ids.add("P4")
@@ -161,10 +162,15 @@ def record_patch_blocker(row_id: str, patch_name: str, code: str, reason: str) -
     )
 
 
-def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]], row_id: str) -> None:
+def write_patch(
+    patch_path: Path,
+    changes: list[tuple[str, list[str], list[str]]],
+    row_id: str,
+    source_rows: list[dict[str, object]] | None = None,
+) -> bool:
     material_changes = [(rel, old, new) for rel, old, new in changes if old != new]
     if not material_changes:
-        return
+        return False
 
     if len(material_changes) > 6:
         record_patch_blocker(
@@ -173,7 +179,7 @@ def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]
             "patch_file_limit_exceeded",
             f"Materializer for {row_id} would touch {len(material_changes)} files, above the 6-file patch limit.",
         )
-        return
+        return False
 
     net_lines = sum(abs(len(new) - len(old)) for _, old, new in material_changes)
     if net_lines > 160:
@@ -183,7 +189,7 @@ def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]
             "patch_line_limit_exceeded",
             f"Materializer for {row_id} would change {net_lines} net lines, above the 160-line patch limit.",
         )
-        return
+        return False
 
     if len(list(patch_dir.glob("*.patch"))) >= 5:
         record_patch_blocker(
@@ -192,7 +198,7 @@ def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]
             "patch_run_limit_exceeded",
             "This run already emitted the maximum 5 patch files; this row remains blocked for a later run.",
         )
-        return
+        return False
 
     parts: list[str] = []
     for rel, old, new in material_changes:
@@ -212,6 +218,10 @@ def write_patch(patch_path: Path, changes: list[tuple[str, list[str], list[str]]
     if parts:
         patch_path.write_text("\n".join(parts) + "\n", encoding="utf-8")
         written_row_ids.add(row_id)
+        if source_rows:
+            patch_metadata.extend(patch_metadata_for_rows(patch_path.name, material_changes, source_rows))
+        return True
+    return False
 
 
 def is_separator(cells: list[str]) -> bool:
@@ -220,6 +230,50 @@ def is_separator(cells: list[str]) -> bool:
 
 def is_patch_manifest_heading(text: str) -> bool:
     return bool(re.match(r"^#{1,6}\s*(?:\d+\.\s*)?Patch Manifest\b", text, re.IGNORECASE))
+
+
+def extract_scan_context(text: str) -> dict[str, object] | None:
+    marker = "scan_context="
+    start = text.find(marker)
+    if start < 0:
+        return None
+    brace_start = text.find("{", start + len(marker))
+    if brace_start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for idx in range(brace_start, len(text)):
+        char = text[idx]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    value = json.loads(text[brace_start : idx + 1])
+                except json.JSONDecodeError:
+                    return None
+                return value if isinstance(value, dict) else None
+    return None
+
+
+def scan_limited_non_claim(scan_context: dict[str, object] | None) -> list[str]:
+    if scan_context and scan_context.get("scan_limited") is True:
+        return [
+            "scan-limited metadata is preserved from the advisor recommendation; it does not prove repository-wide absence or presence beyond the recorded scan scope."
+        ]
+    return []
 
 
 def manifest_rows(text: str) -> list[dict[str, object]]:
@@ -257,9 +311,40 @@ def manifest_rows(text: str) -> list[dict[str, object]]:
                 "findings": findings_value,
                 "files_touched": files_touched,
                 "raw_row": raw,
+                "scan_context": extract_scan_context(raw),
             }
         )
     return rows
+
+
+def manifest_rows_for(row_id: str) -> list[dict[str, object]]:
+    return [row for row in manifest_rows(plan) if str(row.get("row_id", "")) == row_id]
+
+
+def patch_metadata_for_rows(
+    patch_name: str,
+    material_changes: list[tuple[str, list[str], list[str]]],
+    source_rows: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    target_files = [rel for rel, _, _ in material_changes]
+    metadata: list[dict[str, object]] = []
+    for row in source_rows:
+        scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+        if not scan_context:
+            continue
+        entry: dict[str, object] = {
+            "row_id": str(row.get("row_id", "unknown")),
+            "patch": patch_name,
+            "findings": row.get("findings", ""),
+            "files_touched": row.get("files_touched", ""),
+            "scan_context": scan_context,
+            "target_files": target_files,
+            "bounded_non_claims": scan_limited_non_claim(scan_context),
+        }
+        if len(target_files) == 1:
+            entry["target_file"] = target_files[0]
+        metadata.append(entry)
+    return metadata
 
 
 def blocker_for(row: dict[str, object]) -> dict[str, object]:
@@ -290,7 +375,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
             if supported
             else f"No deterministic patch materializer is implemented for manifest row {row_id}."
         )
-    return {
+    blocker = {
         "row_id": row_id,
         "patch": row.get("patch", ""),
         "findings": row.get("findings", ""),
@@ -298,6 +383,13 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         "blocker_code": code,
         "reason": reason,
     }
+    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+    if scan_context:
+        blocker["scan_context"] = scan_context
+        claims = scan_limited_non_claim(scan_context)
+        if claims:
+            blocker["bounded_non_claims"] = claims
+    return blocker
 
 
 def flush_manifest_blockers() -> None:
@@ -796,7 +888,7 @@ def materialize_pp01() -> None:
         ]
         changes.append((rel, old, frontmatter + old))
 
-    write_patch(patch_dir / "PP-1-skill-frontmatter.patch", changes, "PP-1")
+    write_patch(patch_dir / "PP-1-skill-frontmatter.patch", changes, "PP-1", manifest_rows_for("PP-1"))
 
 
 def materialize_pp03() -> None:
@@ -817,8 +909,8 @@ def materialize_pp03() -> None:
             else:
                 agent_changes.append((rel, old, new))
 
-    write_patch(patch_dir / "PP-3-additive-skill-metadata.patch", skill_changes, "PP-3")
-    write_patch(patch_dir / "PP-3-additive-agent-metadata.patch", agent_changes, "PP-3")
+    write_patch(patch_dir / "PP-3-additive-skill-metadata.patch", skill_changes, "PP-3", manifest_rows_for("PP-3"))
+    write_patch(patch_dir / "PP-3-additive-agent-metadata.patch", agent_changes, "PP-3", manifest_rows_for("PP-3"))
 
 
 def materialize_pp04() -> None:
@@ -845,7 +937,7 @@ def materialize_pp04() -> None:
         if old != new:
             changes.append((rel, old, new))
 
-    write_patch(patch_dir / "PP-4-hook-safety-flags.patch", changes, "PP-4")
+    write_patch(patch_dir / "PP-4-hook-safety-flags.patch", changes, "PP-4", manifest_rows_for("PP-4"))
 
 
 def materialize_wm01() -> None:
@@ -894,7 +986,7 @@ def materialize_wm01() -> None:
             continue
         changes.append((rel, old, insert_after_heading(old, block)))
 
-    write_patch(patch_dir / "WM-01-no-handback-recommendation-contract.patch", changes, "WM-01")
+    write_patch(patch_dir / "WM-01-no-handback-recommendation-contract.patch", changes, "WM-01", manifest_rows_for("WM-01"))
 
 
 def materialize_wm02() -> None:
@@ -1000,7 +1092,7 @@ def materialize_wm02() -> None:
         ]
         changes.append((rel, old, new))
 
-    write_patch(patch_dir / "WM-02-github-native-closeout-bypass.patch", changes, "WM-02")
+    write_patch(patch_dir / "WM-02-github-native-closeout-bypass.patch", changes, "WM-02", manifest_rows_for("WM-02"))
 
 
 def materialize_wm03() -> None:
@@ -1026,7 +1118,7 @@ def materialize_wm03() -> None:
     if old is not None:
         changes.append((rel, old, insert_after_heading(old, block)))
 
-    write_patch(patch_dir / "WM-03-core-five-proving-ground-guidance.patch", changes, "WM-03")
+    write_patch(patch_dir / "WM-03-core-five-proving-ground-guidance.patch", changes, "WM-03", manifest_rows_for("WM-03"))
 
 
 def materialize_wm04() -> None:
@@ -1056,7 +1148,7 @@ def materialize_wm04() -> None:
     if old is not None:
         changes.append((rel, old, insert_after_heading(old, block)))
 
-    write_patch(patch_dir / "WM-04-capability-home-owner-surface-table.patch", changes, "WM-04")
+    write_patch(patch_dir / "WM-04-capability-home-owner-surface-table.patch", changes, "WM-04", manifest_rows_for("WM-04"))
 
 
 def materialize_hs01() -> None:
@@ -1103,7 +1195,7 @@ def materialize_hs01() -> None:
         if changed:
             changes.append((rel, old, new))
 
-    write_patch(patch_dir / "HS-01-hermes-status-variable.patch", changes, "HS-01")
+    write_patch(patch_dir / "HS-01-hermes-status-variable.patch", changes, "HS-01", manifest_rows_for("HS-01"))
 
 
 def manifest_capability(row_id: str) -> str | None:
@@ -1192,7 +1284,7 @@ def materialize_cr01() -> None:
 
     block = default_capability_reconciliation_block(capability)
     new = upsert_reconciliation_block(old, block)
-    write_patch(patch_dir / patch_name, [(rel, old, new)], row_id)
+    write_patch(patch_dir / patch_name, [(rel, old, new)], row_id, manifest_rows_for(row_id))
 
 
 def hfr01_receipt_block() -> list[str]:
@@ -1233,16 +1325,21 @@ def hfr01_paths_for_row(row: dict[str, object]) -> list[str | None]:
 
 
 def hfr01_record(row: dict[str, object], patch_name: str, code: str, reason: str) -> None:
-    overflow_blockers.append(
-        {
-            "row_id": str(row.get("row_id", "HFR-01")),
-            "patch": row.get("patch", ""),
-            "findings": row.get("findings", ""),
-            "files_touched": row.get("files_touched", ""),
-            "blocker_code": code,
-            "reason": reason,
-        }
-    )
+    blocker = {
+        "row_id": str(row.get("row_id", "HFR-01")),
+        "patch": row.get("patch", ""),
+        "findings": row.get("findings", ""),
+        "files_touched": row.get("files_touched", ""),
+        "blocker_code": code,
+        "reason": reason,
+    }
+    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+    if scan_context:
+        blocker["scan_context"] = scan_context
+        claims = scan_limited_non_claim(scan_context)
+        if claims:
+            blocker["bounded_non_claims"] = claims
+    overflow_blockers.append(blocker)
 
 
 def materialize_hfr01() -> None:
@@ -1252,6 +1349,7 @@ def materialize_hfr01() -> None:
 
     patch_name = "HFR-01-hermes-foreground-run-receipt.patch"
     changes: list[tuple[str, list[str], list[str]]] = []
+    metadata_rows: list[dict[str, object]] = []
     emitted_or_blocked = False
     processed_targets: set[str] = set()
     for row in rows:
@@ -1336,13 +1434,44 @@ def materialize_hfr01() -> None:
             continue
         new = insert_after_frontmatter_or_heading(old, hfr01_receipt_block())
         changes.append((rel, old, new))
+        scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+        if scan_context:
+            metadata_rows.append(
+                {
+                    "row_id": str(row.get("row_id", "HFR-01")),
+                    "patch": patch_name,
+                    "target_file": rel,
+                    "scan_context": scan_context,
+                    "bounded_non_claims": scan_limited_non_claim(scan_context),
+                }
+            )
         processed_targets.add(rel)
         emitted_or_blocked = True
 
     if changes:
-        write_patch(patch_dir / patch_name, changes, "HFR-01")
+        if write_patch(patch_dir / patch_name, changes, "HFR-01"):
+            patch_metadata.extend(metadata_rows)
     elif emitted_or_blocked:
         written_row_ids.add("HFR-01")
+
+
+def flush_patch_metadata() -> None:
+    if not patch_metadata:
+        return
+    out_path = patch_dir.parent / "PATCH_PACK_METADATA.json"
+    payload = {
+        "schema_version": "1.0.0",
+        "artifact": "PATCH_PACK_METADATA",
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source_manifest": str(findings),
+        "patch_dir": str(patch_dir),
+        "patches": patch_metadata,
+        "bounded_non_claims": [
+            "This metadata records patch-pack provenance and preserved advisor scan context only.",
+            "It does not authorize target repository mutation or auto-apply behavior.",
+        ],
+    }
+    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 materialize_pp01()
@@ -1355,6 +1484,7 @@ materialize_wm04()
 materialize_hs01()
 materialize_cr01()
 materialize_hfr01()
+flush_patch_metadata()
 flush_manifest_blockers()
 PY
 
@@ -1408,6 +1538,50 @@ def is_patch_manifest_heading(text: str) -> bool:
     return bool(re.match(r"^#{1,6}\s*(?:\d+\.\s*)?Patch Manifest\b", text, re.IGNORECASE))
 
 
+def extract_scan_context(text: str) -> dict[str, object] | None:
+    marker = "scan_context="
+    start = text.find(marker)
+    if start < 0:
+        return None
+    brace_start = text.find("{", start + len(marker))
+    if brace_start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for idx in range(brace_start, len(text)):
+        char = text[idx]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    value = json.loads(text[brace_start : idx + 1])
+                except json.JSONDecodeError:
+                    return None
+                return value if isinstance(value, dict) else None
+    return None
+
+
+def scan_limited_non_claim(scan_context: dict[str, object] | None) -> list[str]:
+    if scan_context and scan_context.get("scan_limited") is True:
+        return [
+            "scan-limited metadata is preserved from the advisor recommendation; it does not prove repository-wide absence or presence beyond the recorded scan scope."
+        ]
+    return []
+
+
 def manifest_rows(text: str) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     headers: list[str] | None = None
@@ -1443,6 +1617,7 @@ def manifest_rows(text: str) -> list[dict[str, object]]:
                 "findings": findings_value,
                 "files_touched": files_touched,
                 "raw_row": raw,
+                "scan_context": extract_scan_context(raw),
             }
         )
     return rows
@@ -1463,7 +1638,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         if supported
         else f"No deterministic patch materializer is implemented for manifest row {row_id}."
     )
-    return {
+    blocker = {
         "row_id": row_id,
         "patch": row.get("patch", ""),
         "findings": row.get("findings", ""),
@@ -1471,6 +1646,13 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         "blocker_code": code,
         "reason": reason,
     }
+    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+    if scan_context:
+        blocker["scan_context"] = scan_context
+        claims = scan_limited_non_claim(scan_context)
+        if claims:
+            blocker["bounded_non_claims"] = claims
+    return blocker
 
 
 rows = manifest_rows(plan)

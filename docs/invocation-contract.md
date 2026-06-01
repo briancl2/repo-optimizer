@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.9 | Spec: 054 + 003 + 004 + 005 + 006 + 007 | Date: 2026-05-08
+> Version: 1.11 | Spec: 054 + 003 + 004 + 005 + 006 + 007 | Date: 2026-06-01
 
 ## Purpose
 
@@ -32,6 +32,8 @@ agent (copilot CLI). All consumers must follow this contract.
 | `audit-admission-receipt.json` | YES | Audit receipt admission verdict before optimizer discovery |
 | `CLEANUP_CONTRACT.json` | YES | Additive cleanup-safety classification and patch fail-closed metadata |
 | `PATCH_PACK/*.patch` | Only with --patch | Unified diff patches |
+| `PATCH_PACK_METADATA.json` | Only with --patch and preserved metadata | Patch-pack provenance and preserved advisor scan context |
+| `PATCHABILITY_BLOCKERS.json` | Only with --patch blockers | Patchability blockers, including preserved scan context when present |
 
 `OPTIMIZATION_SCORECARD.json`, `RUNTIME_RECEIPTS.json`, `OPERATION_EVAL.json`,
 and the deterministic coverage section in `OPTIMIZATION_PLAN.md` carry additive
@@ -83,6 +85,14 @@ recommendations that lack target paths, owner-boundary evidence, keep-set
 evidence, authorization, or sufficient evidence threshold. Missing or partial
 repo-auditor inventory maps to `authorization_status=blocked_unknown` and
 `evidence_threshold=insufficient`; it never authorizes cleanup.
+
+Patch-pack materializers preserve advisor `scan_context` metadata when a
+supported manifest row carries it inline as `scan_context={...}`. Generated
+patch rows with preserved metadata are recorded in `PATCH_PACK_METADATA.json`;
+blocked rows preserve the same object in `PATCHABILITY_BLOCKERS.json`. A
+`scan_limited: true` context is provenance only: it remains field-signal
+evidence and does not prove repository-wide absence, presence, cleanup
+readiness, or target-local repair.
 
 ## Audit Receipt Admission
 
@@ -271,6 +281,7 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.11 | 2026-06-01 | Added patch-pack scan-context preservation in generated patch metadata and patchability blockers |
 | 1.10 | 2026-05-09 | Blocked scan-limited and snapshot-limited completed audit evidence from normal readiness claims |
 | 1.9 | 2026-05-08 | Added additive P5 cleanup-safety contract metadata and patch fail-closed receipt for unsafe destructive cleanup recommendations |
 | 1.8 | 2026-05-08 | Added pointer-only target policy context metadata in `pre-flight.json`, `target-policy-context.json`, and runtime-safe context |

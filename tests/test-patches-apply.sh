@@ -838,7 +838,7 @@ cat > "$HS_FINDINGS" <<'EOF'
 
 | Patch # | Findings | Files touched |
 |---|---|---:|
-| HS-01 | replace reserved Hermes launch `status=$?` in `docs/hermes-launch.md` | 1 |
+| HS-01 | replace reserved Hermes launch `status=$?` in `docs/hermes-launch.md` scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"hs01"} | 1 |
 EOF
 
 if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$HS_FINDINGS" "$HS_OUTPUT" >/dev/null; then
@@ -868,6 +868,16 @@ if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$HS_OUTPUT/PATCH_
     PASS=$((PASS + 1))
 else
     echo "  ✗ HS-01 generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$HS_OUTPUT/PATCH_PACK_METADATA.json" ] \
+    && python3 -c "import json; d=json.load(open('$HS_OUTPUT/PATCH_PACK_METADATA.json')); row=next(r for r in d['patches'] if r['row_id'] == 'HS-01'); assert row['patch'] == 'HS-01-hermes-status-variable.patch'; assert row['target_file'] == 'docs/hermes-launch.md'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'hs01'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ HS-01 patch-pack metadata preserves inline scan_context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HS-01 patch-pack metadata did not preserve inline scan_context"
+    [ -f "$HS_OUTPUT/PATCH_PACK_METADATA.json" ] && cat "$HS_OUTPUT/PATCH_PACK_METADATA.json"
     FAIL=$((FAIL + 1))
 fi
 
@@ -979,7 +989,7 @@ cat > "$HFR_FINDINGS" <<'EOF'
 
 | Patch # | Findings | Files touched |
 |---|---|---:|
-| HFR-01 | Hermes foreground receipt adoption guidance in `docs/hermes-receipts.md` | 1 |
+| HFR-01 | Hermes foreground receipt adoption guidance in `docs/hermes-receipts.md` scan_context={"scanner":"repo-auditor-as","scanned_files":200,"eligible_files":247,"scan_limit":200,"scan_limited":true} | 1 |
 | HFR-01 | Hermes foreground receipt adoption guidance in `.agents/skills/metadata-target/SKILL.md` | 1 |
 | HFR-01 | duplicate Hermes foreground receipt adoption guidance in `docs/hermes-receipts.md` | 1 |
 EOF
@@ -1041,6 +1051,16 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+if [ -s "$HFR_OUTPUT/PATCH_PACK_METADATA.json" ] \
+    && python3 -c "import json; d=json.load(open('$HFR_OUTPUT/PATCH_PACK_METADATA.json')); rows=d['patches']; row=next(r for r in rows if r['target_file'] == 'docs/hermes-receipts.md'); assert row['row_id'] == 'HFR-01'; assert row['patch'] == 'HFR-01-hermes-foreground-run-receipt.patch'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scanned_files':200,'eligible_files':247,'scan_limit':200,'scan_limited':True}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ HFR-01 patch-pack metadata preserves inline scan_context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HFR-01 patch-pack metadata did not preserve inline scan_context"
+    [ -f "$HFR_OUTPUT/PATCH_PACK_METADATA.json" ] && cat "$HFR_OUTPUT/PATCH_PACK_METADATA.json"
+    FAIL=$((FAIL + 1))
+fi
+
 if [ -s "$HFR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
     && python3 -c "import json; d=json.load(open('$HFR_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 1; assert d['blocker_count'] == 1; assert d['blockers'][0]['blocker_code'] == 'hfr01_duplicate_target_file'"; then
     echo "  ✓ HFR-01 duplicate target row emits deterministic blocker"
@@ -1070,7 +1090,7 @@ cat > "$HFR_BLOCKED_FINDINGS" <<'EOF'
 |---|---|---:|
 | HFR-01 | Hermes foreground receipt adoption guidance in `docs/hermes-receipts.md` and `docs/hermes-receipts-grounded.md` | 2 |
 | HFR-01 | broad Hermes foreground receipt adoption guidance in `docs/hermes-receipts.md` | 2 |
-| HFR-01 | Hermes foreground receipt adoption guidance | 1 |
+| HFR-01 | Hermes foreground receipt adoption guidance scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"missing-file"} | 1 |
 | HFR-01 | Hermes foreground receipt adoption guidance in `.agents/skills/escaped/SKILL.md` | 1 |
 | HFR-01 | Hermes foreground receipt adoption guidance in `docs/hermes-receipts-grounded.md` | 1 |
 | HFR-01 | Hermes foreground receipt adoption guidance in `../../escape.md` | 1 |
@@ -1092,6 +1112,16 @@ if [ ! -e "$HFR_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
     PASS=$((PASS + 1))
 else
     echo "  ✗ HFR-01 unsafe rows did not emit expected blockers"
+    [ -f "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); row=next(r for r in d['blockers'] if r['blocker_code'] == 'hfr01_missing_named_file'); assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'missing-file'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ HFR-01 blocker preserves inline scan_context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ HFR-01 blocker did not preserve inline scan_context"
     [ -f "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
     FAIL=$((FAIL + 1))
 fi
