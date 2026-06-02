@@ -55,8 +55,10 @@ HFR_OUTPUT="$(mktemp -d)"
 HFR_BLOCKED_OUTPUT="$(mktemp -d)"
 FGR_OUTPUT="$(mktemp -d)"
 FGR_BLOCKED_OUTPUT="$(mktemp -d)"
+FGR_CONTEXT_OUTPUT="$(mktemp -d)"
 LR_OUTPUT="$(mktemp -d)"
 LR_BLOCKED_OUTPUT="$(mktemp -d)"
+LR_CONTEXT_OUTPUT="$(mktemp -d)"
 WM02_SAFE_REPO="$(mktemp -d)"
 WM02_SAFE_OUTPUT="$(mktemp -d)"
 WM02_CLEAN_OUTPUT="$(mktemp -d)"
@@ -68,7 +70,7 @@ PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$FGR_OUTPUT" "$FGR_BLOCKED_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$FGR_OUTPUT" "$FGR_BLOCKED_OUTPUT" "$FGR_CONTEXT_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$LR_CONTEXT_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -1415,7 +1417,7 @@ cat > "$FGR_FINDINGS" <<'EOF'
 
 | Patch # | Findings | Files touched |
 |---|---|---:|
-| FGR-01 | foreground failure guidance recovery block in `docs/foreground-recovery.md` scan_context={"scanner":"repo-auditor-as","scanned_files":77,"eligible_files":111,"scan_limit":100,"scan_limited":true} | 1 |
+| FGR-01 | foreground failure guidance recovery block in `docs/foreground-recovery.md` scan_context={"scanner":"repo-auditor-as","scanned_files":77,"eligible_files":111,"scan_limit":100,"scan_limited":true} evidence_context={"primary_class":"active_doc","source":"owner_issue_62"} | 1 |
 | FGR-01 | foreground failure guidance recovery block in `.agents/skills/metadata-target/SKILL.md` | 1 |
 | FGR-01 | duplicate foreground failure guidance recovery block in `docs/foreground-recovery.md` | 1 |
 EOF
@@ -1477,8 +1479,8 @@ else
 fi
 
 if [ -s "$FGR_OUTPUT/PATCH_PACK_METADATA.json" ] \
-    && python3 -c "import json; d=json.load(open('$FGR_OUTPUT/PATCH_PACK_METADATA.json')); rows=d['patches']; row=next(r for r in rows if r['target_file'] == 'docs/foreground-recovery.md'); assert row['row_id'] == 'FGR-01'; assert row['patch'] == 'FGR-01-foreground-failure-guidance-recovery.patch'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scanned_files':77,'eligible_files':111,'scan_limit':100,'scan_limited':True}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
-    echo "  ✓ FGR-01 patch-pack metadata preserves inline scan_context"
+    && python3 -c "import json; d=json.load(open('$FGR_OUTPUT/PATCH_PACK_METADATA.json')); rows=d['patches']; row=next(r for r in rows if r['target_file'] == 'docs/foreground-recovery.md'); assert row['row_id'] == 'FGR-01'; assert row['patch'] == 'FGR-01-foreground-failure-guidance-recovery.patch'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scanned_files':77,'eligible_files':111,'scan_limit':100,'scan_limited':True}; assert row['evidence_context'] == {'primary_class':'active_doc','source':'owner_issue_62'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ FGR-01 patch-pack metadata preserves inline scan_context/evidence_context"
     PASS=$((PASS + 1))
 else
     echo "  ✗ FGR-01 patch-pack metadata did not preserve inline scan_context"
@@ -1551,6 +1553,31 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+FGR_CONTEXT_FINDINGS="$FGR_CONTEXT_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$FGR_CONTEXT_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| FGR-01 | foreground failure guidance recovery block in `docs/foreground-recovery.md` scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"fgr-evidence"} evidence_context={"primary_class":"historical_work","source":"closed_issue_123"} | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$FGR_CONTEXT_FINDINGS" "$FGR_CONTEXT_OUTPUT" >/dev/null \
+    && ! compgen -G "$FGR_CONTEXT_OUTPUT/PATCH_PACK/*.patch" >/dev/null \
+    && [ -s "$FGR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$FGR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; row=d['blockers'][0]; assert row['row_id'] == 'FGR-01'; assert row['blocker_code'] == 'fgr01_non_active_evidence_context'; assert row['evidence_context'] == {'primary_class':'historical_work','source':'closed_issue_123'}; assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'fgr-evidence'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ FGR-01 non-active evidence_context fails closed with preserved metadata"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FGR-01 non-active evidence_context did not fail closed with preserved metadata"
+    find "$FGR_CONTEXT_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$FGR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$FGR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    [ -f "$FGR_CONTEXT_OUTPUT/PATCH_PACK/FGR-01-foreground-failure-guidance-recovery.patch" ] && cat "$FGR_CONTEXT_OUTPUT/PATCH_PACK/FGR-01-foreground-failure-guidance-recovery.patch"
+    FAIL=$((FAIL + 1))
+fi
+
 LR_FINDINGS="$LR_OUTPUT/OPTIMIZATION_PLAN.md"
 cat > "$LR_FINDINGS" <<'EOF'
 # Optimization Plan
@@ -1559,7 +1586,7 @@ cat > "$LR_FINDINGS" <<'EOF'
 
 | Patch # | Findings | Files touched |
 |---|---|---:|
-| LR-01 | foreground learning recovery block in `docs/learning-recovery.md` scan_context={"scanner":"repo-auditor-as","scanned_files":88,"eligible_files":120,"scan_limit":100,"scan_limited":true} | 1 |
+| LR-01 | foreground learning recovery block in `docs/learning-recovery.md` scan_context={"scanner":"repo-auditor-as","scanned_files":88,"eligible_files":120,"scan_limit":100,"scan_limited":true} evidence_context={"primary_class":"active_doc","source":"owner_issue_62"} | 1 |
 | LR-01 | foreground learning recovery block in `.agents/skills/metadata-target/SKILL.md` | 1 |
 | LR-01 | duplicate foreground learning recovery block in `docs/learning-recovery.md` | 1 |
 EOF
@@ -1624,8 +1651,8 @@ else
 fi
 
 if [ -s "$LR_OUTPUT/PATCH_PACK_METADATA.json" ] \
-    && python3 -c "import json; d=json.load(open('$LR_OUTPUT/PATCH_PACK_METADATA.json')); rows=d['patches']; row=next(r for r in rows if r['target_file'] == 'docs/learning-recovery.md'); assert row['row_id'] == 'LR-01'; assert row['patch'] == 'LR-01-foreground-learning-recovery-block.patch'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scanned_files':88,'eligible_files':120,'scan_limit':100,'scan_limited':True}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
-    echo "  ✓ LR-01 patch-pack metadata preserves inline scan_context"
+    && python3 -c "import json; d=json.load(open('$LR_OUTPUT/PATCH_PACK_METADATA.json')); rows=d['patches']; row=next(r for r in rows if r['target_file'] == 'docs/learning-recovery.md'); assert row['row_id'] == 'LR-01'; assert row['patch'] == 'LR-01-foreground-learning-recovery-block.patch'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scanned_files':88,'eligible_files':120,'scan_limit':100,'scan_limited':True}; assert row['evidence_context'] == {'primary_class':'active_doc','source':'owner_issue_62'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ LR-01 patch-pack metadata preserves inline scan_context/evidence_context"
     PASS=$((PASS + 1))
 else
     echo "  ✗ LR-01 patch-pack metadata did not preserve inline scan_context"
@@ -1695,6 +1722,31 @@ if [ -s "$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
 else
     echo "  ✗ LR-01 blocker did not preserve inline scan_context"
     [ -f "$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$LR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+LR_CONTEXT_FINDINGS="$LR_CONTEXT_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$LR_CONTEXT_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| LR-01 | foreground learning recovery block in `docs/learning-recovery.md` scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"lr-evidence"} evidence_context={"primary_class":"debug_log","source":"runtime_log"} | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$LR_CONTEXT_FINDINGS" "$LR_CONTEXT_OUTPUT" >/dev/null \
+    && ! compgen -G "$LR_CONTEXT_OUTPUT/PATCH_PACK/*.patch" >/dev/null \
+    && [ -s "$LR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$LR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; row=d['blockers'][0]; assert row['row_id'] == 'LR-01'; assert row['blocker_code'] == 'lr01_non_active_evidence_context'; assert row['evidence_context'] == {'primary_class':'debug_log','source':'runtime_log'}; assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'lr-evidence'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ LR-01 non-active evidence_context fails closed with preserved metadata"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ LR-01 non-active evidence_context did not fail closed with preserved metadata"
+    find "$LR_CONTEXT_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$LR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$LR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    [ -f "$LR_CONTEXT_OUTPUT/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch" ] && cat "$LR_CONTEXT_OUTPUT/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch"
     FAIL=$((FAIL + 1))
 fi
 

@@ -173,12 +173,7 @@ def record_patch_blocker(
             "blocker_code": code,
             "reason": reason,
         }
-        scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
-        if scan_context:
-            blocker["scan_context"] = scan_context
-            claims = scan_limited_non_claim(scan_context)
-            if claims:
-                blocker["bounded_non_claims"] = claims
+        add_row_metadata(blocker, row)
         overflow_blockers.append(blocker)
 
 
@@ -252,8 +247,7 @@ def is_patch_manifest_heading(text: str) -> bool:
     return bool(re.match(r"^#{1,6}\s*(?:\d+\.\s*)?Patch Manifest\b", text, re.IGNORECASE))
 
 
-def extract_scan_context(text: str) -> dict[str, object] | None:
-    marker = "scan_context="
+def extract_json_metadata(text: str, marker: str) -> dict[str, object] | None:
     start = text.find(marker)
     if start < 0:
         return None
@@ -286,6 +280,55 @@ def extract_scan_context(text: str) -> dict[str, object] | None:
                     return None
                 return value if isinstance(value, dict) else None
     return None
+
+
+def extract_scan_context(text: str) -> dict[str, object] | None:
+    return extract_json_metadata(text, "scan_context=")
+
+
+def extract_evidence_context(text: str) -> dict[str, object] | None:
+    return extract_json_metadata(text, "evidence_context=")
+
+
+def evidence_context_primary_class(evidence_context: dict[str, object] | None) -> str | None:
+    if not evidence_context:
+        return None
+    primary_class = evidence_context.get("primary_class")
+    return str(primary_class) if primary_class is not None else None
+
+
+def non_active_evidence_context_code(row_id: str, evidence_context: dict[str, object] | None) -> str | None:
+    primary_class = evidence_context_primary_class(evidence_context)
+    if primary_class is None or primary_class == "active_doc":
+        return None
+    normalized = row_id.lower().replace("-", "")
+    return f"{normalized}_non_active_evidence_context"
+
+
+def add_row_metadata(blocker: dict[str, object], row: dict[str, object]) -> None:
+    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+    if scan_context:
+        blocker["scan_context"] = scan_context
+        claims = scan_limited_non_claim(scan_context)
+        if claims:
+            blocker["bounded_non_claims"] = claims
+    evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
+    if evidence_context:
+        blocker["evidence_context"] = evidence_context
+
+
+def row_metadata_context(row: dict[str, object]) -> dict[str, object]:
+    entry: dict[str, object] = {}
+    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+    if scan_context:
+        entry["scan_context"] = scan_context
+        claims = scan_limited_non_claim(scan_context)
+        if claims:
+            entry["bounded_non_claims"] = claims
+    evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
+    if evidence_context:
+        entry["evidence_context"] = evidence_context
+    return entry
 
 
 def scan_limited_non_claim(scan_context: dict[str, object] | None) -> list[str]:
@@ -332,6 +375,7 @@ def manifest_rows(text: str) -> list[dict[str, object]]:
                 "files_touched": files_touched,
                 "raw_row": raw,
                 "scan_context": extract_scan_context(raw),
+                "evidence_context": extract_evidence_context(raw),
             }
         )
     return rows
@@ -357,9 +401,8 @@ def patch_metadata_for_rows(
             "patch": patch_name,
             "findings": row.get("findings", ""),
             "files_touched": row.get("files_touched", ""),
-            "scan_context": scan_context,
             "target_files": target_files,
-            "bounded_non_claims": scan_limited_non_claim(scan_context),
+            **row_metadata_context(row),
         }
         if len(target_files) == 1:
             entry["target_file"] = target_files[0]
@@ -403,12 +446,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         "blocker_code": code,
         "reason": reason,
     }
-    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
-    if scan_context:
-        blocker["scan_context"] = scan_context
-        claims = scan_limited_non_claim(scan_context)
-        if claims:
-            blocker["bounded_non_claims"] = claims
+    add_row_metadata(blocker, row)
     return blocker
 
 
@@ -1453,12 +1491,7 @@ def hfr01_record(row: dict[str, object], patch_name: str, code: str, reason: str
         "blocker_code": code,
         "reason": reason,
     }
-    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
-    if scan_context:
-        blocker["scan_context"] = scan_context
-        claims = scan_limited_non_claim(scan_context)
-        if claims:
-            blocker["bounded_non_claims"] = claims
+    add_row_metadata(blocker, row)
     overflow_blockers.append(blocker)
 
 
@@ -1554,15 +1587,14 @@ def materialize_hfr01() -> None:
             continue
         new = insert_after_frontmatter_or_heading(old, hfr01_receipt_block())
         changes.append((rel, old, new))
-        scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
-        if scan_context:
+        metadata_context = row_metadata_context(row)
+        if metadata_context:
             metadata_rows.append(
                 {
                     "row_id": str(row.get("row_id", "HFR-01")),
                     "patch": patch_name,
                     "target_file": rel,
-                    "scan_context": scan_context,
-                    "bounded_non_claims": scan_limited_non_claim(scan_context),
+                    **metadata_context,
                 }
             )
         processed_targets.add(rel)
@@ -1625,12 +1657,7 @@ def fgr01_record(row: dict[str, object], patch_name: str, code: str, reason: str
         "blocker_code": code,
         "reason": reason,
     }
-    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
-    if scan_context:
-        blocker["scan_context"] = scan_context
-        claims = scan_limited_non_claim(scan_context)
-        if claims:
-            blocker["bounded_non_claims"] = claims
+    add_row_metadata(blocker, row)
     overflow_blockers.append(blocker)
 
 
@@ -1645,6 +1672,17 @@ def materialize_fgr01() -> None:
     emitted_or_blocked = False
     processed_targets: set[str] = set()
     for row in rows:
+        evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
+        evidence_blocker_code = non_active_evidence_context_code("FGR-01", evidence_context)
+        if evidence_blocker_code:
+            fgr01_record(
+                row,
+                patch_name,
+                evidence_blocker_code,
+                "FGR-01 patch materialization requires absent evidence_context or evidence_context.primary_class=active_doc; non-active evidence contexts fail closed.",
+            )
+            emitted_or_blocked = True
+            continue
         paths = fgr01_paths_for_row(row)
         files_touched = str(row.get("files_touched", "")).strip()
         if any(path is None for path in paths):
@@ -1726,15 +1764,14 @@ def materialize_fgr01() -> None:
             continue
         new = insert_after_frontmatter_or_heading(old, fgr01_recovery_block())
         changes.append((rel, old, new))
-        scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
-        if scan_context:
+        metadata_context = row_metadata_context(row)
+        if metadata_context:
             metadata_rows.append(
                 {
                     "row_id": str(row.get("row_id", "FGR-01")),
                     "patch": patch_name,
                     "target_file": rel,
-                    "scan_context": scan_context,
-                    "bounded_non_claims": scan_limited_non_claim(scan_context),
+                    **metadata_context,
                 }
             )
         processed_targets.add(rel)
@@ -1801,12 +1838,7 @@ def lr01_record(row: dict[str, object], patch_name: str, code: str, reason: str)
         "blocker_code": code,
         "reason": reason,
     }
-    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
-    if scan_context:
-        blocker["scan_context"] = scan_context
-        claims = scan_limited_non_claim(scan_context)
-        if claims:
-            blocker["bounded_non_claims"] = claims
+    add_row_metadata(blocker, row)
     overflow_blockers.append(blocker)
 
 
@@ -1821,6 +1853,17 @@ def materialize_lr01() -> None:
     emitted_or_blocked = False
     processed_targets: set[str] = set()
     for row in rows:
+        evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
+        evidence_blocker_code = non_active_evidence_context_code("LR-01", evidence_context)
+        if evidence_blocker_code:
+            lr01_record(
+                row,
+                patch_name,
+                evidence_blocker_code,
+                "LR-01 patch materialization requires absent evidence_context or evidence_context.primary_class=active_doc; non-active evidence contexts fail closed.",
+            )
+            emitted_or_blocked = True
+            continue
         paths = lr01_paths_for_row(row)
         files_touched = str(row.get("files_touched", "")).strip()
         if any(path is None for path in paths):
@@ -1902,15 +1945,14 @@ def materialize_lr01() -> None:
             continue
         new = insert_after_frontmatter_or_heading(old, lr01_learning_recovery_block())
         changes.append((rel, old, new))
-        scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
-        if scan_context:
+        metadata_context = row_metadata_context(row)
+        if metadata_context:
             metadata_rows.append(
                 {
                     "row_id": str(row.get("row_id", "LR-01")),
                     "patch": patch_name,
                     "target_file": rel,
-                    "scan_context": scan_context,
-                    "bounded_non_claims": scan_limited_non_claim(scan_context),
+                    **metadata_context,
                 }
             )
         processed_targets.add(rel)
@@ -2008,8 +2050,7 @@ def is_patch_manifest_heading(text: str) -> bool:
     return bool(re.match(r"^#{1,6}\s*(?:\d+\.\s*)?Patch Manifest\b", text, re.IGNORECASE))
 
 
-def extract_scan_context(text: str) -> dict[str, object] | None:
-    marker = "scan_context="
+def extract_json_metadata(text: str, marker: str) -> dict[str, object] | None:
     start = text.find(marker)
     if start < 0:
         return None
@@ -2042,6 +2083,55 @@ def extract_scan_context(text: str) -> dict[str, object] | None:
                     return None
                 return value if isinstance(value, dict) else None
     return None
+
+
+def extract_scan_context(text: str) -> dict[str, object] | None:
+    return extract_json_metadata(text, "scan_context=")
+
+
+def extract_evidence_context(text: str) -> dict[str, object] | None:
+    return extract_json_metadata(text, "evidence_context=")
+
+
+def evidence_context_primary_class(evidence_context: dict[str, object] | None) -> str | None:
+    if not evidence_context:
+        return None
+    primary_class = evidence_context.get("primary_class")
+    return str(primary_class) if primary_class is not None else None
+
+
+def non_active_evidence_context_code(row_id: str, evidence_context: dict[str, object] | None) -> str | None:
+    primary_class = evidence_context_primary_class(evidence_context)
+    if primary_class is None or primary_class == "active_doc":
+        return None
+    normalized = row_id.lower().replace("-", "")
+    return f"{normalized}_non_active_evidence_context"
+
+
+def add_row_metadata(blocker: dict[str, object], row: dict[str, object]) -> None:
+    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+    if scan_context:
+        blocker["scan_context"] = scan_context
+        claims = scan_limited_non_claim(scan_context)
+        if claims:
+            blocker["bounded_non_claims"] = claims
+    evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
+    if evidence_context:
+        blocker["evidence_context"] = evidence_context
+
+
+def row_metadata_context(row: dict[str, object]) -> dict[str, object]:
+    entry: dict[str, object] = {}
+    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+    if scan_context:
+        entry["scan_context"] = scan_context
+        claims = scan_limited_non_claim(scan_context)
+        if claims:
+            entry["bounded_non_claims"] = claims
+    evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
+    if evidence_context:
+        entry["evidence_context"] = evidence_context
+    return entry
 
 
 def scan_limited_non_claim(scan_context: dict[str, object] | None) -> list[str]:
@@ -2088,6 +2178,7 @@ def manifest_rows(text: str) -> list[dict[str, object]]:
                 "files_touched": files_touched,
                 "raw_row": raw,
                 "scan_context": extract_scan_context(raw),
+                "evidence_context": extract_evidence_context(raw),
             }
         )
     return rows
@@ -2116,12 +2207,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         "blocker_code": code,
         "reason": reason,
     }
-    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
-    if scan_context:
-        blocker["scan_context"] = scan_context
-        claims = scan_limited_non_claim(scan_context)
-        if claims:
-            blocker["bounded_non_claims"] = claims
+    add_row_metadata(blocker, row)
     return blocker
 
 
