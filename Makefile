@@ -36,7 +36,7 @@ help:
 	@echo "  make collect-live-agent-receipts FIXTURES=<path> ADAPTER=<codex|copilot|generic> OUTPUT_DIR=<dir>  Collect live receipts"
 	@echo "  make cr01-replay TARGET=<path> OUTPUT_DIR=<dir> CR01_TARGET_FILE=<path> CR01_CAPABILITY=<name>"
 	@echo "                                            Replay bounded CR-01 patch-pack read-only"
-	@echo "  make recovery-runtime-replay TARGET=<path> OUTPUT_DIR=<dir> [FGR_TARGET_FILE=<path>] [LR_TARGET_FILE=<path>]"
+	@echo "  make recovery-runtime-replay TARGET=<path> OUTPUT_DIR=<dir> [FGR_TARGET_FILE=<path>] [LR_TARGET_FILE=<path>] [FROM_ADVISOR=<OPPORTUNITIES.json>]"
 	@echo "                                            Replay bounded FGR-01/LR-01 patch-pack read-only"
 	@echo "  make patch-check                         Validate existing patches"
 	@echo "  make test                                Run all tests"
@@ -122,10 +122,11 @@ cr01-replay:
 	@bash scripts/replay-cr01-patch-pack.sh "$(TARGET)" "$(OUTPUT_DIR)" "$(CR01_TARGET_FILE)" "$(CR01_CAPABILITY)"
 
 recovery-runtime-replay:
-	@test -n "$(FGR_TARGET_FILE)$(LR_TARGET_FILE)" || { echo "ERROR: set FGR_TARGET_FILE=<path> and/or LR_TARGET_FILE=<path>"; exit 2; }
+	@test -n "$(FGR_TARGET_FILE)$(LR_TARGET_FILE)$(FROM_ADVISOR)" || { echo "ERROR: set FGR_TARGET_FILE=<path>, LR_TARGET_FILE=<path>, and/or FROM_ADVISOR=<OPPORTUNITIES.json>"; exit 2; }
 	@bash scripts/replay-recovery-runtime-patch-pack.sh "$(TARGET)" "$(OUTPUT_DIR)" \
 		$(if $(FGR_TARGET_FILE),--fgr-target "$(FGR_TARGET_FILE)",) \
 		$(if $(LR_TARGET_FILE),--lr-target "$(LR_TARGET_FILE)",) \
+		$(if $(FROM_ADVISOR),--from-advisor "$(FROM_ADVISOR)",) \
 		$(if $(EXPECT_PATCHES),--expect-patches "$(EXPECT_PATCHES)",) \
 		--expect-blockers "$(EXPECT_BLOCKERS)"
 

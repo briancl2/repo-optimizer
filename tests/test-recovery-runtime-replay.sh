@@ -6,10 +6,13 @@ set -euo pipefail
 OPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET_REPO="$(mktemp -d)"
 OUTPUT_DIR="$(mktemp -d)"
+ADVISOR_OUTPUT="$(mktemp -d)"
+ADVISOR_BLOCKED_OUTPUT="$(mktemp -d)"
+MAKE_ADVISOR_OUTPUT="$(mktemp -d)"
 BLOCKED_OUTPUT="$(mktemp -d)"
 BLOCKER_ONLY_OUTPUT="$(mktemp -d)"
 LINK_PARENT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$BLOCKED_OUTPUT" "$BLOCKER_ONLY_OUTPUT" "$LINK_PARENT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$ADVISOR_OUTPUT" "$ADVISOR_BLOCKED_OUTPUT" "$MAKE_ADVISOR_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKER_ONLY_OUTPUT" "$LINK_PARENT"' EXIT
 
 mkdir -p "$TARGET_REPO/docs"
 cat > "$TARGET_REPO/docs/foreground-guide.md" <<'EOF'
@@ -17,10 +20,20 @@ cat > "$TARGET_REPO/docs/foreground-guide.md" <<'EOF'
 
 Existing foreground command guidance.
 EOF
+cat > "$TARGET_REPO/docs/advisor-foreground.md" <<'EOF'
+# Advisor Foreground
+
+Advisor foreground guidance target.
+EOF
 cat > "$TARGET_REPO/docs/learning-recovery.md" <<'EOF'
 # Learning Recovery
 
 Existing learning capture guidance.
+EOF
+cat > "$TARGET_REPO/docs/advisor-learning.md" <<'EOF'
+# Advisor Learning
+
+Advisor learning recovery target.
 EOF
 cat > "$TARGET_REPO/docs/already-grounded.md" <<'EOF'
 # Already Grounded
@@ -67,6 +80,163 @@ if [ -s "$MANIFEST" ] \
 else
     echo "  ✗ replay manifest missing expected FGR-01/LR-01 rows"
     [ -f "$MANIFEST" ] && cat "$MANIFEST"
+    exit 1
+fi
+
+ADVISOR_JSON="$ADVISOR_OUTPUT/OPPORTUNITIES.json"
+cat > "$ADVISOR_JSON" <<'EOF'
+{
+  "target": "advisor-fixture",
+  "recommendations": [
+    {
+      "id": "REC-01",
+      "title": "Add foreground failure guidance",
+      "patch_materializer": "FGR-01",
+      "patch_target_file": "docs/advisor-foreground.md",
+      "scan_context": {"scanner": "repo-upgrade-advisor", "scan_limited": true, "sample": "as-33"},
+      "evidence_context": {"primary_class": "active_doc", "source": "AS-33"},
+      "anti_pattern_family": "foreground_failure_guidance_gap",
+      "evidence_refs": ["AS-33", "receipt:fgr"],
+      "owner_surface": "BMA #417",
+      "first_deliverable": "Patch bridge row",
+      "downstream_pilot_receipt": {"artifact": "advisor-pilot", "id": "pilot-fgr"},
+      "downstream_pilot_context": {"artifact": "advisor-context", "id": "context-fgr"}
+    },
+    {
+      "id": "REC-02",
+      "title": "Add learning recovery guidance",
+      "patch_materializer": "LR-01",
+      "patch_target_file": "docs/advisor-learning.md",
+      "scan_context": {"scanner": "repo-upgrade-advisor", "scan_limited": true, "sample": "as-32"},
+      "evidence_context": {"primary_class": "active_doc", "source": "AS-32"},
+      "anti_pattern_family": "unanchored_self_learning_claim",
+      "evidence_refs": ["AS-32"],
+      "owner_surface": "BMA #417",
+      "first_deliverable": "Learning bridge row"
+    }
+  ],
+  "meta": {"timestamp": "2026-06-02T00:00:00Z", "advisor_version": "test"}
+}
+EOF
+if bash "$OPT_DIR/scripts/replay-recovery-runtime-patch-pack.sh" \
+    "$TARGET_REPO" \
+    "$ADVISOR_OUTPUT" \
+    --from-advisor "$ADVISOR_JSON" >/dev/null; then
+    echo "  ✓ recovery-runtime replay completed from advisor FGR-01/LR-01 rows without explicit targets"
+else
+    echo "  ✗ recovery-runtime replay failed from advisor safe rows"
+    find "$ADVISOR_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$ADVISOR_OUTPUT/recovery-runtime-generate-patches.log" ] && cat "$ADVISOR_OUTPUT/recovery-runtime-generate-patches.log"
+    [ -f "$ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+fi
+
+if [ -s "$ADVISOR_OUTPUT/PATCH_PACK_METADATA.json" ] \
+    && [ -s "$ADVISOR_OUTPUT/PATCH_PACK/FGR-01-foreground-failure-guidance-recovery.patch" ] \
+    && [ -s "$ADVISOR_OUTPUT/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch" ] \
+    && python3 - "$ADVISOR_OUTPUT/OPTIMIZATION_PLAN.md" "$ADVISOR_OUTPUT/PATCH_PACK_METADATA.json" "$ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$TARGET_REPO" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+manifest = Path(sys.argv[1]).read_text()
+metadata = json.loads(Path(sys.argv[2]).read_text())
+receipt = json.loads(Path(sys.argv[3]).read_text())
+target = Path(sys.argv[4])
+assert "repo-upgrade-advisor" in manifest
+assert "evidence_context={\"primary_class\":\"active_doc\"" in manifest
+assert "anti_pattern_family" in manifest
+rows = {row["target_file"]: row for row in metadata["patches"]}
+fgr = rows["docs/advisor-foreground.md"]
+lr = rows["docs/advisor-learning.md"]
+assert fgr["row_id"] == "FGR-01"
+assert lr["row_id"] == "LR-01"
+assert fgr["scan_context"]["sample"] == "as-33"
+assert lr["scan_context"]["sample"] == "as-32"
+assert fgr["evidence_context"]["primary_class"] == "active_doc"
+assert lr["evidence_context"]["primary_class"] == "active_doc"
+assert fgr["advisor_metadata"]["anti_pattern_family"] == "foreground_failure_guidance_gap"
+assert fgr["advisor_metadata"]["evidence_refs"] == ["AS-33", "receipt:fgr"]
+assert fgr["advisor_metadata"]["owner_surface"] == "BMA #417"
+assert fgr["advisor_metadata"]["first_deliverable"] == "Patch bridge row"
+assert fgr["advisor_metadata"]["downstream_pilot_receipt"]["id"] == "pilot-fgr"
+assert fgr["advisor_metadata"]["downstream_pilot_context"]["id"] == "context-fgr"
+assert receipt["advisor_artifact_path"] == str(Path(sys.argv[1]).resolve())
+assert receipt["source_advisor_artifact_path"]
+assert receipt["materializers"] == ["FGR-01", "LR-01"]
+assert receipt["target_git_state_unchanged"] is True
+assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
+PY
+then
+    echo "  ✓ advisor-derived manifest preserves metadata and target cleanliness"
+else
+    echo "  ✗ advisor-derived metadata or cleanliness proof missing"
+    [ -f "$ADVISOR_OUTPUT/OPTIMIZATION_PLAN.md" ] && cat "$ADVISOR_OUTPUT/OPTIMIZATION_PLAN.md"
+    [ -f "$ADVISOR_OUTPUT/PATCH_PACK_METADATA.json" ] && cat "$ADVISOR_OUTPUT/PATCH_PACK_METADATA.json"
+    [ -f "$ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+fi
+
+ADVISOR_BAD_JSON="$ADVISOR_BLOCKED_OUTPUT/OPPORTUNITIES.json"
+cat > "$ADVISOR_BAD_JSON" <<'EOF'
+{
+  "target": "advisor-fixture",
+  "recommendations": [
+    {"id": "REC-10", "title": "Unsupported materializer", "patch_materializer": "CR-01", "patch_target_file": "docs/advisor-foreground.md"},
+    {"id": "REC-11", "title": "Unsafe materializer target", "patch_materializer": "FGR-01", "patch_target_file": "../escape.md"},
+    "REC-12 missing recommendation object",
+    {"id": "REC-13", "title": "Ambiguous broad row", "patch_materializer": "LR-01", "patch_target_file": ["docs/advisor-learning.md", "docs/learning-recovery.md"]}
+  ],
+  "meta": {"timestamp": "2026-06-02T00:00:00Z", "advisor_version": "test"}
+}
+EOF
+if bash "$OPT_DIR/scripts/replay-recovery-runtime-patch-pack.sh" \
+    "$TARGET_REPO" \
+    "$ADVISOR_BLOCKED_OUTPUT" \
+    --from-advisor "$ADVISOR_BAD_JSON" \
+    --expect-patches 0 \
+    --expect-blockers 4 >/dev/null; then
+    echo "  ✓ advisor invalid rows are routed to PATCHABILITY_BLOCKERS.json"
+else
+    echo "  ✗ advisor invalid rows were not routed to blockers as expected"
+    find "$ADVISOR_BLOCKED_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$ADVISOR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$ADVISOR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    [ -f "$ADVISOR_BLOCKED_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_BLOCKED_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+fi
+
+if [ -s "$ADVISOR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 - "$ADVISOR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+assert payload["blocker_count"] == 4
+codes = {row["blocker_code"] for row in payload["blockers"]}
+assert "advisor_unsupported_patch_materializer" in codes
+assert "advisor_unsafe_patch_target_file" in codes
+assert "advisor_missing_recommendation_object" in codes
+assert "advisor_ambiguous_broad_row" in codes
+assert all(row.get("advisor_row") for row in payload["blockers"])
+PY
+then
+    echo "  ✓ advisor blockers preserve invalid row evidence"
+else
+    echo "  ✗ advisor blocker artifact missing invalid row evidence"
+    [ -f "$ADVISOR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$ADVISOR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    exit 1
+fi
+
+if make -C "$OPT_DIR" recovery-runtime-replay \
+    TARGET="$TARGET_REPO" \
+    OUTPUT_DIR="$MAKE_ADVISOR_OUTPUT" \
+    FROM_ADVISOR="$ADVISOR_JSON" >/dev/null; then
+    echo "  ✓ Makefile recovery-runtime-replay supports FROM_ADVISOR"
+else
+    echo "  ✗ Makefile recovery-runtime-replay failed with FROM_ADVISOR"
+    find "$MAKE_ADVISOR_OUTPUT" -maxdepth 3 -type f -print
     exit 1
 fi
 
