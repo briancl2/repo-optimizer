@@ -165,10 +165,40 @@ fi
 
 BEFORE_HEAD="$(git -C "$REPO" rev-parse HEAD)"
 BEFORE_STATUS="$(git -C "$REPO" status --short)"
+BEFORE_DIRTY_COUNT="$(git -C "$REPO" status --porcelain | wc -l | tr -d ' ')"
+TARGET_REMOTE_URL="$(git -C "$REPO" remote get-url origin 2>/dev/null || true)"
+TARGET_REPO_IDENTITY="$(python3 - "$REPO" "$TARGET_REMOTE_URL" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+
+repo_name = Path(sys.argv[1]).name
+remote = sys.argv[2].strip()
+if not remote:
+    print(repo_name)
+    raise SystemExit(0)
+
+if "://" in remote:
+    parsed = urlsplit(remote)
+    netloc = parsed.hostname or ""
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    sanitized = urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
+elif "@" in remote and ":" in remote.split("@", 1)[1]:
+    sanitized = remote.split("@", 1)[1]
+else:
+    sanitized = remote
+
+print(f"{repo_name} <{sanitized}>")
+PY
+)"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MANIFEST="$OUTPUT_ABS/OPTIMIZATION_PLAN.md"
 PATCH_DIR="$OUTPUT_ABS/PATCH_PACK"
+PATCH_METADATA="$OUTPUT_ABS/PATCH_PACK_METADATA.json"
 BLOCKERS="$OUTPUT_ABS/PATCHABILITY_BLOCKERS.json"
 RECEIPT="$OUTPUT_ABS/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
 SCORECARD="$OUTPUT_ABS/OPTIMIZATION_SCORECARD.json"
@@ -224,6 +254,7 @@ fi
 
 AFTER_HEAD="$(git -C "$REPO" rev-parse HEAD)"
 AFTER_STATUS="$(git -C "$REPO" status --short)"
+AFTER_DIRTY_COUNT="$(git -C "$REPO" status --porcelain | wc -l | tr -d ' ')"
 
 PATCH_COUNT=0
 if [ -d "$PATCH_DIR" ]; then
@@ -249,6 +280,120 @@ print(int(json.load(open(sys.argv[1])).get("blocker_count", 0)))
 PY
 )"
 fi
+
+python3 - "$PATCH_METADATA" "$BLOCKERS" "$RECEIPT" "$PATCH_DIR" "$VALIDATE_LOG" "$MANIFEST" "$REPO" "$TARGET_REPO_IDENTITY" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_DIRTY_COUNT" "$AFTER_DIRTY_COUNT" <<'PY'
+from __future__ import annotations
+
+import json
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+(
+    patch_metadata,
+    blockers,
+    receipt,
+    patch_dir,
+    validate_log,
+    manifest,
+    repo,
+    target_repo_identity,
+    before_head,
+    after_head,
+    before_dirty_count,
+    after_dirty_count,
+) = sys.argv[1:13]
+
+bounded_non_claims = [
+    "This receipt does not apply patches.",
+    "This receipt does not open downstream PRs or issues.",
+    "This receipt does not mutate the target repo.",
+    "This receipt does not install hooks or change target repo configuration.",
+    "This receipt does not start a daemon, scheduler, queue, controller, retry loop, hidden registry, background sync, MCP server, watcher, cron job, service, or autopilot.",
+    "This receipt does not perform automatic GitHub issue creation.",
+    "This receipt does not claim the generated patch pack is safe to apply without explicit operator review and an explicit downstream write step outside this pilot.",
+]
+context: dict[str, Any] = {
+    "artifact": "DOWNSTREAM_READ_ONLY_RECOVERY_RUNTIME_PILOT_RECEIPT_CONTEXT",
+    "schema_version": 1,
+    "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "contract_reference": "https://github.com/briancl2/repo-agent-core/blob/main/docs/downstream-read-only-recovery-runtime-pilot-contract.md",
+    "target_repo_identity": target_repo_identity,
+    "target_path_or_name": str(Path(repo).resolve()),
+    "target_git_head_before": before_head,
+    "target_git_head_after": after_head,
+    "target_dirty_count_before": int(before_dirty_count),
+    "target_dirty_count_after": int(after_dirty_count),
+    "auditor_as_replay_artifact_path": None,
+    "advisor_artifact_path": str(Path(manifest).resolve()),
+    "optimizer_replay_receipt_path": str(Path(receipt).resolve()),
+    "generated_patch_pack_path": str(Path(patch_dir).resolve()),
+    "patch_metadata_path": str(Path(patch_metadata).resolve()) if Path(patch_metadata).exists() else None,
+    "blocker_path": str(Path(blockers).resolve()) if Path(blockers).exists() else None,
+    "apply_check_result_path": str(Path(validate_log).resolve()),
+    "bounded_non_claims": bounded_non_claims,
+}
+
+
+def safe_target_from_text(text: str) -> str | None:
+    values = []
+    for match in re.finditer(r"`([^`]+)`", text):
+        value = match.group(1).strip()
+        if (
+            value
+            and not value.startswith("/")
+            and not value.startswith("../")
+            and "/../" not in value
+            and ".git" not in value.split("/")
+            and re.fullmatch(r"[A-Za-z0-9_./-]+(?:\.md|\.txt|/SKILL\.md)", value)
+        ):
+            values.append(value)
+    if len(set(values)) == 1:
+        return values[0]
+    return None
+
+
+def row_context(row: dict[str, Any]) -> dict[str, Any]:
+    value = dict(context)
+    target = row.get("target_file")
+    if not isinstance(target, str) or not target:
+        target = safe_target_from_text(
+            " ".join(str(row.get(key, "")) for key in ("findings", "reason", "raw_row"))
+        )
+    if target:
+        value["target_file"] = target
+    return value
+
+
+def enrich(path: Path, rows_key: str) -> None:
+    if not path.exists():
+        return
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"ERROR: cannot enrich invalid JSON artifact {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit(f"ERROR: cannot enrich non-object JSON artifact {path}")
+    payload["downstream_contract_reference"] = context["contract_reference"]
+    payload["downstream_pilot_context"] = context
+    rows = payload.get(rows_key)
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict):
+                row["downstream_pilot_context"] = row_context(row)
+    claims = payload.setdefault("bounded_non_claims", [])
+    if isinstance(claims, list):
+        for claim in bounded_non_claims:
+            if claim not in claims:
+                claims.append(claim)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+enrich(Path(patch_metadata), "patches")
+enrich(Path(blockers), "blockers")
+PY
 
 UNCHANGED=false
 if [ "$BEFORE_HEAD" = "$AFTER_HEAD" ] && [ "$BEFORE_STATUS" = "$AFTER_STATUS" ]; then
@@ -277,7 +422,7 @@ if [ "$GENERATE_STATUS" -eq 0 ] \
     STATUS="completed"
 fi
 
-python3 - "$RECEIPT" "$SCORECARD" "$STATUS" "$REPO" "$MANIFEST" "$PATCH_DIR" "$BLOCKERS" "$GENERATE_LOG" "$VALIDATE_LOG" "$GENERATE_STATUS" "$VALIDATE_STATUS" "$PATCH_COUNT" "$PATCHES_VALID" "$EXPECT_PATCHES" "$BLOCKER_COUNT" "$EXPECT_BLOCKERS" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_STATUS" "$AFTER_STATUS" "$UNCHANGED" "$SCRIPT_DIR" "$MATERIALIZERS" <<'PY'
+python3 - "$RECEIPT" "$SCORECARD" "$STATUS" "$REPO" "$MANIFEST" "$PATCH_DIR" "$BLOCKERS" "$GENERATE_LOG" "$VALIDATE_LOG" "$GENERATE_STATUS" "$VALIDATE_STATUS" "$PATCH_COUNT" "$PATCHES_VALID" "$EXPECT_PATCHES" "$BLOCKER_COUNT" "$EXPECT_BLOCKERS" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_STATUS" "$AFTER_STATUS" "$UNCHANGED" "$SCRIPT_DIR" "$MATERIALIZERS" "$BEFORE_DIRTY_COUNT" "$AFTER_DIRTY_COUNT" "$TARGET_REPO_IDENTITY" "$PATCH_METADATA" <<'PY'
 from __future__ import annotations
 
 import json
@@ -309,34 +454,83 @@ from pathlib import Path
     unchanged,
     script_dir,
     materializers,
-) = sys.argv[1:24]
+    before_dirty_count,
+    after_dirty_count,
+    target_repo_identity,
+    patch_metadata,
+) = sys.argv[1:28]
 
 script_dir_path = Path(script_dir)
 materializer_list = [item for item in materializers.split(",") if item]
 bounded_non_claims = [
-    "Replay consumes explicit FGR-01/LR-01 target rows and validates generated patch packs only.",
-    "Replay does not run a controller, scheduler, queue, daemon, retry loop, retained report, downstream mutation, or direct target mutation.",
-    "Replay does not apply generated patches to the target repository.",
+    "This receipt does not apply patches.",
+    "This receipt does not open downstream PRs or issues.",
+    "This receipt does not mutate the target repo.",
+    "This receipt does not install hooks or change target repo configuration.",
+    "This receipt does not start a daemon, scheduler, queue, controller, retry loop, hidden registry, background sync, MCP server, watcher, cron job, service, or autopilot.",
+    "This receipt does not perform automatic GitHub issue creation.",
+    "This receipt does not claim the generated patch pack is safe to apply without explicit operator review and an explicit downstream write step outside this pilot.",
 ]
+receipt_path = Path(receipt).resolve()
+patch_dir_path = Path(patch_dir).resolve()
+patch_metadata_path = Path(patch_metadata).resolve()
+blockers_path = Path(blockers).resolve()
+validate_log_path = Path(validate_log).resolve()
+generate_log_path = Path(generate_log).resolve()
+scorecard_path = Path(scorecard).resolve()
+manifest_path = Path(manifest).resolve()
+repo_path = Path(repo).resolve()
+downstream_contract_reference = "https://github.com/briancl2/repo-agent-core/blob/main/docs/downstream-read-only-recovery-runtime-pilot-contract.md"
+pilot_receipt = {
+    "artifact": "DOWNSTREAM_READ_ONLY_RECOVERY_RUNTIME_PILOT_RECEIPT",
+    "schema_version": 1,
+    "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "target_repo_identity": target_repo_identity,
+    "target_path_or_name": str(repo_path),
+    "target_git_head_before": before_head,
+    "target_git_head_after": after_head,
+    "target_dirty_count_before": int(before_dirty_count),
+    "target_dirty_count_after": int(after_dirty_count),
+    "auditor_as_replay_artifact_path": None,
+    "advisor_artifact_path": str(manifest_path),
+    "optimizer_replay_receipt_path": str(receipt_path),
+    "generated_patch_pack_path": str(patch_dir_path),
+    "patch_metadata_path": str(patch_metadata_path) if patch_metadata_path.exists() else None,
+    "blocker_path": str(blockers_path) if blockers_path.exists() else None,
+    "apply_check_result_path": str(validate_log_path),
+    "bounded_non_claims": bounded_non_claims,
+}
 payload = {
     "schema_version": "1.0.0",
     "artifact": "RECOVERY_RUNTIME_REPLAY_RECEIPT",
     "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "status": status,
-    "target_repo": str(Path(repo).resolve()),
+    "target_repo": str(repo_path),
+    "target_repo_identity": target_repo_identity,
+    "target_path_or_name": str(repo_path),
     "target_read_only": True,
     "materializers": materializer_list,
-    "manifest_path": str(Path(manifest).resolve()),
-    "patch_dir": str(Path(patch_dir).resolve()),
-    "patchability_blockers_path": str(Path(blockers).resolve()) if Path(blockers).exists() else None,
-    "receipt_path": str(Path(receipt).resolve()),
-    "optimization_scorecard_path": str(Path(scorecard).resolve()),
+    "manifest_path": str(manifest_path),
+    "advisor_artifact_path": str(manifest_path),
+    "patch_dir": str(patch_dir_path),
+    "generated_patch_pack_path": str(patch_dir_path),
+    "patch_metadata_path": str(patch_metadata_path) if patch_metadata_path.exists() else None,
+    "blocker_path": str(blockers_path) if blockers_path.exists() else None,
+    "apply_check_result_path": str(validate_log_path),
+    "patchability_blockers_path": str(blockers_path) if blockers_path.exists() else None,
+    "receipt_path": str(receipt_path),
+    "optimizer_replay_receipt_path": str(receipt_path),
+    "optimization_scorecard_path": str(scorecard_path),
     "expected_patches": int(expected_patches),
     "patches_generated": int(patch_count),
     "patches_valid": int(patches_valid),
     "expected_blockers": int(expected_blockers),
     "blocker_count": int(blocker_count),
     "target_git_state_unchanged": unchanged == "true",
+    "target_git_head_before": before_head,
+    "target_git_head_after": after_head,
+    "target_dirty_count_before": int(before_dirty_count),
+    "target_dirty_count_after": int(after_dirty_count),
     "before_git_head": before_head,
     "after_git_head": after_head,
     "before_git_status": before_status,
@@ -345,14 +539,16 @@ payload = {
         {
             "command": f"bash {script_dir_path / 'generate-patches.sh'} {repo} {manifest} {Path(patch_dir).parent}",
             "exit_code": int(generate_status),
-            "log_path": str(Path(generate_log).resolve()),
+            "log_path": str(generate_log_path),
         },
         {
             "command": f"bash {script_dir_path / 'validate-patches.sh'} {repo} {patch_dir}",
             "exit_code": int(validate_status),
-            "log_path": str(Path(validate_log).resolve()),
+            "log_path": str(validate_log_path),
         },
     ],
+    "downstream_contract_reference": downstream_contract_reference,
+    "downstream_pilot_receipt": pilot_receipt,
     "bounded_non_claims": bounded_non_claims,
 }
 scorecard_payload = {
@@ -368,7 +564,7 @@ scorecard_payload = {
     "meta": {
         "status": status,
         "patch_status": "patches_generated" if int(patch_count) else "patchability_blocked",
-        "target": str(Path(repo).resolve()),
+        "target": str(repo_path),
         "optimizer_version": "recovery-runtime-replay-v1",
     },
 }
