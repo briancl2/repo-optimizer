@@ -384,7 +384,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         code, reason = special_reasons[row_id]
     else:
         supported = bool(
-            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "LR-01"}
+            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "FGR-01", "LR-01"}
             or re.search(r"\bS-05\b", row_text)
             and re.search(r"\bS-06\b", row_text)
             and re.search(r"\bS-07\b", row_text)
@@ -1575,6 +1575,178 @@ def materialize_hfr01() -> None:
         written_row_ids.add("HFR-01")
 
 
+def fgr01_recovery_block() -> list[str]:
+    return [
+        "## Foreground Failure Guidance / Recovery",
+        "",
+        "- Failure signal: name the failed foreground command, exit status, and user-visible symptom.",
+        "- Recovery owner: link the owner issue, PR, or operator surface responsible for follow-up.",
+        "- Recovery action: state the next bounded foreground command or manual owner step; keep it one-shot and explicit.",
+        "- Evidence receipt: cite the stdout/stderr receipt path, CI run, or command transcript used to justify recovery.",
+        "- Bounded non-claims: This block does not authorize controllers, schedulers, queues, daemons, retry loops, retained reports, downstream mutation, or target mutation.",
+    ]
+
+
+def fgr01_has_recovery_block(lines: list[str]) -> bool:
+    text = "\n".join(lines).lower()
+    return "## foreground failure guidance / recovery" in text or (
+        "failure signal" in text
+        and "recovery owner" in text
+        and "recovery action" in text
+        and "evidence receipt" in text
+        and "bounded non-claims" in text
+    )
+
+
+def fgr01_manifest_rows() -> list[dict[str, object]]:
+    return [row for row in manifest_rows(plan) if str(row.get("row_id", "")) == "FGR-01"]
+
+
+def fgr01_paths_for_row(row: dict[str, object]) -> list[str | None]:
+    text = str(row.get("raw_row", ""))
+    paths: list[str | None] = []
+    for match in re.finditer(r"`([^`]+)`", text):
+        value = match.group(1)
+        rel = safe_rel_path(value)
+        if rel is None or has_git_path_component(rel):
+            paths.append(None)
+            continue
+        if re.fullmatch(r"[A-Za-z0-9_./-]+(?:\.md|\.txt|/SKILL\.md)", rel):
+            paths.append(rel)
+    return paths
+
+
+def fgr01_record(row: dict[str, object], patch_name: str, code: str, reason: str) -> None:
+    blocker = {
+        "row_id": str(row.get("row_id", "FGR-01")),
+        "patch": row.get("patch", ""),
+        "findings": row.get("findings", ""),
+        "files_touched": row.get("files_touched", ""),
+        "blocker_code": code,
+        "reason": reason,
+    }
+    scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+    if scan_context:
+        blocker["scan_context"] = scan_context
+        claims = scan_limited_non_claim(scan_context)
+        if claims:
+            blocker["bounded_non_claims"] = claims
+    overflow_blockers.append(blocker)
+
+
+def materialize_fgr01() -> None:
+    rows = fgr01_manifest_rows()
+    if not rows:
+        return
+
+    patch_name = "FGR-01-foreground-failure-guidance-recovery.patch"
+    changes: list[tuple[str, list[str], list[str]]] = []
+    metadata_rows: list[dict[str, object]] = []
+    emitted_or_blocked = False
+    processed_targets: set[str] = set()
+    for row in rows:
+        paths = fgr01_paths_for_row(row)
+        files_touched = str(row.get("files_touched", "")).strip()
+        if any(path is None for path in paths):
+            fgr01_record(
+                row,
+                patch_name,
+                "fgr01_unsafe_named_file",
+                "FGR-01 requires a safe repository-relative named target file; absolute paths, .git paths, or parent traversal are not patchable.",
+            )
+            emitted_or_blocked = True
+            continue
+        concrete_paths = [path for path in paths if path is not None]
+        if not concrete_paths:
+            fgr01_record(
+                row,
+                patch_name,
+                "fgr01_missing_named_file",
+                "FGR-01 requires exactly one safe named target file in the manifest row.",
+            )
+            emitted_or_blocked = True
+            continue
+        if len(dedupe_paths(concrete_paths)) != 1:
+            fgr01_record(
+                row,
+                patch_name,
+                "fgr01_ambiguous_named_files",
+                "FGR-01 requires exactly one target file so foreground failure guidance does not become a broad rewrite.",
+            )
+            emitted_or_blocked = True
+            continue
+        if files_touched != "1":
+            fgr01_record(
+                row,
+                patch_name,
+                "fgr01_broad_row_scope",
+                "FGR-01 requires a patch manifest row scoped to exactly one file; broad rows are not patchable.",
+            )
+            emitted_or_blocked = True
+            continue
+
+        rel = concrete_paths[0]
+        if rel in processed_targets:
+            fgr01_record(
+                row,
+                patch_name,
+                "fgr01_duplicate_target_file",
+                f"FGR-01 target file already has a materialized foreground failure guidance block in this run: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        path = repo / rel
+        if path.is_symlink():
+            fgr01_record(
+                row,
+                patch_name,
+                "fgr01_symlinked_target_file",
+                f"FGR-01 target file is symlinked and is not safe for deterministic patch materialization: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        old = read_lines(path)
+        if old is None:
+            fgr01_record(
+                row,
+                patch_name,
+                "fgr01_target_file_unreadable",
+                f"FGR-01 target file is missing, broad, unsafe, or outside the repository: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        if fgr01_has_recovery_block(old):
+            fgr01_record(
+                row,
+                patch_name,
+                "fgr01_already_grounded",
+                f"FGR-01 target file already contains foreground failure guidance recovery: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        new = insert_after_frontmatter_or_heading(old, fgr01_recovery_block())
+        changes.append((rel, old, new))
+        scan_context = row.get("scan_context") if isinstance(row.get("scan_context"), dict) else None
+        if scan_context:
+            metadata_rows.append(
+                {
+                    "row_id": str(row.get("row_id", "FGR-01")),
+                    "patch": patch_name,
+                    "target_file": rel,
+                    "scan_context": scan_context,
+                    "bounded_non_claims": scan_limited_non_claim(scan_context),
+                }
+            )
+        processed_targets.add(rel)
+        emitted_or_blocked = True
+
+    if changes:
+        if write_patch(patch_dir / patch_name, changes, "FGR-01"):
+            patch_metadata.extend(metadata_rows)
+    elif emitted_or_blocked:
+        written_row_ids.add("FGR-01")
+
+
 def lr01_learning_recovery_block() -> list[str]:
     return [
         "## Learning / Recovery",
@@ -1780,6 +1952,7 @@ materialize_wm04()
 materialize_hs01()
 materialize_cr01()
 materialize_hfr01()
+materialize_fgr01()
 materialize_lr01()
 flush_patch_metadata()
 flush_manifest_blockers()
@@ -1924,7 +2097,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     supported = bool(
-        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "LR-01"}
+        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "FGR-01", "LR-01"}
         or re.search(r"\bS-05\b", row_text)
         and re.search(r"\bS-06\b", row_text)
         and re.search(r"\bS-07\b", row_text)
