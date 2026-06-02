@@ -92,7 +92,10 @@ patch rows with preserved metadata are recorded in `PATCH_PACK_METADATA.json`;
 blocked rows preserve the same object in `PATCHABILITY_BLOCKERS.json`. A
 `scan_limited: true` context is provenance only: it remains field-signal
 evidence and does not prove repository-wide absence, presence, cleanup
-readiness, or target-local repair.
+readiness, or target-local repair. `FGR-01` is a bounded deterministic
+materializer for explicit one-file manifest rows: it emits patch files that add a
+compact foreground failure-guidance/recovery block to the named safe target file
+only, and it never mutates the target repository.
 
 ## Audit Receipt Admission
 

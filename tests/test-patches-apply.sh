@@ -53,6 +53,8 @@ CR_OUTPUT="$(mktemp -d)"
 CR_BLOCKED_OUTPUT="$(mktemp -d)"
 HFR_OUTPUT="$(mktemp -d)"
 HFR_BLOCKED_OUTPUT="$(mktemp -d)"
+FGR_OUTPUT="$(mktemp -d)"
+FGR_BLOCKED_OUTPUT="$(mktemp -d)"
 LR_OUTPUT="$(mktemp -d)"
 LR_BLOCKED_OUTPUT="$(mktemp -d)"
 WM02_SAFE_REPO="$(mktemp -d)"
@@ -66,7 +68,7 @@ PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$FGR_OUTPUT" "$FGR_BLOCKED_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -169,6 +171,22 @@ cat > "$TARGET_REPO/docs/learning-recovery-grounded.md" <<'EOF'
 - Reusable learning text: existing guidance.
 - Owner action: owner issue.
 - Bounded non-claims: no background memory.
+EOF
+cat > "$TARGET_REPO/docs/foreground-recovery.md" <<'EOF'
+# Foreground Recovery Guidance
+
+Capture foreground failures with bounded owner recovery steps.
+EOF
+cat > "$TARGET_REPO/docs/foreground-recovery-grounded.md" <<'EOF'
+# Grounded Foreground Recovery Guidance
+
+## Foreground Failure Guidance / Recovery
+
+- Failure signal: already recorded.
+- Recovery owner: owner issue.
+- Recovery action: bounded foreground rerun.
+- Evidence receipt: command receipt.
+- Bounded non-claims: no target mutation.
 EOF
 cat > "$TARGET_REPO/scripts/generic-status.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -1386,6 +1404,150 @@ if [ -s "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
 else
     echo "  ✗ HFR-01 blocker did not preserve inline scan_context"
     [ -f "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$HFR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+FGR_FINDINGS="$FGR_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$FGR_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| FGR-01 | foreground failure guidance recovery block in `docs/foreground-recovery.md` scan_context={"scanner":"repo-auditor-as","scanned_files":77,"eligible_files":111,"scan_limit":100,"scan_limited":true} | 1 |
+| FGR-01 | foreground failure guidance recovery block in `.agents/skills/metadata-target/SKILL.md` | 1 |
+| FGR-01 | duplicate foreground failure guidance recovery block in `docs/foreground-recovery.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$FGR_FINDINGS" "$FGR_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for FGR-01 foreground failure-guidance materializer"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for FGR-01 foreground failure-guidance materializer"
+    FAIL=$((FAIL + 1))
+fi
+
+FGR_PATCH="$FGR_OUTPUT/PATCH_PACK/FGR-01-foreground-failure-guidance-recovery.patch"
+if [ -s "$FGR_PATCH" ] \
+    && grep -Fq 'diff --git a/docs/foreground-recovery.md b/docs/foreground-recovery.md' "$FGR_PATCH" \
+    && grep -Fq 'diff --git a/.agents/skills/metadata-target/SKILL.md b/.agents/skills/metadata-target/SKILL.md' "$FGR_PATCH" \
+    && grep -Fq '+## Foreground Failure Guidance / Recovery' "$FGR_PATCH" \
+    && grep -Fq '+- Failure signal:' "$FGR_PATCH" \
+    && grep -Fq '+- Recovery owner:' "$FGR_PATCH" \
+    && grep -Fq '+- Recovery action:' "$FGR_PATCH" \
+    && grep -Fq '+- Evidence receipt:' "$FGR_PATCH" \
+    && grep -Fq '+- Bounded non-claims:' "$FGR_PATCH" \
+    && grep -Fq 'does not authorize controllers, schedulers, queues, daemons, retry loops, retained reports, downstream mutation, or target mutation' "$FGR_PATCH"; then
+    echo "  ✓ FGR-01 patch materialized compact foreground failure-guidance/recovery block only"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FGR-01 patch missing compact foreground failure-guidance/recovery block"
+    [ -f "$FGR_PATCH" ] && cat "$FGR_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if python3 - "$FGR_PATCH" <<'PY'
+import sys
+
+patch = open(sys.argv[1], encoding="utf-8").read()
+marker = "diff --git a/.agents/skills/metadata-target/SKILL.md b/.agents/skills/metadata-target/SKILL.md"
+section = patch.split(marker, 1)[1].split("\ndiff --git ", 1)[0]
+frontmatter = section.index("\n ---\n")
+heading = section.index("\n # Metadata Target")
+fgr = section.index("\n+## Foreground Failure Guidance / Recovery")
+assert frontmatter < heading < fgr
+assert "\n+---\n" not in section
+PY
+then
+    echo "  ✓ FGR-01 preserves YAML frontmatter before recovery guidance"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FGR-01 did not preserve YAML frontmatter before recovery guidance"
+    [ -f "$FGR_PATCH" ] && cat "$FGR_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$FGR_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ FGR-01 generated patch passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FGR-01 generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$FGR_OUTPUT/PATCH_PACK_METADATA.json" ] \
+    && python3 -c "import json; d=json.load(open('$FGR_OUTPUT/PATCH_PACK_METADATA.json')); rows=d['patches']; row=next(r for r in rows if r['target_file'] == 'docs/foreground-recovery.md'); assert row['row_id'] == 'FGR-01'; assert row['patch'] == 'FGR-01-foreground-failure-guidance-recovery.patch'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scanned_files':77,'eligible_files':111,'scan_limit':100,'scan_limited':True}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ FGR-01 patch-pack metadata preserves inline scan_context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FGR-01 patch-pack metadata did not preserve inline scan_context"
+    [ -f "$FGR_OUTPUT/PATCH_PACK_METADATA.json" ] && cat "$FGR_OUTPUT/PATCH_PACK_METADATA.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$FGR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$FGR_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 1; assert d['blocker_count'] == 1; assert d['blockers'][0]['blocker_code'] == 'fgr01_duplicate_target_file'"; then
+    echo "  ✓ FGR-01 duplicate target row emits deterministic blocker"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FGR-01 duplicate target row did not emit expected blocker"
+    [ -f "$FGR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$FGR_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if git -C "$TARGET_REPO" diff --quiet; then
+    echo "  ✓ FGR-01 materializer left target repo unmodified"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FGR-01 materializer mutated target repo"
+    git -C "$TARGET_REPO" diff --stat
+    FAIL=$((FAIL + 1))
+fi
+
+FGR_BLOCKED_FINDINGS="$FGR_BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$FGR_BLOCKED_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| FGR-01 | foreground failure guidance recovery block in `docs/foreground-recovery.md` and `docs/foreground-recovery-grounded.md` | 2 |
+| FGR-01 | broad foreground failure guidance recovery block in `docs/foreground-recovery.md` | 2 |
+| FGR-01 | foreground failure guidance recovery block scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"missing-file"} | 1 |
+| FGR-01 | foreground failure guidance recovery block in `.agents/skills/escaped/SKILL.md` | 1 |
+| FGR-01 | foreground failure guidance recovery block in `docs/foreground-recovery-grounded.md` | 1 |
+| FGR-01 | foreground failure guidance recovery block in `../../escape.md` | 1 |
+| FGR-01 | foreground failure guidance recovery block in `.git/hooks/recovery.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$FGR_BLOCKED_FINDINGS" "$FGR_BLOCKED_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for blocked FGR-01 manifests"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for blocked FGR-01 manifests"
+    FAIL=$((FAIL + 1))
+fi
+
+if ! compgen -G "$FGR_BLOCKED_OUTPUT/PATCH_PACK/*.patch" >/dev/null \
+    && [ -s "$FGR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$FGR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); codes=[row['blocker_code'] for row in d['blockers']]; assert d['patches_generated'] == 0; assert d['blocker_count'] == 7; assert codes == ['fgr01_ambiguous_named_files','fgr01_broad_row_scope','fgr01_missing_named_file','fgr01_symlinked_target_file','fgr01_already_grounded','fgr01_unsafe_named_file','fgr01_unsafe_named_file']"; then
+    echo "  ✓ FGR-01 unsafe rows emit PATCHABILITY_BLOCKERS.json"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FGR-01 unsafe rows did not emit expected blockers"
+    [ -f "$FGR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$FGR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$FGR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$FGR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); row=next(r for r in d['blockers'] if r['blocker_code'] == 'fgr01_missing_named_file'); assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'missing-file'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ FGR-01 blocker preserves inline scan_context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FGR-01 blocker did not preserve inline scan_context"
+    [ -f "$FGR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$FGR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
     FAIL=$((FAIL + 1))
 fi
 
