@@ -45,6 +45,8 @@ Spec-kit helper scripts retained in this repo include
 | `scripts/generate-patches.sh` | Unified diff generation |
 | `scripts/fix-diff-headers.sh` | Hunk-header recomputation |
 | `scripts/validate-patches.sh` | `git apply --check` wrapper |
+| `scripts/replay-cr01-patch-pack.sh` | Bounded read-only CR-01 capability-reconciliation patch-pack replay |
+| `scripts/replay-recovery-runtime-patch-pack.sh` | Bounded read-only FGR-01/LR-01 recovery-runtime patch-pack replay |
 | `scripts/compare-scorecards.sh` | Pre/post scorecard deltas |
 
 ## Benchmark And Receipt Scripts
