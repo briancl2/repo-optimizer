@@ -4,7 +4,7 @@
 # Usage:
 #   bash scripts/replay-recovery-runtime-patch-pack.sh <repo_path> <output_dir> \
 #     [--fgr-target <repo-relative-file>]... [--lr-target <repo-relative-file>]... \
-#     [--expect-patches <count>] [--expect-blockers <count>]
+#     [--from-advisor <OPPORTUNITIES.json>] [--expect-patches <count>] [--expect-blockers <count>]
 #
 # Builds an explicit FGR-01/LR-01 optimization manifest, generates a patch pack,
 # validates it with git apply --check, and records target git state before/after.
@@ -19,6 +19,7 @@ Usage: replay-recovery-runtime-patch-pack.sh <repo_path> <output_dir> [options]
 Options:
   --fgr-target <path>      Add one FGR-01 foreground failure guidance target file.
   --lr-target <path>       Add one LR-01 Learning Recovery target file.
+  --from-advisor <json>    Read repo-upgrade-advisor OPPORTUNITIES.json bridge rows.
   --expect-patches <n>     Required generated patch count. Defaults to one per materializer family present.
   --expect-blockers <n>    Required PATCHABILITY_BLOCKERS blocker_count. Defaults to 0.
   -h, --help               Show this help.
@@ -40,6 +41,7 @@ shift 2
 
 FGR_TARGETS=()
 LR_TARGETS=()
+FROM_ADVISOR=""
 EXPECT_PATCHES=""
 EXPECT_BLOCKERS="0"
 
@@ -51,6 +53,10 @@ while [ $# -gt 0 ]; do
             ;;
         --lr-target)
             LR_TARGETS+=("${2:?--lr-target requires a repository-relative file}")
+            shift 2
+            ;;
+        --from-advisor)
+            FROM_ADVISOR="${2:?--from-advisor requires OPPORTUNITIES.json}"
             shift 2
             ;;
         --expect-patches)
@@ -73,8 +79,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if [ "${#FGR_TARGETS[@]}" -eq 0 ] && [ "${#LR_TARGETS[@]}" -eq 0 ]; then
-    echo "ERROR: at least one --fgr-target or --lr-target is required" >&2
+if [ "${#FGR_TARGETS[@]}" -eq 0 ] && [ "${#LR_TARGETS[@]}" -eq 0 ] && [ -z "$FROM_ADVISOR" ]; then
+    echo "ERROR: at least one --fgr-target, --lr-target, or --from-advisor is required" >&2
     exit 2
 fi
 
@@ -142,6 +148,20 @@ PY
     fi
 }
 
+if [ -n "$FROM_ADVISOR" ] && [ ! -f "$FROM_ADVISOR" ]; then
+    echo "ERROR: --from-advisor file does not exist: $FROM_ADVISOR" >&2
+    exit 1
+fi
+ADVISOR_ABS=""
+if [ -n "$FROM_ADVISOR" ]; then
+    ADVISOR_ABS="$(python3 - "$FROM_ADVISOR" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).expanduser().resolve(strict=True))
+PY
+)"
+fi
+
 if [ "${#FGR_TARGETS[@]}" -gt 0 ]; then
     for rel in "${FGR_TARGETS[@]}"; do
         validate_target_file "$rel"
@@ -155,10 +175,10 @@ fi
 
 if [ -z "$EXPECT_PATCHES" ]; then
     EXPECT_PATCHES=0
-    if [ "${#FGR_TARGETS[@]}" -gt 0 ]; then
+    if [ "${#FGR_TARGETS[@]}" -gt 0 ] || { [ -n "$ADVISOR_ABS" ] && grep -Fq '"patch_materializer": "FGR-01"' "$ADVISOR_ABS"; }; then
         EXPECT_PATCHES=$((EXPECT_PATCHES + 1))
     fi
-    if [ "${#LR_TARGETS[@]}" -gt 0 ]; then
+    if [ "${#LR_TARGETS[@]}" -gt 0 ] || { [ -n "$ADVISOR_ABS" ] && grep -Fq '"patch_materializer": "LR-01"' "$ADVISOR_ABS"; }; then
         EXPECT_PATCHES=$((EXPECT_PATCHES + 1))
     fi
 fi
@@ -207,7 +227,7 @@ VALIDATE_LOG="$OUTPUT_ABS/recovery-runtime-validate-patches.log"
 
 mkdir -p "$OUTPUT_ABS"
 
-MANIFEST_ARGS=("$MANIFEST" "${#FGR_TARGETS[@]}" "${#LR_TARGETS[@]}")
+MANIFEST_ARGS=("$MANIFEST" "$REPO" "$ADVISOR_ABS" "${#FGR_TARGETS[@]}" "${#LR_TARGETS[@]}")
 if [ "${#FGR_TARGETS[@]}" -gt 0 ]; then
     MANIFEST_ARGS+=("${FGR_TARGETS[@]}")
 fi
@@ -215,14 +235,149 @@ if [ "${#LR_TARGETS[@]}" -gt 0 ]; then
     MANIFEST_ARGS+=("${LR_TARGETS[@]}")
 fi
 python3 - "${MANIFEST_ARGS[@]}" <<'PY'
-from pathlib import Path
+from __future__ import annotations
+
+import json
+import re
 import sys
+from pathlib import Path, PurePosixPath
+from typing import Any
+
 manifest = Path(sys.argv[1])
-fgr_count = int(sys.argv[2])
-lr_count = int(sys.argv[3])
-values = sys.argv[4:]
+repo = Path(sys.argv[2])
+advisor_arg = sys.argv[3]
+fgr_count = int(sys.argv[4])
+lr_count = int(sys.argv[5])
+values = sys.argv[6:]
 fgr_targets = values[:fgr_count]
 lr_targets = values[fgr_count:fgr_count + lr_count]
+
+SAFE_TARGET_RE = re.compile(r"[A-Za-z0-9_./-]+")
+SUPPORTED_SUFFIXES = {".md", ".txt"}
+PRESERVE_KEYS = [
+    "anti_pattern_family",
+    "evidence_refs",
+    "owner_surface",
+    "first_deliverable",
+    "downstream_pilot_receipt",
+    "downstream_pilot_context",
+]
+
+
+def compact_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def is_safe_target(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    rel = value.strip()
+    if not rel or rel.startswith("/") or rel.startswith("../") or "/../" in rel:
+        return False
+    if any(part == ".git" for part in PurePosixPath(rel).parts):
+        return False
+    if not SAFE_TARGET_RE.fullmatch(rel):
+        return False
+    if PurePosixPath(rel).suffix not in SUPPORTED_SUFFIXES and not rel.endswith("/SKILL.md"):
+        return False
+    return (repo / rel).is_file()
+
+
+def advisor_metadata(row: dict[str, Any], *, blocker_code: str | None = None, blocker_reason: str | None = None) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"advisor_row": row}
+    for key in PRESERVE_KEYS:
+        if key in row:
+            metadata[key] = row[key]
+    if blocker_code:
+        metadata["blocker_code"] = blocker_code
+    if blocker_reason:
+        metadata["blocker_reason"] = blocker_reason
+    return metadata
+
+
+def blocker_row(row: dict[str, Any], code: str, reason: str) -> tuple[str, str, str]:
+    rec_id = str(row.get("id") or "advisor-row")
+    findings = f"Advisor bridge blocker for {rec_id}: {reason} advisor_metadata={compact_json(advisor_metadata(row, blocker_code=code, blocker_reason=reason))}"
+    safe_rec_id = re.sub(r"[^A-Za-z0-9_.-]+", "-", rec_id).strip("-") or "advisor-row"
+    return f"ADVISOR-BLOCKER-{safe_rec_id}", findings, "0"
+
+
+def advisor_manifest_rows(path: Path) -> list[tuple[str, str, str]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"ERROR: invalid --from-advisor JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit("ERROR: --from-advisor JSON must be an object")
+    recommendations = payload.get("recommendations")
+    if not isinstance(recommendations, list):
+        return [
+            blocker_row(
+                {"id": "recommendations", "value": recommendations},
+                "advisor_missing_recommendation_object",
+                "OPPORTUNITIES.json must contain a recommendations array.",
+            )
+        ]
+
+    rows: list[tuple[str, str, str]] = []
+    for idx, rec in enumerate(recommendations, start=1):
+        if not isinstance(rec, dict):
+            rows.append(
+                blocker_row(
+                    {"id": f"REC-{idx:02d}", "value": rec},
+                    "advisor_missing_recommendation_object",
+                    "Advisor recommendation entry must be an object.",
+                )
+            )
+            continue
+        materializer = rec.get("patch_materializer")
+        target = rec.get("patch_target_file")
+        if materializer not in {"FGR-01", "LR-01"}:
+            rows.append(
+                blocker_row(
+                    rec,
+                    "advisor_unsupported_patch_materializer",
+                    "Advisor bridge rows must declare patch_materializer FGR-01 or LR-01.",
+                )
+            )
+            continue
+        if isinstance(target, list) or isinstance(target, dict):
+            rows.append(
+                blocker_row(
+                    rec,
+                    "advisor_ambiguous_broad_row",
+                    "Advisor bridge rows must name exactly one patch_target_file.",
+                )
+            )
+            continue
+        if not is_safe_target(target):
+            rows.append(
+                blocker_row(
+                    rec,
+                    "advisor_unsafe_patch_target_file",
+                    "Advisor bridge row patch_target_file is missing, unsafe, unsupported, or absent from the target repo.",
+                )
+            )
+            continue
+        scan_context = rec.get("scan_context") if isinstance(rec.get("scan_context"), dict) else {
+            "scanner": "repo-upgrade-advisor",
+            "scan_limited": True,
+            "source": "--from-advisor",
+        }
+        evidence_context = rec.get("evidence_context") if isinstance(rec.get("evidence_context"), dict) else None
+        finding_prefix = (
+            "foreground failure guidance recovery"
+            if materializer == "FGR-01"
+            else "Learning Recovery guidance"
+        )
+        metadata = advisor_metadata(rec)
+        findings = f"{finding_prefix} for `{target}` scan_context={compact_json(scan_context)}"
+        if evidence_context:
+            findings += f" evidence_context={compact_json(evidence_context)}"
+        findings += f" advisor_metadata={compact_json(metadata)}"
+        rows.append((materializer, findings, "1"))
+    return rows
+
 lines = [
     "# Optimization Plan",
     "",
@@ -235,6 +390,9 @@ for target in fgr_targets:
     lines.append(f"| FGR-01 | foreground failure guidance recovery for `{target}` scan_context={{\"scanner\":\"recovery-runtime-replay\",\"scan_limited\":true,\"sample\":\"explicit-fgr-target\"}} | 1 |")
 for target in lr_targets:
     lines.append(f"| LR-01 | Learning Recovery guidance for `{target}` scan_context={{\"scanner\":\"recovery-runtime-replay\",\"scan_limited\":true,\"sample\":\"explicit-lr-target\"}} | 1 |")
+if advisor_arg:
+    for row_id, findings, files_touched in advisor_manifest_rows(Path(advisor_arg)):
+        lines.append(f"| {row_id} | {findings} | {files_touched} |")
 manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 
@@ -281,7 +439,7 @@ PY
 )"
 fi
 
-python3 - "$PATCH_METADATA" "$BLOCKERS" "$RECEIPT" "$PATCH_DIR" "$VALIDATE_LOG" "$MANIFEST" "$REPO" "$TARGET_REPO_IDENTITY" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_DIRTY_COUNT" "$AFTER_DIRTY_COUNT" <<'PY'
+python3 - "$PATCH_METADATA" "$BLOCKERS" "$RECEIPT" "$PATCH_DIR" "$VALIDATE_LOG" "$MANIFEST" "$REPO" "$TARGET_REPO_IDENTITY" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_DIRTY_COUNT" "$AFTER_DIRTY_COUNT" "$ADVISOR_ABS" <<'PY'
 from __future__ import annotations
 
 import json
@@ -304,7 +462,8 @@ from typing import Any
     after_head,
     before_dirty_count,
     after_dirty_count,
-) = sys.argv[1:13]
+    source_advisor_artifact,
+) = sys.argv[1:14]
 
 bounded_non_claims = [
     "This receipt does not apply patches.",
@@ -328,6 +487,7 @@ context: dict[str, Any] = {
     "target_dirty_count_after": int(after_dirty_count),
     "auditor_as_replay_artifact_path": None,
     "advisor_artifact_path": str(Path(manifest).resolve()),
+    "source_advisor_artifact_path": str(Path(source_advisor_artifact).resolve()) if source_advisor_artifact else None,
     "optimizer_replay_receipt_path": str(Path(receipt).resolve()),
     "generated_patch_pack_path": str(Path(patch_dir).resolve()),
     "patch_metadata_path": str(Path(patch_metadata).resolve()) if Path(patch_metadata).exists() else None,
@@ -401,10 +561,10 @@ if [ "$BEFORE_HEAD" = "$AFTER_HEAD" ] && [ "$BEFORE_STATUS" = "$AFTER_STATUS" ];
 fi
 
 MATERIALIZERS=""
-if [ "${#FGR_TARGETS[@]}" -gt 0 ]; then
+if grep -Eq '^\| FGR-01 \|' "$MANIFEST"; then
     MATERIALIZERS="FGR-01"
 fi
-if [ "${#LR_TARGETS[@]}" -gt 0 ]; then
+if grep -Eq '^\| LR-01 \|' "$MANIFEST"; then
     if [ -n "$MATERIALIZERS" ]; then
         MATERIALIZERS="$MATERIALIZERS,LR-01"
     else
@@ -422,7 +582,7 @@ if [ "$GENERATE_STATUS" -eq 0 ] \
     STATUS="completed"
 fi
 
-python3 - "$RECEIPT" "$SCORECARD" "$STATUS" "$REPO" "$MANIFEST" "$PATCH_DIR" "$BLOCKERS" "$GENERATE_LOG" "$VALIDATE_LOG" "$GENERATE_STATUS" "$VALIDATE_STATUS" "$PATCH_COUNT" "$PATCHES_VALID" "$EXPECT_PATCHES" "$BLOCKER_COUNT" "$EXPECT_BLOCKERS" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_STATUS" "$AFTER_STATUS" "$UNCHANGED" "$SCRIPT_DIR" "$MATERIALIZERS" "$BEFORE_DIRTY_COUNT" "$AFTER_DIRTY_COUNT" "$TARGET_REPO_IDENTITY" "$PATCH_METADATA" <<'PY'
+python3 - "$RECEIPT" "$SCORECARD" "$STATUS" "$REPO" "$MANIFEST" "$PATCH_DIR" "$BLOCKERS" "$GENERATE_LOG" "$VALIDATE_LOG" "$GENERATE_STATUS" "$VALIDATE_STATUS" "$PATCH_COUNT" "$PATCHES_VALID" "$EXPECT_PATCHES" "$BLOCKER_COUNT" "$EXPECT_BLOCKERS" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_STATUS" "$AFTER_STATUS" "$UNCHANGED" "$SCRIPT_DIR" "$MATERIALIZERS" "$BEFORE_DIRTY_COUNT" "$AFTER_DIRTY_COUNT" "$TARGET_REPO_IDENTITY" "$PATCH_METADATA" "$ADVISOR_ABS" <<'PY'
 from __future__ import annotations
 
 import json
@@ -458,7 +618,8 @@ from pathlib import Path
     after_dirty_count,
     target_repo_identity,
     patch_metadata,
-) = sys.argv[1:28]
+    source_advisor_artifact,
+) = sys.argv[1:29]
 
 script_dir_path = Path(script_dir)
 materializer_list = [item for item in materializers.split(",") if item]
@@ -493,6 +654,7 @@ pilot_receipt = {
     "target_dirty_count_after": int(after_dirty_count),
     "auditor_as_replay_artifact_path": None,
     "advisor_artifact_path": str(manifest_path),
+    "source_advisor_artifact_path": str(Path(source_advisor_artifact).resolve()) if source_advisor_artifact else None,
     "optimizer_replay_receipt_path": str(receipt_path),
     "generated_patch_pack_path": str(patch_dir_path),
     "patch_metadata_path": str(patch_metadata_path) if patch_metadata_path.exists() else None,
@@ -512,6 +674,7 @@ payload = {
     "materializers": materializer_list,
     "manifest_path": str(manifest_path),
     "advisor_artifact_path": str(manifest_path),
+    "source_advisor_artifact_path": str(Path(source_advisor_artifact).resolve()) if source_advisor_artifact else None,
     "patch_dir": str(patch_dir_path),
     "generated_patch_pack_path": str(patch_dir_path),
     "patch_metadata_path": str(patch_metadata_path) if patch_metadata_path.exists() else None,

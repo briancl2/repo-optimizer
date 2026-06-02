@@ -290,6 +290,10 @@ def extract_evidence_context(text: str) -> dict[str, object] | None:
     return extract_json_metadata(text, "evidence_context=")
 
 
+def extract_advisor_metadata(text: str) -> dict[str, object] | None:
+    return extract_json_metadata(text, "advisor_metadata=")
+
+
 def evidence_context_primary_class(evidence_context: dict[str, object] | None) -> str | None:
     if not evidence_context:
         return None
@@ -315,6 +319,11 @@ def add_row_metadata(blocker: dict[str, object], row: dict[str, object]) -> None
     evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
     if evidence_context:
         blocker["evidence_context"] = evidence_context
+    advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
+    if advisor_metadata:
+        blocker["advisor_metadata"] = advisor_metadata
+        if isinstance(advisor_metadata.get("advisor_row"), dict):
+            blocker["advisor_row"] = advisor_metadata["advisor_row"]
 
 
 def row_metadata_context(row: dict[str, object]) -> dict[str, object]:
@@ -328,6 +337,9 @@ def row_metadata_context(row: dict[str, object]) -> dict[str, object]:
     evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
     if evidence_context:
         entry["evidence_context"] = evidence_context
+    advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
+    if advisor_metadata:
+        entry["advisor_metadata"] = advisor_metadata
     return entry
 
 
@@ -376,6 +388,7 @@ def manifest_rows(text: str) -> list[dict[str, object]]:
                 "raw_row": raw,
                 "scan_context": extract_scan_context(raw),
                 "evidence_context": extract_evidence_context(raw),
+                "advisor_metadata": extract_advisor_metadata(raw),
             }
         )
     return rows
@@ -426,18 +439,25 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     if row_id in special_reasons:
         code, reason = special_reasons[row_id]
     else:
-        supported = bool(
-            row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "FGR-01", "LR-01"}
-            or re.search(r"\bS-05\b", row_text)
-            and re.search(r"\bS-06\b", row_text)
-            and re.search(r"\bS-07\b", row_text)
-        )
-        code = "supported_materializer_no_output" if supported else "unsupported_manifest_row"
-        reason = (
-            f"A deterministic materializer matched {row_id}, but the target had no apply-checkable change."
-            if supported
-            else f"No deterministic patch materializer is implemented for manifest row {row_id}."
-        )
+        advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
+        advisor_code = advisor_metadata.get("blocker_code") if advisor_metadata else None
+        advisor_reason = advisor_metadata.get("blocker_reason") if advisor_metadata else None
+        if isinstance(advisor_code, str) and advisor_code.startswith("advisor_"):
+            code = advisor_code
+            reason = str(advisor_reason or f"Advisor row {row_id} is not safe for recovery-runtime bridge materialization.")
+        else:
+            supported = bool(
+                row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "FGR-01", "LR-01"}
+                or re.search(r"\bS-05\b", row_text)
+                and re.search(r"\bS-06\b", row_text)
+                and re.search(r"\bS-07\b", row_text)
+            )
+            code = "supported_materializer_no_output" if supported else "unsupported_manifest_row"
+            reason = (
+                f"A deterministic materializer matched {row_id}, but the target had no apply-checkable change."
+                if supported
+                else f"No deterministic patch materializer is implemented for manifest row {row_id}."
+            )
     blocker = {
         "row_id": row_id,
         "patch": row.get("patch", ""),
@@ -2093,6 +2113,10 @@ def extract_evidence_context(text: str) -> dict[str, object] | None:
     return extract_json_metadata(text, "evidence_context=")
 
 
+def extract_advisor_metadata(text: str) -> dict[str, object] | None:
+    return extract_json_metadata(text, "advisor_metadata=")
+
+
 def evidence_context_primary_class(evidence_context: dict[str, object] | None) -> str | None:
     if not evidence_context:
         return None
@@ -2118,6 +2142,11 @@ def add_row_metadata(blocker: dict[str, object], row: dict[str, object]) -> None
     evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
     if evidence_context:
         blocker["evidence_context"] = evidence_context
+    advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
+    if advisor_metadata:
+        blocker["advisor_metadata"] = advisor_metadata
+        if isinstance(advisor_metadata.get("advisor_row"), dict):
+            blocker["advisor_row"] = advisor_metadata["advisor_row"]
 
 
 def row_metadata_context(row: dict[str, object]) -> dict[str, object]:
@@ -2131,6 +2160,9 @@ def row_metadata_context(row: dict[str, object]) -> dict[str, object]:
     evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
     if evidence_context:
         entry["evidence_context"] = evidence_context
+    advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
+    if advisor_metadata:
+        entry["advisor_metadata"] = advisor_metadata
     return entry
 
 
@@ -2179,6 +2211,7 @@ def manifest_rows(text: str) -> list[dict[str, object]]:
                 "raw_row": raw,
                 "scan_context": extract_scan_context(raw),
                 "evidence_context": extract_evidence_context(raw),
+                "advisor_metadata": extract_advisor_metadata(raw),
             }
         )
     return rows
