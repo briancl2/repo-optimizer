@@ -1,4 +1,4 @@
-.PHONY: review optimize transfer-oracle benchmark-optimization-workloads normalize-agent-run-receipts build-live-paired-corpus collect-live-agent-receipts cr01-replay patch-check test validate help install-hooks check work work-close health spec-init
+.PHONY: review optimize transfer-oracle benchmark-optimization-workloads normalize-agent-run-receipts build-live-paired-corpus collect-live-agent-receipts cr01-replay recovery-runtime-replay patch-check test validate help install-hooks check work work-close health spec-init
 
 TARGET ?= .
 AUDIT ?= audit_output
@@ -6,6 +6,10 @@ OUTPUT_DIR ?= optimizer_output
 PATCH ?= false
 CR01_TARGET_FILE ?= docs/capability-guidance.md
 CR01_CAPABILITY ?= Hermes -z
+FGR_TARGET_FILE ?=
+LR_TARGET_FILE ?=
+EXPECT_PATCHES ?=
+EXPECT_BLOCKERS ?= 0
 DECISIONS ?=
 CAPABILITY_FAMILY ?=
 HOTSPOT_ID ?=
@@ -32,6 +36,8 @@ help:
 	@echo "  make collect-live-agent-receipts FIXTURES=<path> ADAPTER=<codex|copilot|generic> OUTPUT_DIR=<dir>  Collect live receipts"
 	@echo "  make cr01-replay TARGET=<path> OUTPUT_DIR=<dir> CR01_TARGET_FILE=<path> CR01_CAPABILITY=<name>"
 	@echo "                                            Replay bounded CR-01 patch-pack read-only"
+	@echo "  make recovery-runtime-replay TARGET=<path> OUTPUT_DIR=<dir> [FGR_TARGET_FILE=<path>] [LR_TARGET_FILE=<path>]"
+	@echo "                                            Replay bounded FGR-01/LR-01 patch-pack read-only"
 	@echo "  make patch-check                         Validate existing patches"
 	@echo "  make test                                Run all tests"
 	@echo "  make validate OUTPUT_DIR=<dir>           Validate generated optimizer bundle integrity"
@@ -115,6 +121,14 @@ collect-live-agent-receipts:
 cr01-replay:
 	@bash scripts/replay-cr01-patch-pack.sh "$(TARGET)" "$(OUTPUT_DIR)" "$(CR01_TARGET_FILE)" "$(CR01_CAPABILITY)"
 
+recovery-runtime-replay:
+	@test -n "$(FGR_TARGET_FILE)$(LR_TARGET_FILE)" || { echo "ERROR: set FGR_TARGET_FILE=<path> and/or LR_TARGET_FILE=<path>"; exit 2; }
+	@bash scripts/replay-recovery-runtime-patch-pack.sh "$(TARGET)" "$(OUTPUT_DIR)" \
+		$(if $(FGR_TARGET_FILE),--fgr-target "$(FGR_TARGET_FILE)",) \
+		$(if $(LR_TARGET_FILE),--lr-target "$(LR_TARGET_FILE)",) \
+		$(if $(EXPECT_PATCHES),--expect-patches "$(EXPECT_PATCHES)",) \
+		--expect-blockers "$(EXPECT_BLOCKERS)"
+
 patch-check:
 	@bash scripts/validate-patches.sh "$(TARGET)" "$(OUTPUT_DIR)/PATCH_PACK"
 
@@ -127,6 +141,7 @@ test:
 	@bash tests/test-phase-output-classifier.sh
 	@bash tests/test-transfer-oracle-consumer.sh
 	@bash tests/test-cr01-replay.sh
+	@bash tests/test-recovery-runtime-replay.sh
 	@bash tests/test-patches-apply.sh
 	@bash tests/test-preflight-tiers.sh
 	@bash tests/test-target-policy-context.sh
