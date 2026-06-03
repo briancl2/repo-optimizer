@@ -8,11 +8,14 @@ TARGET_REPO="$(mktemp -d)"
 OUTPUT_DIR="$(mktemp -d)"
 ADVISOR_OUTPUT="$(mktemp -d)"
 ADVISOR_BLOCKED_OUTPUT="$(mktemp -d)"
+ADVISOR_ONLY_BLOCKER_OUTPUT="$(mktemp -d)"
+ADVISOR_MIXED_OUTPUT="$(mktemp -d)"
+MAKE_MIXED_ADVISOR_OUTPUT="$(mktemp -d)"
 MAKE_ADVISOR_OUTPUT="$(mktemp -d)"
 BLOCKED_OUTPUT="$(mktemp -d)"
 BLOCKER_ONLY_OUTPUT="$(mktemp -d)"
 LINK_PARENT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$ADVISOR_OUTPUT" "$ADVISOR_BLOCKED_OUTPUT" "$MAKE_ADVISOR_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKER_ONLY_OUTPUT" "$LINK_PARENT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$ADVISOR_OUTPUT" "$ADVISOR_BLOCKED_OUTPUT" "$ADVISOR_ONLY_BLOCKER_OUTPUT" "$ADVISOR_MIXED_OUTPUT" "$MAKE_MIXED_ADVISOR_OUTPUT" "$MAKE_ADVISOR_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKER_ONLY_OUTPUT" "$LINK_PARENT"' EXIT
 
 mkdir -p "$TARGET_REPO/docs"
 cat > "$TARGET_REPO/docs/foreground-guide.md" <<'EOF'
@@ -229,6 +232,46 @@ else
     exit 1
 fi
 
+ADVISOR_ONLY_BLOCKER_JSON="$ADVISOR_ONLY_BLOCKER_OUTPUT/OPPORTUNITIES.json"
+cat > "$ADVISOR_ONLY_BLOCKER_JSON" <<'EOF'
+{
+  "target": "advisor-only-blocker-fixture",
+  "recommendations": [
+    {
+      "id": "REC-ONLY-BLOCKER-01",
+      "title": "Unsupported recommendation without patch materializer",
+      "anti_pattern_family": "reciprocal_proving_ground_gap",
+      "owner_surface": "docs/CODE_REVIEW_GUIDE.md",
+      "first_deliverable": "Open owner issue"
+    }
+  ],
+  "meta": {"timestamp": "2026-06-03T00:00:00Z", "advisor_version": "test"}
+}
+EOF
+if bash "$OPT_DIR/scripts/replay-recovery-runtime-patch-pack.sh" \
+    "$TARGET_REPO" \
+    "$ADVISOR_ONLY_BLOCKER_OUTPUT" \
+    --from-advisor "$ADVISOR_ONLY_BLOCKER_JSON" >/dev/null; then
+    echo "  ✗ advisor-only blockers succeeded without explicit --expect-blockers"
+    find "$ADVISOR_ONLY_BLOCKER_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$ADVISOR_ONLY_BLOCKER_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_ONLY_BLOCKER_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+else
+    echo "  ✓ advisor-only blockers fail closed without explicit --expect-blockers"
+fi
+if bash "$OPT_DIR/scripts/replay-recovery-runtime-patch-pack.sh" \
+    "$TARGET_REPO" \
+    "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch" \
+    --lr-target docs/learning-recovery.md \
+    --from-advisor "$ADVISOR_ONLY_BLOCKER_JSON" >/dev/null; then
+    echo "  ✗ advisor-only blockers succeeded because an unrelated explicit patch existed"
+    find "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch" -maxdepth 3 -type f -print
+    [ -f "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+else
+    echo "  ✓ unrelated explicit patches do not satisfy advisor mixed blocker defaults"
+fi
+
 if make -C "$OPT_DIR" recovery-runtime-replay \
     TARGET="$TARGET_REPO" \
     OUTPUT_DIR="$MAKE_ADVISOR_OUTPUT" \
@@ -237,6 +280,81 @@ if make -C "$OPT_DIR" recovery-runtime-replay \
 else
     echo "  ✗ Makefile recovery-runtime-replay failed with FROM_ADVISOR"
     find "$MAKE_ADVISOR_OUTPUT" -maxdepth 3 -type f -print
+    exit 1
+fi
+
+ADVISOR_MIXED_JSON="$ADVISOR_MIXED_OUTPUT/OPPORTUNITIES.json"
+cat > "$ADVISOR_MIXED_JSON" <<'EOF'
+{
+  "target": "advisor-mixed-fixture",
+  "recommendations": [
+    {
+      "id": "REC-MIX-01",
+      "title": "Add learning recovery guidance",
+      "patch_materializer": "LR-01",
+      "patch_target_file": "docs/advisor-learning.md",
+      "scan_context": {"scanner": "repo-upgrade-advisor", "scan_limited": true, "sample": "as-32"},
+      "evidence_context": {"primary_class": "active_doc", "source": "AS-32"},
+      "anti_pattern_family": "unanchored_self_learning_claim",
+      "evidence_refs": ["AS-32"],
+      "owner_surface": "BMA #419",
+      "first_deliverable": "Learning bridge row"
+    },
+    {
+      "id": "REC-MIX-02",
+      "title": "Preserve non-materialized proving-ground guidance",
+      "anti_pattern_family": "reciprocal_proving_ground_gap",
+      "evidence_refs": ["AS-24"],
+      "owner_surface": "docs/CODE_REVIEW_GUIDE.md",
+      "first_deliverable": "Open owner issue for proving-ground guidance"
+    }
+  ],
+  "meta": {"timestamp": "2026-06-03T00:00:00Z", "advisor_version": "test"}
+}
+EOF
+if make -C "$OPT_DIR" recovery-runtime-replay \
+    TARGET="$TARGET_REPO" \
+    OUTPUT_DIR="$MAKE_MIXED_ADVISOR_OUTPUT" \
+    FROM_ADVISOR="$ADVISOR_MIXED_JSON" >/dev/null; then
+    echo "  ✓ Makefile recovery-runtime-replay tolerates advisor mixed patch and blocker rows"
+else
+    echo "  ✗ Makefile recovery-runtime-replay failed advisor mixed patch and blocker rows"
+    find "$MAKE_MIXED_ADVISOR_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$MAKE_MIXED_ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$MAKE_MIXED_ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    [ -f "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    exit 1
+fi
+
+if [ -s "$MAKE_MIXED_ADVISOR_OUTPUT/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch" ] \
+    && [ -s "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 - "$MAKE_MIXED_ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json" "$TARGET_REPO" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt = json.loads(Path(sys.argv[1]).read_text())
+blockers = json.loads(Path(sys.argv[2]).read_text())
+target = Path(sys.argv[3])
+assert receipt["status"] == "completed"
+assert receipt["patches_generated"] == 1
+assert receipt["patches_valid"] == 1
+assert receipt["expected_blockers"] == 1
+assert receipt["blocker_count"] == 1
+assert receipt["target_git_state_unchanged"] is True
+assert blockers["blocker_count"] == 1
+row = blockers["blockers"][0]
+assert row["blocker_code"] == "advisor_unsupported_patch_materializer"
+assert row["advisor_metadata"]["anti_pattern_family"] == "reciprocal_proving_ground_gap"
+assert row["advisor_metadata"]["first_deliverable"] == "Open owner issue for proving-ground guidance"
+assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
+PY
+then
+    echo "  ✓ advisor mixed replay preserves blockers while completing valid patch replay"
+else
+    echo "  ✗ advisor mixed replay did not preserve blocker completion evidence"
+    [ -f "$MAKE_MIXED_ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$MAKE_MIXED_ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    [ -f "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json"
     exit 1
 fi
 
