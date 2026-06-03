@@ -9,13 +9,16 @@ OUTPUT_DIR="$(mktemp -d)"
 ADVISOR_OUTPUT="$(mktemp -d)"
 ADVISOR_BLOCKED_OUTPUT="$(mktemp -d)"
 ADVISOR_ONLY_BLOCKER_OUTPUT="$(mktemp -d)"
+ADVISOR_NOOP_OUTPUT="$(mktemp -d)"
+ADVISOR_EMPTY_OUTPUT="$(mktemp -d)"
+ADVISOR_MALFORMED_NOOP_OUTPUT="$(mktemp -d)"
 ADVISOR_MIXED_OUTPUT="$(mktemp -d)"
 MAKE_MIXED_ADVISOR_OUTPUT="$(mktemp -d)"
 MAKE_ADVISOR_OUTPUT="$(mktemp -d)"
 BLOCKED_OUTPUT="$(mktemp -d)"
 BLOCKER_ONLY_OUTPUT="$(mktemp -d)"
 LINK_PARENT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$ADVISOR_OUTPUT" "$ADVISOR_BLOCKED_OUTPUT" "$ADVISOR_ONLY_BLOCKER_OUTPUT" "$ADVISOR_MIXED_OUTPUT" "$MAKE_MIXED_ADVISOR_OUTPUT" "$MAKE_ADVISOR_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKER_ONLY_OUTPUT" "$LINK_PARENT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$ADVISOR_OUTPUT" "$ADVISOR_BLOCKED_OUTPUT" "$ADVISOR_ONLY_BLOCKER_OUTPUT" "$ADVISOR_NOOP_OUTPUT" "$ADVISOR_EMPTY_OUTPUT" "$ADVISOR_MALFORMED_NOOP_OUTPUT" "$ADVISOR_MIXED_OUTPUT" "$MAKE_MIXED_ADVISOR_OUTPUT" "$MAKE_ADVISOR_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKER_ONLY_OUTPUT" "$LINK_PARENT"' EXIT
 
 mkdir -p "$TARGET_REPO/docs"
 cat > "$TARGET_REPO/docs/foreground-guide.md" <<'EOF'
@@ -178,6 +181,188 @@ else
     [ -f "$ADVISOR_OUTPUT/OPTIMIZATION_PLAN.md" ] && cat "$ADVISOR_OUTPUT/OPTIMIZATION_PLAN.md"
     [ -f "$ADVISOR_OUTPUT/PATCH_PACK_METADATA.json" ] && cat "$ADVISOR_OUTPUT/PATCH_PACK_METADATA.json"
     [ -f "$ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+fi
+
+ADVISOR_NOOP_JSON="$ADVISOR_NOOP_OUTPUT/OPPORTUNITIES.json"
+cat > "$ADVISOR_NOOP_JSON" <<'EOF'
+{
+  "schema_version": "advisor-opportunities-v1",
+  "target": {"name": "clean-noop-fixture"},
+  "calibration": {
+    "as_work_management_replay_noop": {
+      "status": "clean_replay_noop",
+      "source_artifact": "AS_WORK_MANAGEMENT_REPLAY",
+      "source_report": "/tmp/as-work-management-replay.json",
+      "signature_scope": ["AS-20", "AS-33"],
+      "finding_count": 2,
+      "fired_count": 0,
+      "reason": "AS_WORK_MANAGEMENT_REPLAY fired_count is zero."
+    }
+  },
+  "recommendations": [],
+  "demoted": [
+    {
+      "id": "DEMOTED-01",
+      "title": "Suppressed runner observation",
+      "patch_materializer": "FGR-01",
+      "patch_target_file": "docs/advisor-foreground.md",
+      "reason": "Suppressed because AS_WORK_MANAGEMENT_REPLAY fired_count=0."
+    }
+  ],
+  "meta": {"timestamp": "2026-06-03T00:00:00Z", "advisor_version": "test"}
+}
+EOF
+if make -C "$OPT_DIR" recovery-runtime-replay \
+    TARGET="$TARGET_REPO" \
+    OUTPUT_DIR="$ADVISOR_NOOP_OUTPUT/replay" \
+    FROM_ADVISOR="$ADVISOR_NOOP_JSON" >/dev/null; then
+    echo "  ✓ clean advisor recovery-runtime no-op succeeds with zero patches"
+else
+    echo "  ✗ clean advisor recovery-runtime no-op failed"
+    find "$ADVISOR_NOOP_OUTPUT/replay" -maxdepth 3 -type f -print
+    [ -f "$ADVISOR_NOOP_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_NOOP_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    [ -f "$ADVISOR_NOOP_OUTPUT/replay/PATCHABILITY_BLOCKERS.json" ] && cat "$ADVISOR_NOOP_OUTPUT/replay/PATCHABILITY_BLOCKERS.json"
+    exit 1
+fi
+
+if [ -s "$ADVISOR_NOOP_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] \
+    && [ -d "$ADVISOR_NOOP_OUTPUT/replay/PATCH_PACK" ] \
+    && [ ! -e "$ADVISOR_NOOP_OUTPUT/replay/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 - "$ADVISOR_NOOP_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$ADVISOR_NOOP_OUTPUT/replay/OPTIMIZATION_SCORECARD.json" "$ADVISOR_NOOP_OUTPUT/replay/OPTIMIZATION_PLAN.md" "$TARGET_REPO" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt = json.loads(Path(sys.argv[1]).read_text())
+scorecard = json.loads(Path(sys.argv[2]).read_text())
+manifest = Path(sys.argv[3]).read_text()
+target = Path(sys.argv[4])
+assert receipt["status"] == "completed"
+assert receipt["clean_advisor_noop"] is True
+assert receipt["patches_generated"] == 0
+assert receipt["patches_valid"] == 0
+assert receipt["expected_patches"] == 0
+assert receipt["blocker_count"] == 0
+assert receipt["expected_blockers"] == 0
+assert receipt["blocker_path"] is None
+assert receipt["target_git_state_unchanged"] is True
+assert receipt["source_advisor_artifact_path"].endswith("OPPORTUNITIES.json")
+assert all(command["skipped"] is True for command in receipt["commands"])
+assert {command["skip_reason"] for command in receipt["commands"]} == {"clean_advisor_recovery_runtime_noop"}
+assert scorecard["meta"]["patch_status"] == "clean_advisor_noop"
+assert "repo-optimizer:clean-advisor-recovery-runtime-noop" in manifest
+assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
+PY
+then
+    echo "  ✓ clean advisor no-op receipt records zero-output success"
+else
+    echo "  ✗ clean advisor no-op receipt did not preserve expected proof"
+    [ -f "$ADVISOR_NOOP_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_NOOP_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    [ -f "$ADVISOR_NOOP_OUTPUT/replay/OPTIMIZATION_SCORECARD.json" ] && cat "$ADVISOR_NOOP_OUTPUT/replay/OPTIMIZATION_SCORECARD.json"
+    exit 1
+fi
+
+if make -C "$OPT_DIR" validate OUTPUT_DIR="$ADVISOR_NOOP_OUTPUT/replay" >/dev/null; then
+    echo "  ✓ clean advisor no-op replay output passes make validate"
+else
+    echo "  ✗ clean advisor no-op replay output failed make validate"
+    find "$ADVISOR_NOOP_OUTPUT/replay" -maxdepth 3 -type f -print
+    exit 1
+fi
+
+mkdir -p "$ADVISOR_NOOP_OUTPUT/replay/PATCH_PACK"
+printf '%s\n' 'stale patch' > "$ADVISOR_NOOP_OUTPUT/replay/PATCH_PACK/stale.patch"
+printf '%s\n' '{"stale": true}' > "$ADVISOR_NOOP_OUTPUT/replay/PATCHABILITY_BLOCKERS.json"
+printf '%s\n' '{"stale": true}' > "$ADVISOR_NOOP_OUTPUT/replay/PATCH_PACK_METADATA.json"
+if make -C "$OPT_DIR" recovery-runtime-replay \
+    TARGET="$TARGET_REPO" \
+    OUTPUT_DIR="$ADVISOR_NOOP_OUTPUT/replay" \
+    FROM_ADVISOR="$ADVISOR_NOOP_JSON" >/dev/null \
+    && [ ! -e "$ADVISOR_NOOP_OUTPUT/replay/PATCH_PACK/stale.patch" ] \
+    && [ ! -e "$ADVISOR_NOOP_OUTPUT/replay/PATCHABILITY_BLOCKERS.json" ] \
+    && [ ! -e "$ADVISOR_NOOP_OUTPUT/replay/PATCH_PACK_METADATA.json" ]; then
+    echo "  ✓ clean advisor no-op clears stale patch-pack artifacts on reused output dirs"
+else
+    echo "  ✗ clean advisor no-op left stale patch-pack artifacts behind"
+    find "$ADVISOR_NOOP_OUTPUT/replay" -maxdepth 3 -type f -print
+    exit 1
+fi
+
+ADVISOR_EMPTY_JSON="$ADVISOR_EMPTY_OUTPUT/OPPORTUNITIES.json"
+cat > "$ADVISOR_EMPTY_JSON" <<'EOF'
+{
+  "target": "empty-untrusted-fixture",
+  "recommendations": [],
+  "meta": {"timestamp": "2026-06-03T00:00:00Z", "advisor_version": "test"}
+}
+EOF
+if make -C "$OPT_DIR" recovery-runtime-replay \
+    TARGET="$TARGET_REPO" \
+    OUTPUT_DIR="$ADVISOR_EMPTY_OUTPUT/replay" \
+    FROM_ADVISOR="$ADVISOR_EMPTY_JSON" >/dev/null; then
+    echo "  ✗ untrusted empty advisor recommendations succeeded as a no-op"
+    find "$ADVISOR_EMPTY_OUTPUT/replay" -maxdepth 3 -type f -print
+    [ -f "$ADVISOR_EMPTY_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_EMPTY_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+else
+    echo "  ✓ untrusted empty advisor recommendations still fail closed"
+fi
+
+if [ -s "$ADVISOR_EMPTY_OUTPUT/replay/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 - "$ADVISOR_EMPTY_OUTPUT/replay/PATCHABILITY_BLOCKERS.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+assert payload["blocker_count"] == 1
+assert payload["blockers"][0]["blocker_code"] == "manifest_rows_not_found"
+PY
+then
+    echo "  ✓ untrusted empty advisor replay records manifest row blocker"
+else
+    echo "  ✗ untrusted empty advisor replay did not preserve manifest row blocker"
+    [ -f "$ADVISOR_EMPTY_OUTPUT/replay/PATCHABILITY_BLOCKERS.json" ] && cat "$ADVISOR_EMPTY_OUTPUT/replay/PATCHABILITY_BLOCKERS.json"
+    exit 1
+fi
+
+ADVISOR_MALFORMED_NOOP_JSON="$ADVISOR_MALFORMED_NOOP_OUTPUT/OPPORTUNITIES.json"
+cat > "$ADVISOR_MALFORMED_NOOP_JSON" <<'EOF'
+{
+  "target": "malformed-noop-fixture",
+  "calibration": {
+    "as_work_management_replay_noop": {
+      "status": "clean_replay_noop",
+      "source_artifact": "AS_WORK_MANAGEMENT_REPLAY",
+      "finding_count": "2",
+      "fired_count": "0"
+    }
+  },
+  "recommendations": [],
+  "meta": {"timestamp": "2026-06-03T00:00:00Z", "advisor_version": "test"}
+}
+EOF
+if make -C "$OPT_DIR" recovery-runtime-replay \
+    TARGET="$TARGET_REPO" \
+    OUTPUT_DIR="$ADVISOR_MALFORMED_NOOP_OUTPUT/replay" \
+    FROM_ADVISOR="$ADVISOR_MALFORMED_NOOP_JSON" >/dev/null; then
+    echo "  ✗ malformed clean-noop calibration succeeded as a no-op"
+    find "$ADVISOR_MALFORMED_NOOP_OUTPUT/replay" -maxdepth 3 -type f -print
+    [ -f "$ADVISOR_MALFORMED_NOOP_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_MALFORMED_NOOP_OUTPUT/replay/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+else
+    echo "  ✓ malformed clean-noop calibration fails closed without crashing"
+fi
+
+if [ -s "$ADVISOR_MALFORMED_NOOP_OUTPUT/replay/PATCHABILITY_BLOCKERS.json" ] \
+    && ! grep -Fq 'repo-optimizer:clean-advisor-recovery-runtime-noop' "$ADVISOR_MALFORMED_NOOP_OUTPUT/replay/OPTIMIZATION_PLAN.md"; then
+    echo "  ✓ malformed clean-noop calibration does not emit no-op proof marker"
+else
+    echo "  ✗ malformed clean-noop calibration emitted no-op proof or omitted blocker"
+    [ -f "$ADVISOR_MALFORMED_NOOP_OUTPUT/replay/OPTIMIZATION_PLAN.md" ] && cat "$ADVISOR_MALFORMED_NOOP_OUTPUT/replay/OPTIMIZATION_PLAN.md"
+    [ -f "$ADVISOR_MALFORMED_NOOP_OUTPUT/replay/PATCHABILITY_BLOCKERS.json" ] && cat "$ADVISOR_MALFORMED_NOOP_OUTPUT/replay/PATCHABILITY_BLOCKERS.json"
     exit 1
 fi
 

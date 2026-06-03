@@ -163,6 +163,51 @@ print(Path(sys.argv[1]).expanduser().resolve(strict=True))
 PY
 )"
 fi
+CLEAN_ADVISOR_NOOP=0
+if [ -n "$ADVISOR_ABS" ] && [ "${#FGR_TARGETS[@]}" -eq 0 ] && [ "${#LR_TARGETS[@]}" -eq 0 ]; then
+    CLEAN_ADVISOR_NOOP="$(python3 - "$ADVISOR_ABS" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+def strict_int(value):
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+try:
+    payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    print("0")
+    raise SystemExit(0)
+
+if not isinstance(payload, dict):
+    print("0")
+    raise SystemExit(0)
+
+recommendations = payload.get("recommendations")
+if recommendations != []:
+    print("0")
+    raise SystemExit(0)
+
+calibration = payload.get("calibration")
+noop = calibration.get("as_work_management_replay_noop") if isinstance(calibration, dict) else None
+if not isinstance(noop, dict):
+    print("0")
+    raise SystemExit(0)
+
+clean = (
+    noop.get("status") == "clean_replay_noop"
+    and noop.get("source_artifact") == "AS_WORK_MANAGEMENT_REPLAY"
+    and strict_int(noop.get("fired_count")) == 0
+    and (strict_int(noop.get("finding_count")) or 0) > 0
+)
+print("1" if clean else "0")
+PY
+)"
+fi
 
 if [ "${#FGR_TARGETS[@]}" -gt 0 ]; then
     for rel in "${FGR_TARGETS[@]}"; do
@@ -176,12 +221,16 @@ if [ "${#LR_TARGETS[@]}" -gt 0 ]; then
 fi
 
 if [ -z "$EXPECT_PATCHES" ]; then
-    EXPECT_PATCHES=0
-    if [ "${#FGR_TARGETS[@]}" -gt 0 ] || { [ -n "$ADVISOR_ABS" ] && grep -Fq '"patch_materializer": "FGR-01"' "$ADVISOR_ABS"; }; then
-        EXPECT_PATCHES=$((EXPECT_PATCHES + 1))
-    fi
-    if [ "${#LR_TARGETS[@]}" -gt 0 ] || { [ -n "$ADVISOR_ABS" ] && grep -Fq '"patch_materializer": "LR-01"' "$ADVISOR_ABS"; }; then
-        EXPECT_PATCHES=$((EXPECT_PATCHES + 1))
+    if [ "$CLEAN_ADVISOR_NOOP" = "1" ]; then
+        EXPECT_PATCHES=0
+    else
+        EXPECT_PATCHES=0
+        if [ "${#FGR_TARGETS[@]}" -gt 0 ] || { [ -n "$ADVISOR_ABS" ] && grep -Fq '"patch_materializer": "FGR-01"' "$ADVISOR_ABS"; }; then
+            EXPECT_PATCHES=$((EXPECT_PATCHES + 1))
+        fi
+        if [ "${#LR_TARGETS[@]}" -gt 0 ] || { [ -n "$ADVISOR_ABS" ] && grep -Fq '"patch_materializer": "LR-01"' "$ADVISOR_ABS"; }; then
+            EXPECT_PATCHES=$((EXPECT_PATCHES + 1))
+        fi
     fi
 fi
 
@@ -227,7 +276,9 @@ SCORECARD="$OUTPUT_ABS/OPTIMIZATION_SCORECARD.json"
 GENERATE_LOG="$OUTPUT_ABS/recovery-runtime-generate-patches.log"
 VALIDATE_LOG="$OUTPUT_ABS/recovery-runtime-validate-patches.log"
 
-mkdir -p "$OUTPUT_ABS"
+mkdir -p "$OUTPUT_ABS" "$PATCH_DIR"
+find "$PATCH_DIR" -maxdepth 1 -type f -name '*.patch' -delete
+rm -f "$BLOCKERS" "$PATCH_METADATA"
 
 MANIFEST_ARGS=("$MANIFEST" "$REPO" "$ADVISOR_ABS" "${#FGR_TARGETS[@]}" "${#LR_TARGETS[@]}")
 if [ "${#FGR_TARGETS[@]}" -gt 0 ]; then
@@ -398,15 +449,36 @@ if advisor_arg:
 manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 
+if [ "$CLEAN_ADVISOR_NOOP" = "1" ]; then
+    {
+        echo ""
+        echo "<!-- repo-optimizer:clean-advisor-recovery-runtime-noop source_artifact=AS_WORK_MANAGEMENT_REPLAY fired_count=0 -->"
+        echo "> Clean advisor recovery-runtime no-op: AS_WORK_MANAGEMENT_REPLAY fired_count=0 and recommendations=0; no patch rows emitted."
+    } >> "$MANIFEST"
+fi
+
 GENERATE_STATUS=0
-if bash "$SCRIPT_DIR/generate-patches.sh" "$REPO" "$MANIFEST" "$OUTPUT_ABS" > "$GENERATE_LOG" 2>&1; then
+if [ "$CLEAN_ADVISOR_NOOP" = "1" ]; then
+    {
+        echo "Clean advisor recovery-runtime no-op."
+        echo "Source advisor artifact: $ADVISOR_ABS"
+        echo "Patch generation intentionally skipped because recommendations=[] and AS_WORK_MANAGEMENT_REPLAY fired_count=0."
+    } > "$GENERATE_LOG"
+    GENERATE_STATUS=0
+elif bash "$SCRIPT_DIR/generate-patches.sh" "$REPO" "$MANIFEST" "$OUTPUT_ABS" > "$GENERATE_LOG" 2>&1; then
     GENERATE_STATUS=0
 else
     GENERATE_STATUS=$?
 fi
 
 VALIDATE_STATUS=0
-if bash "$SCRIPT_DIR/validate-patches.sh" "$REPO" "$PATCH_DIR" > "$VALIDATE_LOG" 2>&1; then
+if [ "$CLEAN_ADVISOR_NOOP" = "1" ]; then
+    {
+        echo "Clean advisor recovery-runtime no-op."
+        echo "No patch files were generated, so git apply --check is not required."
+    } > "$VALIDATE_LOG"
+    VALIDATE_STATUS=0
+elif bash "$SCRIPT_DIR/validate-patches.sh" "$REPO" "$PATCH_DIR" > "$VALIDATE_LOG" 2>&1; then
     VALIDATE_STATUS=0
 else
     VALIDATE_STATUS=$?
@@ -641,7 +713,7 @@ if [ "$GENERATE_STATUS" -eq 0 ] \
     STATUS="completed"
 fi
 
-python3 - "$RECEIPT" "$SCORECARD" "$STATUS" "$REPO" "$MANIFEST" "$PATCH_DIR" "$BLOCKERS" "$GENERATE_LOG" "$VALIDATE_LOG" "$GENERATE_STATUS" "$VALIDATE_STATUS" "$PATCH_COUNT" "$PATCHES_VALID" "$EXPECT_PATCHES" "$BLOCKER_COUNT" "$EXPECT_BLOCKERS" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_STATUS" "$AFTER_STATUS" "$UNCHANGED" "$SCRIPT_DIR" "$MATERIALIZERS" "$BEFORE_DIRTY_COUNT" "$AFTER_DIRTY_COUNT" "$TARGET_REPO_IDENTITY" "$PATCH_METADATA" "$ADVISOR_ABS" <<'PY'
+python3 - "$RECEIPT" "$SCORECARD" "$STATUS" "$REPO" "$MANIFEST" "$PATCH_DIR" "$BLOCKERS" "$GENERATE_LOG" "$VALIDATE_LOG" "$GENERATE_STATUS" "$VALIDATE_STATUS" "$PATCH_COUNT" "$PATCHES_VALID" "$EXPECT_PATCHES" "$BLOCKER_COUNT" "$EXPECT_BLOCKERS" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_STATUS" "$AFTER_STATUS" "$UNCHANGED" "$SCRIPT_DIR" "$MATERIALIZERS" "$BEFORE_DIRTY_COUNT" "$AFTER_DIRTY_COUNT" "$TARGET_REPO_IDENTITY" "$PATCH_METADATA" "$ADVISOR_ABS" "$CLEAN_ADVISOR_NOOP" <<'PY'
 from __future__ import annotations
 
 import json
@@ -678,7 +750,8 @@ from pathlib import Path
     target_repo_identity,
     patch_metadata,
     source_advisor_artifact,
-) = sys.argv[1:29]
+    clean_advisor_noop,
+) = sys.argv[1:30]
 
 script_dir_path = Path(script_dir)
 materializer_list = [item for item in materializers.split(",") if item]
@@ -734,6 +807,7 @@ payload = {
     "manifest_path": str(manifest_path),
     "advisor_artifact_path": str(manifest_path),
     "source_advisor_artifact_path": str(Path(source_advisor_artifact).resolve()) if source_advisor_artifact else None,
+    "clean_advisor_noop": clean_advisor_noop == "1",
     "patch_dir": str(patch_dir_path),
     "generated_patch_pack_path": str(patch_dir_path),
     "patch_metadata_path": str(patch_metadata_path) if patch_metadata_path.exists() else None,
@@ -762,11 +836,15 @@ payload = {
             "command": f"bash {script_dir_path / 'generate-patches.sh'} {repo} {manifest} {Path(patch_dir).parent}",
             "exit_code": int(generate_status),
             "log_path": str(generate_log_path),
+            "skipped": clean_advisor_noop == "1",
+            "skip_reason": "clean_advisor_recovery_runtime_noop" if clean_advisor_noop == "1" else None,
         },
         {
             "command": f"bash {script_dir_path / 'validate-patches.sh'} {repo} {patch_dir}",
             "exit_code": int(validate_status),
             "log_path": str(validate_log_path),
+            "skipped": clean_advisor_noop == "1",
+            "skip_reason": "clean_advisor_recovery_runtime_noop" if clean_advisor_noop == "1" else None,
         },
     ],
     "downstream_contract_reference": downstream_contract_reference,
@@ -785,7 +863,7 @@ scorecard_payload = {
     "bounded_non_claims": bounded_non_claims,
     "meta": {
         "status": status,
-        "patch_status": "patches_generated" if int(patch_count) else "patchability_blocked",
+        "patch_status": "patches_generated" if int(patch_count) else ("clean_advisor_noop" if clean_advisor_noop == "1" else "patchability_blocked"),
         "target": str(repo_path),
         "optimizer_version": "recovery-runtime-replay-v1",
     },
