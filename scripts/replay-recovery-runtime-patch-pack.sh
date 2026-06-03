@@ -21,7 +21,9 @@ Options:
   --lr-target <path>       Add one LR-01 Learning Recovery target file.
   --from-advisor <json>    Read repo-upgrade-advisor OPPORTUNITIES.json bridge rows.
   --expect-patches <n>     Required generated patch count. Defaults to one per materializer family present.
-  --expect-blockers <n>    Required PATCHABILITY_BLOCKERS blocker_count. Defaults to 0.
+  --expect-blockers <n>    Required PATCHABILITY_BLOCKERS blocker_count. Defaults to 0,
+                           or to the actual blocker count for advisor-derived
+                           mixed replay rows when omitted.
   -h, --help               Show this help.
 
 All target files must be explicit repository-relative files. The output directory
@@ -43,7 +45,7 @@ FGR_TARGETS=()
 LR_TARGETS=()
 FROM_ADVISOR=""
 EXPECT_PATCHES=""
-EXPECT_BLOCKERS="0"
+EXPECT_BLOCKERS=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -88,7 +90,7 @@ python3 - "$EXPECT_BLOCKERS" "$EXPECT_PATCHES" <<'PY'
 import re
 import sys
 for label, value, allow_empty in (
-    ("--expect-blockers", sys.argv[1], False),
+    ("--expect-blockers", sys.argv[1], True),
     ("--expect-patches", sys.argv[2], True),
 ):
     if allow_empty and value == "":
@@ -430,6 +432,8 @@ if [ "$PATCH_COUNT" -gt 0 ]; then
 fi
 
 BLOCKER_COUNT=0
+ADVISOR_BLOCKER_COUNT=0
+ADVISOR_PATCHABLE_COUNT=0
 if [ -s "$BLOCKERS" ]; then
     BLOCKER_COUNT="$(python3 - "$BLOCKERS" <<'PY'
 import json
@@ -437,6 +441,61 @@ import sys
 print(int(json.load(open(sys.argv[1])).get("blocker_count", 0)))
 PY
 )"
+    ADVISOR_BLOCKER_COUNT="$(python3 - "$BLOCKERS" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1]))
+count = 0
+for row in payload.get("blockers", []):
+    if isinstance(row, dict) and str(row.get("blocker_code", "")).startswith("advisor_"):
+        count += 1
+print(count)
+PY
+)"
+fi
+if [ -n "$ADVISOR_ABS" ]; then
+    ADVISOR_PATCHABLE_COUNT="$(python3 - "$ADVISOR_ABS" "$REPO" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path, PurePosixPath
+
+payload = json.load(open(sys.argv[1]))
+repo = Path(sys.argv[2])
+safe_re = re.compile(r"[A-Za-z0-9_./-]+")
+supported_suffixes = {".md", ".txt"}
+count = 0
+for rec in payload.get("recommendations", []):
+    if not isinstance(rec, dict):
+        continue
+    materializer = rec.get("patch_materializer")
+    target = rec.get("patch_target_file")
+    if materializer not in {"FGR-01", "LR-01"}:
+        continue
+    if not isinstance(target, str):
+        continue
+    rel = target.strip()
+    if not rel or rel.startswith("/") or rel.startswith("../") or "/../" in rel:
+        continue
+    if any(part == ".git" for part in PurePosixPath(rel).parts):
+        continue
+    if not safe_re.fullmatch(rel):
+        continue
+    if PurePosixPath(rel).suffix not in supported_suffixes and not rel.endswith("/SKILL.md"):
+        continue
+    if (repo / rel).is_file():
+        count += 1
+print(count)
+PY
+)"
+fi
+
+if [ -z "$EXPECT_BLOCKERS" ]; then
+    if [ -n "$ADVISOR_ABS" ] && [ "$ADVISOR_PATCHABLE_COUNT" -gt 0 ] && [ "$PATCH_COUNT" -gt 0 ] && [ "$ADVISOR_BLOCKER_COUNT" -eq "$BLOCKER_COUNT" ]; then
+        EXPECT_BLOCKERS="$ADVISOR_BLOCKER_COUNT"
+    else
+        EXPECT_BLOCKERS=0
+    fi
 fi
 
 python3 - "$PATCH_METADATA" "$BLOCKERS" "$RECEIPT" "$PATCH_DIR" "$VALIDATE_LOG" "$MANIFEST" "$REPO" "$TARGET_REPO_IDENTITY" "$BEFORE_HEAD" "$AFTER_HEAD" "$BEFORE_DIRTY_COUNT" "$AFTER_DIRTY_COUNT" "$ADVISOR_ABS" <<'PY'

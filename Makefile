@@ -9,7 +9,7 @@ CR01_CAPABILITY ?= Hermes -z
 FGR_TARGET_FILE ?=
 LR_TARGET_FILE ?=
 EXPECT_PATCHES ?=
-EXPECT_BLOCKERS ?= 0
+EXPECT_BLOCKERS ?=
 DECISIONS ?=
 CAPABILITY_FAMILY ?=
 HOTSPOT_ID ?=
@@ -36,7 +36,7 @@ help:
 	@echo "  make collect-live-agent-receipts FIXTURES=<path> ADAPTER=<codex|copilot|generic> OUTPUT_DIR=<dir>  Collect live receipts"
 	@echo "  make cr01-replay TARGET=<path> OUTPUT_DIR=<dir> CR01_TARGET_FILE=<path> CR01_CAPABILITY=<name>"
 	@echo "                                            Replay bounded CR-01 patch-pack read-only"
-	@echo "  make recovery-runtime-replay TARGET=<path> OUTPUT_DIR=<dir> [FGR_TARGET_FILE=<path>] [LR_TARGET_FILE=<path>] [FROM_ADVISOR=<OPPORTUNITIES.json>]"
+	@echo "  make recovery-runtime-replay TARGET=<path> OUTPUT_DIR=<dir> [FGR_TARGET_FILE=<path>] [LR_TARGET_FILE=<path>] [FROM_ADVISOR=<OPPORTUNITIES.json>] [EXPECT_BLOCKERS=<n>]"
 	@echo "                                            Replay bounded FGR-01/LR-01 patch-pack read-only"
 	@echo "  make patch-check                         Validate existing patches"
 	@echo "  make test                                Run all tests"
@@ -128,7 +128,7 @@ recovery-runtime-replay:
 		$(if $(LR_TARGET_FILE),--lr-target "$(LR_TARGET_FILE)",) \
 		$(if $(FROM_ADVISOR),--from-advisor "$(FROM_ADVISOR)",) \
 		$(if $(EXPECT_PATCHES),--expect-patches "$(EXPECT_PATCHES)",) \
-		--expect-blockers "$(EXPECT_BLOCKERS)"
+		$(if $(EXPECT_BLOCKERS),--expect-blockers "$(EXPECT_BLOCKERS)",)
 
 patch-check:
 	@bash scripts/validate-patches.sh "$(TARGET)" "$(OUTPUT_DIR)/PATCH_PACK"
