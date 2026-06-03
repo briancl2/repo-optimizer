@@ -15,16 +15,31 @@ ADVISOR_MALFORMED_NOOP_OUTPUT="$(mktemp -d)"
 ADVISOR_MIXED_OUTPUT="$(mktemp -d)"
 MAKE_MIXED_ADVISOR_OUTPUT="$(mktemp -d)"
 MAKE_ADVISOR_OUTPUT="$(mktemp -d)"
+FORBIDDEN_APPLY_OUTPUT="$(mktemp -d)"
+FORBIDDEN_DOC_APPLY_OUTPUT="$(mktemp -d)"
+HIDDEN_PREFIX_APPLY_OUTPUT="$(mktemp -d)"
 BLOCKED_OUTPUT="$(mktemp -d)"
 BLOCKER_ONLY_OUTPUT="$(mktemp -d)"
 LINK_PARENT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$ADVISOR_OUTPUT" "$ADVISOR_BLOCKED_OUTPUT" "$ADVISOR_ONLY_BLOCKER_OUTPUT" "$ADVISOR_NOOP_OUTPUT" "$ADVISOR_EMPTY_OUTPUT" "$ADVISOR_MALFORMED_NOOP_OUTPUT" "$ADVISOR_MIXED_OUTPUT" "$MAKE_MIXED_ADVISOR_OUTPUT" "$MAKE_ADVISOR_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKER_ONLY_OUTPUT" "$LINK_PARENT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$ADVISOR_OUTPUT" "$ADVISOR_BLOCKED_OUTPUT" "$ADVISOR_ONLY_BLOCKER_OUTPUT" "$ADVISOR_NOOP_OUTPUT" "$ADVISOR_EMPTY_OUTPUT" "$ADVISOR_MALFORMED_NOOP_OUTPUT" "$ADVISOR_MIXED_OUTPUT" "$MAKE_MIXED_ADVISOR_OUTPUT" "$MAKE_ADVISOR_OUTPUT" "$FORBIDDEN_APPLY_OUTPUT" "$FORBIDDEN_DOC_APPLY_OUTPUT" "$HIDDEN_PREFIX_APPLY_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKER_ONLY_OUTPUT" "$LINK_PARENT"' EXIT
 
 mkdir -p "$TARGET_REPO/docs"
+mkdir -p "$TARGET_REPO/data"
+mkdir -p "$TARGET_REPO/.github/instructions"
 cat > "$TARGET_REPO/docs/foreground-guide.md" <<'EOF'
 # Foreground Guide
 
 Existing foreground command guidance.
+EOF
+cat > "$TARGET_REPO/.github/instructions/recovery.md" <<'EOF'
+# Recovery Instructions
+
+Fixture instruction guidance.
+EOF
+cat > "$TARGET_REPO/data/holdings.md" <<'EOF'
+# Holdings
+
+Fixture portfolio data.
 EOF
 cat > "$TARGET_REPO/docs/advisor-foreground.md" <<'EOF'
 # Advisor Foreground
@@ -40,6 +55,11 @@ cat > "$TARGET_REPO/docs/advisor-learning.md" <<'EOF'
 # Advisor Learning
 
 Advisor learning recovery target.
+EOF
+cat > "$TARGET_REPO/docs/secrets.md" <<'EOF'
+# Secrets
+
+Fixture sensitive documentation.
 EOF
 cat > "$TARGET_REPO/docs/already-grounded.md" <<'EOF'
 # Already Grounded
@@ -57,7 +77,7 @@ EOF
     git init -q
     git config user.email test@example.invalid
     git config user.name "Test User"
-    git add docs
+    git add docs data .github
     git commit -q -m initial
 )
 
@@ -251,7 +271,16 @@ assert receipt["target_git_state_unchanged"] is True
 assert receipt["source_advisor_artifact_path"].endswith("OPPORTUNITIES.json")
 assert all(command["skipped"] is True for command in receipt["commands"])
 assert {command["skip_reason"] for command in receipt["commands"]} == {"clean_advisor_recovery_runtime_noop"}
+readiness = receipt["controlled_downstream_apply"]
+assert readiness["eligible"] is False
+assert readiness["reason"] == "clean_advisor_noop_no_generated_patches"
+assert readiness["generated_patch_count"] == 0
+assert readiness["valid_patch_count"] == 0
+assert readiness["blocker_count"] == 0
+assert readiness["mutation_boundary"] == "separate downstream PR only"
+assert receipt["downstream_pilot_receipt"]["controlled_downstream_apply"] == readiness
 assert scorecard["meta"]["patch_status"] == "clean_advisor_noop"
+assert scorecard["controlled_downstream_apply"] == readiness
 assert "repo-optimizer:clean-advisor-recovery-runtime-noop" in manifest
 assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
 PY
@@ -527,6 +556,13 @@ assert receipt["patches_valid"] == 1
 assert receipt["expected_blockers"] == 1
 assert receipt["blocker_count"] == 1
 assert receipt["target_git_state_unchanged"] is True
+readiness = receipt["controlled_downstream_apply"]
+assert readiness["eligible"] is False
+assert readiness["reason"] == "patchability_blockers_present"
+assert readiness["generated_patch_count"] == 1
+assert readiness["valid_patch_count"] == 1
+assert readiness["blocker_count"] == 1
+assert readiness["target_git_state_unchanged"] is True
 assert blockers["blocker_count"] == 1
 row = blockers["blockers"][0]
 assert row["blocker_code"] == "advisor_unsupported_patch_materializer"
@@ -605,6 +641,16 @@ assert Path(pilot["patch_metadata_path"]).resolve().name == "PATCH_PACK_METADATA
 assert pilot["blocker_path"] is None
 assert Path(pilot["apply_check_result_path"]).resolve().name == "recovery-runtime-validate-patches.log"
 assert all("does not" in claim.lower() for claim in pilot["bounded_non_claims"])
+readiness = receipt["controlled_downstream_apply"]
+assert readiness["eligible"] is True
+assert readiness["reason"] == "generated_patches_apply_check_clean"
+assert readiness["generated_patch_count"] == 2
+assert readiness["valid_patch_count"] == 2
+assert readiness["blocker_count"] == 0
+assert readiness["target_dirty_count_before"] == readiness["target_dirty_count_after"] == 0
+assert readiness["mutation_boundary"] == "separate downstream PR only"
+assert "portfolio data" in readiness["forbidden_touch_classes"]
+assert pilot["controlled_downstream_apply"] == readiness
 assert metadata["downstream_pilot_context"]["artifact"] == "DOWNSTREAM_READ_ONLY_RECOVERY_RUNTIME_PILOT_RECEIPT_CONTEXT"
 assert metadata["downstream_pilot_context"]["schema_version"] == 1
 assert Path(metadata["downstream_pilot_context"]["generated_patch_pack_path"]).resolve() == Path(receipt["patch_dir"]).resolve()
@@ -614,6 +660,7 @@ assert metadata_rows["LR-01"]["downstream_pilot_context"]["target_file"] == "doc
 assert Path(metadata_rows["FGR-01"]["downstream_pilot_context"]["patch_metadata_path"]).resolve() == metadata_path
 assert scorecard["patches_generated"] == 2
 assert scorecard["patches_valid"] == 2
+assert scorecard["controlled_downstream_apply"] == readiness
 assert scorecard["recommendation_strength"] == "limited"
 assert scorecard["meta"]["status"] == "completed"
 assert any("generate-patches.sh" in command["command"] for command in receipt["commands"])
@@ -626,6 +673,135 @@ then
 else
     echo "  ✗ replay receipt missing expected proof"
     [ -f "$RECEIPT" ] && cat "$RECEIPT"
+    exit 1
+fi
+
+if bash "$OPT_DIR/scripts/replay-recovery-runtime-patch-pack.sh" \
+    "$TARGET_REPO" \
+    "$FORBIDDEN_APPLY_OUTPUT" \
+    --lr-target data/holdings.md \
+    --expect-patches 1 >/dev/null; then
+    echo "  ✓ forbidden downstream target replay completes but is not apply-ready"
+else
+    echo "  ✗ forbidden downstream target replay failed before readiness classification"
+    find "$FORBIDDEN_APPLY_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$FORBIDDEN_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$FORBIDDEN_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+fi
+
+if [ -s "$FORBIDDEN_APPLY_OUTPUT/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch" ] \
+    && python3 - "$FORBIDDEN_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$TARGET_REPO" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt = json.loads(Path(sys.argv[1]).read_text())
+target = Path(sys.argv[2])
+readiness = receipt["controlled_downstream_apply"]
+assert receipt["status"] == "completed"
+assert receipt["patches_generated"] == 1
+assert receipt["patches_valid"] == 1
+assert receipt["blocker_count"] == 0
+assert readiness["eligible"] is False
+assert readiness["reason"] == "patch_targets_outside_allowed_touch_classes"
+assert readiness["patch_target_files"] == ["data/holdings.md"]
+unsafe = readiness["unsafe_patch_target_files"]
+assert unsafe and unsafe[0]["target_file"] == "data/holdings.md"
+assert unsafe[0]["reason"] == "forbidden_touch_class"
+assert "data" in unsafe[0]["class"] or "holdings" in unsafe[0]["class"]
+assert receipt["downstream_pilot_receipt"]["controlled_downstream_apply"] == readiness
+assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
+PY
+then
+    echo "  ✓ apply-readiness rejects generated patches against forbidden target classes"
+else
+    echo "  ✗ apply-readiness allowed or misclassified forbidden target class"
+    [ -f "$FORBIDDEN_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$FORBIDDEN_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+fi
+
+if bash "$OPT_DIR/scripts/replay-recovery-runtime-patch-pack.sh" \
+    "$TARGET_REPO" \
+    "$FORBIDDEN_DOC_APPLY_OUTPUT" \
+    --lr-target docs/secrets.md \
+    --expect-patches 1 >/dev/null; then
+    echo "  ✓ allowed-prefix forbidden target replay completes but is not apply-ready"
+else
+    echo "  ✗ allowed-prefix forbidden target replay failed before readiness classification"
+    find "$FORBIDDEN_DOC_APPLY_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$FORBIDDEN_DOC_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$FORBIDDEN_DOC_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+fi
+
+if [ -s "$FORBIDDEN_DOC_APPLY_OUTPUT/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch" ] \
+    && python3 - "$FORBIDDEN_DOC_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$TARGET_REPO" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt = json.loads(Path(sys.argv[1]).read_text())
+target = Path(sys.argv[2])
+readiness = receipt["controlled_downstream_apply"]
+assert receipt["status"] == "completed"
+assert receipt["patches_generated"] == 1
+assert receipt["patches_valid"] == 1
+assert readiness["eligible"] is False
+assert readiness["reason"] == "patch_targets_outside_allowed_touch_classes"
+assert readiness["patch_target_files"] == ["docs/secrets.md"]
+unsafe = readiness["unsafe_patch_target_files"]
+assert unsafe and unsafe[0]["target_file"] == "docs/secrets.md"
+assert unsafe[0]["reason"] == "forbidden_touch_class"
+assert "secrets" in unsafe[0]["class"] or "secret" in unsafe[0]["class"]
+assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
+PY
+then
+    echo "  ✓ apply-readiness rejects forbidden filename stems under allowed prefixes"
+else
+    echo "  ✗ apply-readiness allowed or misclassified allowed-prefix forbidden target"
+    [ -f "$FORBIDDEN_DOC_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$FORBIDDEN_DOC_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+fi
+
+if bash "$OPT_DIR/scripts/replay-recovery-runtime-patch-pack.sh" \
+    "$TARGET_REPO" \
+    "$HIDDEN_PREFIX_APPLY_OUTPUT" \
+    --lr-target .github/instructions/recovery.md \
+    --expect-patches 1 >/dev/null; then
+    echo "  ✓ hidden-prefix instruction target replay is apply-ready"
+else
+    echo "  ✗ hidden-prefix instruction target replay failed readiness classification"
+    find "$HIDDEN_PREFIX_APPLY_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$HIDDEN_PREFIX_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$HIDDEN_PREFIX_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    exit 1
+fi
+
+if [ -s "$HIDDEN_PREFIX_APPLY_OUTPUT/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch" ] \
+    && python3 - "$HIDDEN_PREFIX_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$TARGET_REPO" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt = json.loads(Path(sys.argv[1]).read_text())
+target = Path(sys.argv[2])
+readiness = receipt["controlled_downstream_apply"]
+assert receipt["status"] == "completed"
+assert receipt["patches_generated"] == 1
+assert receipt["patches_valid"] == 1
+assert receipt["blocker_count"] == 0
+assert readiness["eligible"] is True
+assert readiness["reason"] == "generated_patches_apply_check_clean"
+assert readiness["patch_target_files"] == [".github/instructions/recovery.md"]
+assert readiness["unsafe_patch_target_files"] == []
+assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
+PY
+then
+    echo "  ✓ apply-readiness accepts safe hidden-prefix instruction targets"
+else
+    echo "  ✗ apply-readiness rejected safe hidden-prefix instruction target"
+    [ -f "$HIDDEN_PREFIX_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$HIDDEN_PREFIX_APPLY_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
     exit 1
 fi
 
