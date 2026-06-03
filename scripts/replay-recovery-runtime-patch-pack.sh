@@ -169,6 +169,7 @@ if [ -n "$ADVISOR_ABS" ] && [ "${#FGR_TARGETS[@]}" -eq 0 ] && [ "${#LR_TARGETS[@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -717,6 +718,7 @@ python3 - "$RECEIPT" "$SCORECARD" "$STATUS" "$REPO" "$MANIFEST" "$PATCH_DIR" "$B
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -755,6 +757,13 @@ from pathlib import Path
 
 script_dir_path = Path(script_dir)
 materializer_list = [item for item in materializers.split(",") if item]
+patch_count_int = int(patch_count)
+patches_valid_int = int(patches_valid)
+blocker_count_int = int(blocker_count)
+before_dirty_count_int = int(before_dirty_count)
+after_dirty_count_int = int(after_dirty_count)
+target_git_state_unchanged = unchanged == "true"
+clean_advisor_noop_bool = clean_advisor_noop == "1"
 bounded_non_claims = [
     "This receipt does not apply patches.",
     "This receipt does not open downstream PRs or issues.",
@@ -774,6 +783,208 @@ scorecard_path = Path(scorecard).resolve()
 manifest_path = Path(manifest).resolve()
 repo_path = Path(repo).resolve()
 downstream_contract_reference = "https://github.com/briancl2/repo-agent-core/blob/main/docs/downstream-read-only-recovery-runtime-pilot-contract.md"
+
+ALLOWED_DOWNSTREAM_TARGET_PREFIXES = (
+    ".agents/",
+    ".claude/",
+    ".github/",
+    "docs/",
+    "system/",
+)
+ALLOWED_DOWNSTREAM_TARGET_FILES = {
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+}
+FORBIDDEN_DOWNSTREAM_TARGET_PARTS = {
+    "cash",
+    "configuration",
+    "data",
+    "derived",
+    "artifact",
+    "artifacts",
+    "exports",
+    "holdings",
+    "ledger",
+    "ledgers",
+    "output",
+    "outputs",
+    "portfolio",
+    "prices",
+    "reports",
+    "secret",
+    "secrets",
+    "snapshots",
+    "strategy",
+    "tickets",
+    "trade",
+    "trades",
+    "transactions",
+}
+
+
+def controlled_apply_target_review() -> tuple[list[str], list[dict[str, str]]]:
+    if patch_count_int == 0:
+        return [], []
+    if not patch_metadata_path.exists():
+        return [], [
+            {
+                "target_file": "<missing PATCH_PACK_METADATA.json>",
+                "reason": "missing_patch_metadata",
+            }
+        ]
+    try:
+        payload = json.loads(patch_metadata_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return [], [
+            {
+                "target_file": str(patch_metadata_path),
+                "reason": "invalid_patch_metadata_json",
+            }
+        ]
+    rows = payload.get("patches")
+    if not isinstance(rows, list):
+        return [], [
+            {
+                "target_file": str(patch_metadata_path),
+                "reason": "missing_patch_metadata_rows",
+            }
+        ]
+
+    targets: list[str] = []
+    patch_names: set[str] = set()
+    unsafe: list[dict[str, str]] = []
+    for row in rows:
+        target = row.get("target_file") if isinstance(row, dict) else None
+        if not isinstance(target, str) or not target:
+            unsafe.append(
+                {
+                    "target_file": "<missing target_file>",
+                    "reason": "missing_target_file",
+                }
+            )
+            continue
+        patch_name = row.get("patch") if isinstance(row, dict) else None
+        if isinstance(patch_name, str) and patch_name:
+            patch_names.add(patch_name)
+        targets.append(target)
+        raw_target = target.strip()
+        normalized = raw_target[2:] if raw_target.startswith("./") else raw_target
+        if (
+            not normalized
+            or normalized.startswith("/")
+            or normalized == ".."
+            or normalized.startswith("../")
+            or "/../" in normalized
+            or any(part == ".." for part in normalized.split("/"))
+        ):
+            unsafe.append(
+                {
+                    "target_file": target,
+                    "reason": "unsafe_patch_target_file",
+                }
+            )
+            continue
+        parts: set[str] = set()
+        for raw_part in normalized.split("/"):
+            if not raw_part:
+                continue
+            lowered = raw_part.lower().replace("-", "_")
+            stem = lowered.rsplit(".", 1)[0]
+            parts.add(lowered)
+            parts.add(stem)
+            parts.update(piece for piece in re.split(r"[^a-z0-9]+", lowered) if piece)
+            parts.update(piece for piece in re.split(r"[^a-z0-9]+", stem) if piece)
+        allowed = normalized in ALLOWED_DOWNSTREAM_TARGET_FILES or normalized.startswith(ALLOWED_DOWNSTREAM_TARGET_PREFIXES)
+        forbidden = sorted(parts & FORBIDDEN_DOWNSTREAM_TARGET_PARTS)
+        if forbidden:
+            unsafe.append(
+                {
+                    "target_file": target,
+                    "reason": "forbidden_touch_class",
+                    "class": ",".join(forbidden),
+                }
+            )
+        elif not allowed:
+            unsafe.append(
+                {
+                    "target_file": target,
+                    "reason": "outside_allowed_touch_classes",
+                }
+            )
+    comparable_patch_count = len(patch_names) if patch_names else len(targets)
+    if comparable_patch_count != patch_count_int:
+        unsafe.append(
+            {
+                "target_file": "<patch count mismatch>",
+                "reason": "patch_metadata_count_mismatch",
+            }
+        )
+    return targets, unsafe
+
+
+controlled_patch_targets, unsafe_controlled_patch_targets = controlled_apply_target_review()
+apply_ready = (
+    status == "completed"
+    and target_git_state_unchanged
+    and before_dirty_count_int == 0
+    and after_dirty_count_int == 0
+    and patch_count_int > 0
+    and patches_valid_int == patch_count_int
+    and blocker_count_int == 0
+    and not unsafe_controlled_patch_targets
+    and not clean_advisor_noop_bool
+)
+if apply_ready:
+    apply_reason = "generated_patches_apply_check_clean"
+elif clean_advisor_noop_bool:
+    apply_reason = "clean_advisor_noop_no_generated_patches"
+elif patch_count_int == 0:
+    apply_reason = "no_generated_patches"
+elif blocker_count_int > 0:
+    apply_reason = "patchability_blockers_present"
+elif patches_valid_int != patch_count_int:
+    apply_reason = "patch_apply_check_failed"
+elif unsafe_controlled_patch_targets:
+    apply_reason = "patch_targets_outside_allowed_touch_classes"
+elif not target_git_state_unchanged or before_dirty_count_int != 0 or after_dirty_count_int != 0:
+    apply_reason = "target_git_state_not_clean_or_unchanged"
+else:
+    apply_reason = "replay_status_not_completed"
+
+controlled_downstream_apply = {
+    "artifact": "CONTROLLED_DOWNSTREAM_APPLY_READINESS",
+    "schema_version": 1,
+    "eligible": apply_ready,
+    "reason": apply_reason,
+    "generated_patch_count": patch_count_int,
+    "valid_patch_count": patches_valid_int,
+    "blocker_count": blocker_count_int,
+    "clean_advisor_noop": clean_advisor_noop_bool,
+    "target_git_state_unchanged": target_git_state_unchanged,
+    "target_dirty_count_before": before_dirty_count_int,
+    "target_dirty_count_after": after_dirty_count_int,
+    "generated_patch_pack_path": str(patch_dir_path),
+    "apply_check_result_path": str(validate_log_path),
+    "patch_target_files": controlled_patch_targets,
+    "unsafe_patch_target_files": unsafe_controlled_patch_targets,
+    "mutation_boundary": "separate downstream PR only",
+    "allowed_touch_classes": [
+        "docs",
+        "instructions",
+        "system guidance",
+    ],
+    "forbidden_touch_classes": [
+        "portfolio data",
+        "holdings",
+        "strategy configuration",
+        "derived artifacts",
+        "secrets",
+        "prices",
+        "trade outputs",
+    ],
+    "bounded_non_claim": "Eligibility only means generated patches are ready for explicit downstream PR review; this replay does not apply them.",
+}
 pilot_receipt = {
     "artifact": "DOWNSTREAM_READ_ONLY_RECOVERY_RUNTIME_PILOT_RECEIPT",
     "schema_version": 1,
@@ -792,6 +1003,7 @@ pilot_receipt = {
     "patch_metadata_path": str(patch_metadata_path) if patch_metadata_path.exists() else None,
     "blocker_path": str(blockers_path) if blockers_path.exists() else None,
     "apply_check_result_path": str(validate_log_path),
+    "controlled_downstream_apply": controlled_downstream_apply,
     "bounded_non_claims": bounded_non_claims,
 }
 payload = {
@@ -807,7 +1019,7 @@ payload = {
     "manifest_path": str(manifest_path),
     "advisor_artifact_path": str(manifest_path),
     "source_advisor_artifact_path": str(Path(source_advisor_artifact).resolve()) if source_advisor_artifact else None,
-    "clean_advisor_noop": clean_advisor_noop == "1",
+    "clean_advisor_noop": clean_advisor_noop_bool,
     "patch_dir": str(patch_dir_path),
     "generated_patch_pack_path": str(patch_dir_path),
     "patch_metadata_path": str(patch_metadata_path) if patch_metadata_path.exists() else None,
@@ -818,15 +1030,15 @@ payload = {
     "optimizer_replay_receipt_path": str(receipt_path),
     "optimization_scorecard_path": str(scorecard_path),
     "expected_patches": int(expected_patches),
-    "patches_generated": int(patch_count),
-    "patches_valid": int(patches_valid),
+    "patches_generated": patch_count_int,
+    "patches_valid": patches_valid_int,
     "expected_blockers": int(expected_blockers),
-    "blocker_count": int(blocker_count),
-    "target_git_state_unchanged": unchanged == "true",
+    "blocker_count": blocker_count_int,
+    "target_git_state_unchanged": target_git_state_unchanged,
     "target_git_head_before": before_head,
     "target_git_head_after": after_head,
-    "target_dirty_count_before": int(before_dirty_count),
-    "target_dirty_count_after": int(after_dirty_count),
+    "target_dirty_count_before": before_dirty_count_int,
+    "target_dirty_count_after": after_dirty_count_int,
     "before_git_head": before_head,
     "after_git_head": after_head,
     "before_git_status": before_status,
@@ -849,14 +1061,16 @@ payload = {
     ],
     "downstream_contract_reference": downstream_contract_reference,
     "downstream_pilot_receipt": pilot_receipt,
+    "controlled_downstream_apply": controlled_downstream_apply,
     "bounded_non_claims": bounded_non_claims,
 }
 scorecard_payload = {
     "findings_total": len(materializer_list),
     "findings_approved": len(materializer_list),
     "findings_rejected": 0,
-    "patches_generated": int(patch_count),
-    "patches_valid": int(patches_valid),
+    "patches_generated": patch_count_int,
+    "patches_valid": patches_valid_int,
+    "controlled_downstream_apply": controlled_downstream_apply,
     "expected_delta": 0,
     "coverage_verdict": "partial",
     "recommendation_strength": "limited",
