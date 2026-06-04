@@ -1,5 +1,14 @@
 # repo-optimizer
 
+## Learning / Recovery
+
+- Decision changed: build-meta-analysis Issue #431 promoted repo-optimizer Issue #75 from AS-32 triage to a README-only owner repair after fresh merged-head replay produced a patch-ready LR-01 row and clean apply-check.
+- GitHub surface / owner action: https://github.com/briancl2/repo-optimizer/issues/75 and the README-only owner PR that closes it.
+- Raw runtime evidence: repo-auditor AS-32 reported `unanchored_self_learning_claim=>README.md`; repo-upgrade-advisor emitted `patch_target_file=README.md`; repo-optimizer replay wrote `RECOVERY_RUNTIME_REPLAY_RECEIPT.json`, `PATCH_PACK_METADATA.json`, and `recovery-runtime-validate-patches.log` under `/tmp/issue164-merged-head-20260604T111850Z/optimizer/repo-optimizer/`.
+- GBrain disposition: `no_capture_reason=field replay evidence was sufficient and did not change the route through memory lookup`.
+- Reusable learning text: self-management claims in root guidance need an owner GitHub surface, raw runtime evidence, memory disposition, and explicit non-claims before they are treated as grounded.
+- Bounded non-claims: This block does not authorize background memory, schedulers, queues, daemons, controllers, autofix loops, autonomous downstream mutation, or target-repo mutation.
+
 Standalone **repo optimizer** — produces concrete patches that improve audit scores for any AI-native repository. Part of the [repo-agent fleet](https://github.com/briancl2/repo-agent-core).
 
 ## Quick Start
