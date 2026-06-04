@@ -209,6 +209,45 @@ print("1" if clean else "0")
 PY
 )"
 fi
+ADVISOR_NONPATCH_NOOP=0
+if [ -n "$ADVISOR_ABS" ] && [ "$CLEAN_ADVISOR_NOOP" != "1" ] && [ "${#FGR_TARGETS[@]}" -eq 0 ] && [ "${#LR_TARGETS[@]}" -eq 0 ]; then
+    ADVISOR_NONPATCH_NOOP="$(python3 - "$ADVISOR_ABS" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+try:
+    payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError):
+    print("0")
+    raise SystemExit(0)
+
+if not isinstance(payload, dict):
+    print("0")
+    raise SystemExit(0)
+
+recommendations = payload.get("recommendations")
+if not isinstance(recommendations, list) or not recommendations:
+    print("0")
+    raise SystemExit(0)
+
+for rec in recommendations:
+    if not isinstance(rec, dict):
+        print("0")
+        raise SystemExit(0)
+    if "patch_materializer" in rec or "patch_target_file" in rec:
+        print("0")
+        raise SystemExit(0)
+
+print("1")
+PY
+)"
+fi
+if [ "$ADVISOR_NONPATCH_NOOP" = "1" ]; then
+    CLEAN_ADVISOR_NOOP=1
+fi
 
 if [ "${#FGR_TARGETS[@]}" -gt 0 ]; then
     for rel in "${FGR_TARGETS[@]}"; do
@@ -386,6 +425,8 @@ def advisor_manifest_rows(path: Path) -> list[tuple[str, str, str]]:
             continue
         materializer = rec.get("patch_materializer")
         target = rec.get("patch_target_file")
+        if "patch_materializer" not in rec and "patch_target_file" not in rec:
+            continue
         if materializer not in {"FGR-01", "LR-01"}:
             rows.append(
                 blocker_row(
@@ -453,8 +494,8 @@ PY
 if [ "$CLEAN_ADVISOR_NOOP" = "1" ]; then
     {
         echo ""
-        echo "<!-- repo-optimizer:clean-advisor-recovery-runtime-noop source_artifact=AS_WORK_MANAGEMENT_REPLAY fired_count=0 -->"
-        echo "> Clean advisor recovery-runtime no-op: AS_WORK_MANAGEMENT_REPLAY fired_count=0 and recommendations=0; no patch rows emitted."
+        echo "<!-- repo-optimizer:clean-advisor-recovery-runtime-noop -->"
+        echo "> Clean advisor recovery-runtime no-op: no patch-ready bridge rows emitted; no patch rows emitted."
     } >> "$MANIFEST"
 fi
 
@@ -463,7 +504,7 @@ if [ "$CLEAN_ADVISOR_NOOP" = "1" ]; then
     {
         echo "Clean advisor recovery-runtime no-op."
         echo "Source advisor artifact: $ADVISOR_ABS"
-        echo "Patch generation intentionally skipped because recommendations=[] and AS_WORK_MANAGEMENT_REPLAY fired_count=0."
+        echo "Patch generation intentionally skipped because no patch-ready bridge rows were emitted."
     } > "$GENERATE_LOG"
     GENERATE_STATUS=0
 elif bash "$SCRIPT_DIR/generate-patches.sh" "$REPO" "$MANIFEST" "$OUTPUT_ABS" > "$GENERATE_LOG" 2>&1; then
