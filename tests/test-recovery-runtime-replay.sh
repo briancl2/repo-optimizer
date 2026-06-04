@@ -466,24 +466,89 @@ if bash "$OPT_DIR/scripts/replay-recovery-runtime-patch-pack.sh" \
     "$TARGET_REPO" \
     "$ADVISOR_ONLY_BLOCKER_OUTPUT" \
     --from-advisor "$ADVISOR_ONLY_BLOCKER_JSON" >/dev/null; then
-    echo "  ✗ advisor-only blockers succeeded without explicit --expect-blockers"
+    echo "  ✓ advisor non-bridge rows replay as clean zero-patch no-op"
+else
+    echo "  ✗ advisor non-bridge rows did not replay as clean zero-patch no-op"
     find "$ADVISOR_ONLY_BLOCKER_OUTPUT" -maxdepth 3 -type f -print
     [ -f "$ADVISOR_ONLY_BLOCKER_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_ONLY_BLOCKER_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
     exit 1
+fi
+if [ ! -e "$ADVISOR_ONLY_BLOCKER_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 - "$ADVISOR_ONLY_BLOCKER_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$TARGET_REPO" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt = json.loads(Path(sys.argv[1]).read_text())
+target = Path(sys.argv[2])
+assert receipt["status"] == "completed"
+assert receipt["patches_generated"] == 0
+assert receipt["patches_valid"] == 0
+assert receipt["expected_blockers"] == 0
+assert receipt["blocker_count"] == 0
+assert receipt["blocker_path"] is None
+assert receipt["clean_advisor_noop"] is True
+readiness = receipt["controlled_downstream_apply"]
+assert readiness["eligible"] is False
+assert readiness["reason"] == "clean_advisor_noop_no_generated_patches"
+assert readiness["generated_patch_count"] == 0
+assert readiness["blocker_count"] == 0
+assert readiness["clean_advisor_noop"] is True
+assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
+PY
+then
+    echo "  ✓ advisor non-bridge no-op preserves clean target and no blockers"
 else
-    echo "  ✓ advisor-only blockers fail closed without explicit --expect-blockers"
+    echo "  ✗ advisor non-bridge no-op emitted blockers or invalid receipt"
+    [ -f "$ADVISOR_ONLY_BLOCKER_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_ONLY_BLOCKER_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    [ -f "$ADVISOR_ONLY_BLOCKER_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$ADVISOR_ONLY_BLOCKER_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    exit 1
 fi
 if bash "$OPT_DIR/scripts/replay-recovery-runtime-patch-pack.sh" \
     "$TARGET_REPO" \
     "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch" \
     --lr-target docs/learning-recovery.md \
     --from-advisor "$ADVISOR_ONLY_BLOCKER_JSON" >/dev/null; then
-    echo "  ✗ advisor-only blockers succeeded because an unrelated explicit patch existed"
+    echo "  ✓ explicit patch rows can coexist with non-bridge advisor guidance"
+else
+    echo "  ✗ explicit patch row failed beside non-bridge advisor guidance"
     find "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch" -maxdepth 3 -type f -print
     [ -f "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
     exit 1
+fi
+if [ -s "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch" ] \
+    && [ ! -e "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 - "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$TARGET_REPO" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt = json.loads(Path(sys.argv[1]).read_text())
+target = Path(sys.argv[2])
+assert receipt["status"] == "completed"
+assert receipt["patches_generated"] == 1
+assert receipt["patches_valid"] == 1
+assert receipt["expected_blockers"] == 0
+assert receipt["blocker_count"] == 0
+assert receipt["blocker_path"] is None
+assert receipt["clean_advisor_noop"] is False
+readiness = receipt["controlled_downstream_apply"]
+assert readiness["eligible"] is True
+assert readiness["reason"] == "generated_patches_apply_check_clean"
+assert readiness["generated_patch_count"] == 1
+assert readiness["valid_patch_count"] == 1
+assert readiness["blocker_count"] == 0
+assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
+PY
+then
+    echo "  ✓ explicit patch replay stays apply-ready with non-bridge guidance"
 else
-    echo "  ✓ unrelated explicit patches do not satisfy advisor mixed blocker defaults"
+    echo "  ✗ explicit patch replay lost apply readiness beside non-bridge guidance"
+    [ -f "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
+    [ -f "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/PATCHABILITY_BLOCKERS.json" ] && cat "$ADVISOR_ONLY_BLOCKER_OUTPUT/with-explicit-patch/PATCHABILITY_BLOCKERS.json"
+    exit 1
 fi
 
 if make -C "$OPT_DIR" recovery-runtime-replay \
@@ -540,40 +605,35 @@ else
 fi
 
 if [ -s "$MAKE_MIXED_ADVISOR_OUTPUT/PATCH_PACK/LR-01-foreground-learning-recovery-block.patch" ] \
-    && [ -s "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
-    && python3 - "$MAKE_MIXED_ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json" "$TARGET_REPO" <<'PY'
+    && [ ! -e "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 - "$MAKE_MIXED_ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" "$TARGET_REPO" <<'PY'
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 receipt = json.loads(Path(sys.argv[1]).read_text())
-blockers = json.loads(Path(sys.argv[2]).read_text())
-target = Path(sys.argv[3])
+target = Path(sys.argv[2])
 assert receipt["status"] == "completed"
 assert receipt["patches_generated"] == 1
 assert receipt["patches_valid"] == 1
-assert receipt["expected_blockers"] == 1
-assert receipt["blocker_count"] == 1
+assert receipt["expected_blockers"] == 0
+assert receipt["blocker_count"] == 0
+assert receipt["blocker_path"] is None
 assert receipt["target_git_state_unchanged"] is True
 readiness = receipt["controlled_downstream_apply"]
-assert readiness["eligible"] is False
-assert readiness["reason"] == "patchability_blockers_present"
+assert readiness["eligible"] is True
+assert readiness["reason"] == "generated_patches_apply_check_clean"
 assert readiness["generated_patch_count"] == 1
 assert readiness["valid_patch_count"] == 1
-assert readiness["blocker_count"] == 1
+assert readiness["blocker_count"] == 0
 assert readiness["target_git_state_unchanged"] is True
-assert blockers["blocker_count"] == 1
-row = blockers["blockers"][0]
-assert row["blocker_code"] == "advisor_unsupported_patch_materializer"
-assert row["advisor_metadata"]["anti_pattern_family"] == "reciprocal_proving_ground_gap"
-assert row["advisor_metadata"]["first_deliverable"] == "Open owner issue for proving-ground guidance"
 assert subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True) == ""
 PY
 then
-    echo "  ✓ advisor mixed replay preserves blockers while completing valid patch replay"
+    echo "  ✓ advisor mixed replay keeps valid patch apply-ready and skips non-bridge guidance"
 else
-    echo "  ✗ advisor mixed replay did not preserve blocker completion evidence"
+    echo "  ✗ advisor mixed replay did not preserve apply-ready valid patch evidence"
     [ -f "$MAKE_MIXED_ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json" ] && cat "$MAKE_MIXED_ADVISOR_OUTPUT/RECOVERY_RUNTIME_REPLAY_RECEIPT.json"
     [ -f "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$MAKE_MIXED_ADVISOR_OUTPUT/PATCHABILITY_BLOCKERS.json"
     exit 1
