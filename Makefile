@@ -135,6 +135,8 @@ patch-check:
 
 test:
 	@echo "=== Running optimizer test suite ==="
+	@python3 scripts/closure-run-identity.py --phase test --parent-command "make test" >/dev/null
+	@bash tests/test-closure-run-identity.sh
 	@bash tests/test-critic-rejects.sh
 	@bash tests/test-discovery-payload-capture.sh
 	@bash tests/test-coverage-verdicts.sh
@@ -184,6 +186,7 @@ install-hooks:
 	fi
 
 check:
+	@python3 scripts/closure-run-identity.py --phase check --parent-command "make check" >/dev/null
 	@bash scripts/check.sh
 
 work:
