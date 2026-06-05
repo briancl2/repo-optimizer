@@ -61,6 +61,13 @@ GitHub Actions runs `make check` and `make test` on pull requests and pushes to 
 
 See `AGENTS.md` for full script inventory and `.specify/memory/constitution.md` for governance.
 
+## Live Capability Inventory
+
+The [live capability inventory](docs/live-capability-inventory.md) records
+repo-optimizer's live agents, scripts, Speckit helpers, and tracking decisions
+for calibrated capability-drift checks. It is documentation, not a runtime
+registry or generated control plane.
+
 ## Dependencies
 
 Shared primitives from [repo-agent-core](https://github.com/briancl2/repo-agent-core) (copied, not symlinked).
