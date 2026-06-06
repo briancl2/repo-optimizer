@@ -51,6 +51,10 @@ HS_OUTPUT="$(mktemp -d)"
 HS_BLOCKED_OUTPUT="$(mktemp -d)"
 CR_OUTPUT="$(mktemp -d)"
 CR_BLOCKED_OUTPUT="$(mktemp -d)"
+NR_OUTPUT="$(mktemp -d)"
+NR_APPEND_OUTPUT="$(mktemp -d)"
+NR_BLOCKED_OUTPUT="$(mktemp -d)"
+NR_CONTEXT_OUTPUT="$(mktemp -d)"
 HFR_OUTPUT="$(mktemp -d)"
 HFR_BLOCKED_OUTPUT="$(mktemp -d)"
 FGR_OUTPUT="$(mktemp -d)"
@@ -70,7 +74,7 @@ PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$FGR_OUTPUT" "$FGR_BLOCKED_OUTPUT" "$FGR_CONTEXT_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$LR_CONTEXT_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$NR_OUTPUT" "$NR_APPEND_OUTPUT" "$NR_BLOCKED_OUTPUT" "$NR_CONTEXT_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$FGR_OUTPUT" "$FGR_BLOCKED_OUTPUT" "$FGR_CONTEXT_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$LR_CONTEXT_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -142,6 +146,21 @@ cat > "$TARGET_REPO/docs/capability-guidance.md" <<'EOF'
 
 The Hermes launch guidance describes default behavior but does not yet carry a
 capability reconciliation record.
+EOF
+cat > "$TARGET_REPO/docs/pruning-continuity.md" <<'EOF'
+# Pruning Continuity
+
+Upstream capability intake found possible native replacements, but this target
+does not yet carry a review-only pruning candidate matrix.
+EOF
+cat > "$TARGET_REPO/docs/pruning-continuity-existing.md" <<'EOF'
+# Existing Pruning Continuity
+
+## Native Replacement Pruning Candidates
+
+| Native capability | Affected custom surface | Deletion/sunset confidence | Validation required before deletion | Owner action | Bounded non-claims |
+|---|---|---|---|---|---|
+| existing native capability | `scripts/existing-wrapper.sh` | Review-required candidate; no deletion proof by itself | Existing validation | Existing owner action | Existing non-claims |
 EOF
 cat > "$TARGET_REPO/docs/hermes-receipts.md" <<'EOF'
 # Hermes Receipt Guidance
@@ -1261,6 +1280,159 @@ if [ ! -e "$CR_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
 else
     echo "  ✗ CR-01 missing capability did not emit expected blocker"
     [ -f "$CR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$CR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+NR_FINDINGS="$NR_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$NR_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| NR-01 | native replacement pruning candidate for native capability `repo-agent-core upstream capability intake contract` in `docs/pruning-continuity.md` affected_surface: scripts/local-intake-wrapper.sh scan_context={"scanner":"repo-auditor-as","scanned_files":42,"eligible_files":50,"scan_limit":100,"scan_limited":true} evidence_context={"primary_class":"active_doc","source":"owner_issue_80"} | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$NR_FINDINGS" "$NR_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for NR-01 native pruning candidate materializer"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for NR-01 native pruning candidate materializer"
+    FAIL=$((FAIL + 1))
+fi
+
+NR_PATCH="$NR_OUTPUT/PATCH_PACK/NR-01-native-replacement-pruning-candidate.patch"
+if [ -s "$NR_PATCH" ] \
+    && grep -Fq 'diff --git a/docs/pruning-continuity.md b/docs/pruning-continuity.md' "$NR_PATCH" \
+    && grep -Fq 'Native Replacement Pruning Candidates' "$NR_PATCH" \
+    && grep -Fq '| repo-agent-core upstream capability intake contract | `scripts/local-intake-wrapper.sh` | Review-required candidate; no deletion proof by itself |' "$NR_PATCH" \
+    && grep -Fq 'No target mutation, auto-apply, automatic PR creation, recurring inventory, scheduler, queue, registry, or background memory' "$NR_PATCH"; then
+    echo "  ✓ NR-01 patch materialized review-only native pruning candidate block"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ NR-01 patch missing review-only native pruning candidate block"
+    [ -f "$NR_PATCH" ] && cat "$NR_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$NR_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ NR-01 generated patch passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ NR-01 generated patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ -s "$NR_OUTPUT/PATCH_PACK_METADATA.json" ] \
+    && python3 -c "import json; d=json.load(open('$NR_OUTPUT/PATCH_PACK_METADATA.json')); rows=d['patches']; row=next(r for r in rows if r['row_id'] == 'NR-01'); assert row['patch'] == 'NR-01-native-replacement-pruning-candidate.patch'; assert row['target_file'] == 'docs/pruning-continuity.md'; assert row['native_capability'] == 'repo-agent-core upstream capability intake contract'; assert row['affected_surface'] == 'scripts/local-intake-wrapper.sh'; assert row['scan_context'] == {'scanner':'repo-auditor-as','scanned_files':42,'eligible_files':50,'scan_limit':100,'scan_limited':True}; assert row['evidence_context'] == {'primary_class':'active_doc','source':'owner_issue_80'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ NR-01 patch-pack metadata preserves scan/evidence context"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ NR-01 patch-pack metadata did not preserve scan/evidence context"
+    [ -f "$NR_OUTPUT/PATCH_PACK_METADATA.json" ] && cat "$NR_OUTPUT/PATCH_PACK_METADATA.json"
+    FAIL=$((FAIL + 1))
+fi
+
+if git -C "$TARGET_REPO" diff --quiet -- docs/pruning-continuity.md; then
+    echo "  ✓ NR-01 materializer left target repo unmodified"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ NR-01 materializer mutated target repo"
+    git -C "$TARGET_REPO" diff -- docs/pruning-continuity.md
+    FAIL=$((FAIL + 1))
+fi
+
+NR_APPEND_FINDINGS="$NR_APPEND_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$NR_APPEND_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| NR-01 | native replacement pruning candidate for native capability `repo-agent-core upstream capability intake contract` in `docs/pruning-continuity-existing.md` affected_surface: scripts/new-wrapper.sh | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$NR_APPEND_FINDINGS" "$NR_APPEND_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for NR-01 append candidate materializer"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for NR-01 append candidate materializer"
+    FAIL=$((FAIL + 1))
+fi
+
+NR_APPEND_PATCH="$NR_APPEND_OUTPUT/PATCH_PACK/NR-01-native-replacement-pruning-candidate.patch"
+if [ -s "$NR_APPEND_PATCH" ] \
+    && grep -Fq '+| repo-agent-core upstream capability intake contract | `scripts/new-wrapper.sh` | Review-required candidate; no deletion proof by itself |' "$NR_APPEND_PATCH" \
+    && ! grep -Fq -- '-| existing native capability | `scripts/existing-wrapper.sh` |' "$NR_APPEND_PATCH"; then
+    echo "  ✓ NR-01 appends new candidate without deleting existing candidate rows"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ NR-01 append patch did not preserve existing candidate rows"
+    [ -f "$NR_APPEND_PATCH" ] && cat "$NR_APPEND_PATCH"
+    FAIL=$((FAIL + 1))
+fi
+
+if bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$NR_APPEND_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ NR-01 append patch passes git apply --check"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ NR-01 append patch failed git apply --check"
+    FAIL=$((FAIL + 1))
+fi
+
+NR_BLOCKED_FINDINGS="$NR_BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$NR_BLOCKED_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| NR-01 | native replacement pruning candidate in `docs/pruning-continuity.md` | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$NR_BLOCKED_FINDINGS" "$NR_BLOCKED_OUTPUT" >/dev/null; then
+    echo "  ✓ generate-patches.sh completed for blocked NR-01 manifest"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ generate-patches.sh failed for blocked NR-01 manifest"
+    FAIL=$((FAIL + 1))
+fi
+
+if [ ! -e "$NR_BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$NR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$NR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; assert d['blockers'][0]['row_id'] == 'NR-01'; assert d['blockers'][0]['blocker_code'] == 'nr01_missing_native_capability'"; then
+    echo "  ✓ NR-01 missing native capability emits PATCHABILITY_BLOCKERS.json"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ NR-01 missing native capability did not emit expected blocker"
+    [ -f "$NR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$NR_BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+NR_CONTEXT_FINDINGS="$NR_CONTEXT_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$NR_CONTEXT_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| NR-01 | native replacement pruning candidate for native capability `repo-agent-core upstream capability intake contract` in `docs/pruning-continuity.md` scan_context={"scanner":"repo-auditor-as","scan_limited":true,"sample":"nr-evidence"} evidence_context={"primary_class":"historical_work","source":"closed_issue_474"} | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$NR_CONTEXT_FINDINGS" "$NR_CONTEXT_OUTPUT" >/dev/null \
+    && [ ! -e "$NR_CONTEXT_OUTPUT/PATCH_PACK"/*.patch ] \
+    && [ -s "$NR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$NR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 1; row=d['blockers'][0]; assert row['row_id'] == 'NR-01'; assert row['blocker_code'] == 'nr01_non_active_evidence_context'; assert row['evidence_context'] == {'primary_class':'historical_work','source':'closed_issue_474'}; assert row['scan_context'] == {'scanner':'repo-auditor-as','scan_limited':True,'sample':'nr-evidence'}; assert any('scan-limited' in claim for claim in row['bounded_non_claims'])"; then
+    echo "  ✓ NR-01 non-active evidence_context fails closed with preserved metadata"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ NR-01 non-active evidence_context did not fail closed with preserved metadata"
+    [ -f "$NR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$NR_CONTEXT_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    [ -f "$NR_CONTEXT_OUTPUT/PATCH_PACK/NR-01-native-replacement-pruning-candidate.patch" ] && cat "$NR_CONTEXT_OUTPUT/PATCH_PACK/NR-01-native-replacement-pruning-candidate.patch"
     FAIL=$((FAIL + 1))
 fi
 

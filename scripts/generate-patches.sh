@@ -447,7 +447,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
             reason = str(advisor_reason or f"Advisor row {row_id} is not safe for recovery-runtime bridge materialization.")
         else:
             supported = bool(
-                row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "FGR-01", "LR-01"}
+                row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "NR-01", "HFR-01", "FGR-01", "LR-01"}
                 or re.search(r"\bS-05\b", row_text)
                 and re.search(r"\bS-06\b", row_text)
                 and re.search(r"\bS-07\b", row_text)
@@ -1465,6 +1465,279 @@ def materialize_cr01() -> None:
     write_patch(patch_dir / patch_name, [(rel, old, new)], row_id, manifest_rows_for(row_id))
 
 
+def markdown_table_cell(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip()).replace("|", "/")
+
+
+def native_pruning_candidate_row(native_capability: str, affected_surface: str) -> str:
+    capability = markdown_table_cell(native_capability)
+    surface = markdown_table_cell(affected_surface)
+    return f"| {capability} | `{surface}` | Review-required candidate; no deletion proof by itself | Repo-native tests, owner issue/PR review, and git apply --check patch-pack validation | Route deletion/sunset to the semantic owner surface before mutating files | No target mutation, auto-apply, automatic PR creation, recurring inventory, scheduler, queue, registry, or background memory |"
+
+
+def native_pruning_candidate_block(native_capability: str, affected_surface: str) -> list[str]:
+    return [
+        "## Native Replacement Pruning Candidates",
+        "",
+        "| Native capability | Affected custom surface | Deletion/sunset confidence | Validation required before deletion | Owner action | Bounded non-claims |",
+        "|---|---|---|---|---|---|",
+        native_pruning_candidate_row(native_capability, affected_surface),
+    ]
+
+
+def native_pruning_has_candidate_for(lines: list[str], native_capability: str, affected_surface: str) -> bool:
+    row = native_pruning_candidate_row(native_capability, affected_surface).lower()
+    return any(line.strip().lower() == row for line in lines)
+
+
+def upsert_native_pruning_block(lines: list[str], native_capability: str, affected_surface: str) -> list[str] | None:
+    block = native_pruning_candidate_block(native_capability, affected_surface)
+    marker = block[0]
+    row = block[-1]
+    header = block[2]
+    separator = block[3]
+    for idx, line in enumerate(lines):
+        if line.strip().lower() != marker.lower():
+            continue
+        end = idx + 1
+        while end < len(lines):
+            if lines[end].startswith("## ") and end > idx:
+                break
+            end += 1
+        section = lines[idx:end]
+        if any(existing.strip() == row for existing in section):
+            return lines
+        header_offset = next((offset for offset, existing in enumerate(section) if existing.strip() == header), None)
+        if header_offset is None:
+            return None
+        separator_offset = next(
+            (
+                offset
+                for offset, existing in enumerate(section[header_offset + 1 :], start=header_offset + 1)
+                if existing.strip() == separator
+            ),
+            None,
+        )
+        if separator_offset is None:
+            return None
+        insert_at = idx + separator_offset + 1
+        while insert_at < end and lines[insert_at].startswith("|"):
+            insert_at += 1
+        return lines[:insert_at] + [row] + lines[insert_at:]
+    return insert_after_heading(lines, block)
+
+
+def nr01_manifest_rows() -> list[dict[str, object]]:
+    return [row for row in manifest_rows(plan) if str(row.get("row_id", "")) == "NR-01"]
+
+
+def nr01_paths_for_row(row: dict[str, object]) -> list[str | None]:
+    text = str(row.get("raw_row", ""))
+    paths: list[str | None] = []
+    for match in re.finditer(r"`([^`]+)`", text):
+        value = match.group(1)
+        rel = safe_rel_path(value)
+        if rel is None or has_git_path_component(rel):
+            if re.fullmatch(r"[A-Za-z0-9_./-]+(?:\.md|\.txt|/SKILL\.md)", value.strip()):
+                paths.append(None)
+            continue
+        if re.fullmatch(r"[A-Za-z0-9_./-]+(?:\.md|\.txt|/SKILL\.md)", rel):
+            paths.append(rel)
+    return paths
+
+
+def nr01_native_capability_for_row(row: dict[str, object]) -> str | None:
+    text = str(row.get("raw_row", ""))
+    for value in re.findall(r"`([^`]+)`", text):
+        stripped = value.strip()
+        if re.fullmatch(r"[A-Za-z0-9_./-]+(?:\.md|\.txt|/SKILL\.md)", stripped):
+            continue
+        capability = markdown_table_cell(stripped)
+        if capability:
+            return capability
+    match = re.search(r"\bnative[_ -]?capability\s*:\s*([^|]+)", text, re.IGNORECASE)
+    if match:
+        capability = markdown_table_cell(match.group(1).strip("`'\" "))
+        if capability:
+            return capability
+    match = re.search(r"\bcapability\s*:\s*([^|]+)", text, re.IGNORECASE)
+    if match:
+        capability = markdown_table_cell(match.group(1).strip("`'\" "))
+        if capability:
+            return capability
+    return None
+
+
+def nr01_affected_surface_for_row(row: dict[str, object], fallback: str) -> str:
+    text = str(row.get("raw_row", ""))
+    match = re.search(r"\b(?:affected|custom)[_-]?surface\s*:\s*([^|]+)", text, re.IGNORECASE)
+    if match:
+        value = re.split(r"\s+(?:scan_context|evidence_context|advisor_metadata)=", match.group(1), maxsplit=1)[0]
+        surface = markdown_table_cell(value.strip("`'\" "))
+        if surface:
+            return surface
+    return fallback
+
+
+def nr01_record(row: dict[str, object], patch_name: str, code: str, reason: str) -> None:
+    blocker = {
+        "row_id": str(row.get("row_id", "NR-01")),
+        "patch": row.get("patch", ""),
+        "findings": row.get("findings", ""),
+        "files_touched": row.get("files_touched", ""),
+        "blocker_code": code,
+        "reason": reason,
+    }
+    add_row_metadata(blocker, row)
+    overflow_blockers.append(blocker)
+
+
+def materialize_nr01() -> None:
+    rows = nr01_manifest_rows()
+    if not rows:
+        return
+
+    patch_name = "NR-01-native-replacement-pruning-candidate.patch"
+    changes: list[tuple[str, list[str], list[str]]] = []
+    metadata_rows: list[dict[str, object]] = []
+    emitted_or_blocked = False
+    processed_targets: set[str] = set()
+    for row in rows:
+        evidence_context = row.get("evidence_context") if isinstance(row.get("evidence_context"), dict) else None
+        evidence_blocker_code = non_active_evidence_context_code("NR-01", evidence_context)
+        if evidence_blocker_code:
+            nr01_record(
+                row,
+                patch_name,
+                evidence_blocker_code,
+                "NR-01 patch materialization requires absent evidence_context or evidence_context.primary_class=active_doc; non-active evidence contexts fail closed.",
+            )
+            emitted_or_blocked = True
+            continue
+
+        paths = nr01_paths_for_row(row)
+        files_touched = str(row.get("files_touched", "")).strip()
+        if any(path is None for path in paths):
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_unsafe_named_file",
+                "NR-01 requires a safe repository-relative named target review file; absolute paths, .git paths, or parent traversal are not patchable.",
+            )
+            emitted_or_blocked = True
+            continue
+        concrete_paths = [path for path in paths if path is not None]
+        if not concrete_paths:
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_missing_named_file",
+                "NR-01 requires exactly one safe named target review file in the manifest row.",
+            )
+            emitted_or_blocked = True
+            continue
+        if len(dedupe_paths(concrete_paths)) != 1:
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_ambiguous_named_files",
+                "NR-01 requires exactly one target review file so pruning candidates do not become a broad rewrite.",
+            )
+            emitted_or_blocked = True
+            continue
+        if files_touched != "1":
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_broad_row_scope",
+                "NR-01 requires a patch manifest row scoped to exactly one file; broad rows are not patchable.",
+            )
+            emitted_or_blocked = True
+            continue
+
+        native_capability = nr01_native_capability_for_row(row)
+        if native_capability is None:
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_missing_native_capability",
+                "NR-01 requires an explicitly named native capability, such as `repo-agent-core upstream capability intake contract`, in the manifest row.",
+            )
+            emitted_or_blocked = True
+            continue
+
+        rel = concrete_paths[0]
+        affected_surface = nr01_affected_surface_for_row(row, rel)
+        if rel in processed_targets:
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_duplicate_target_file",
+                f"NR-01 target review file already has a materialized pruning candidate in this run: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        path = repo / rel
+        if path.is_symlink():
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_symlinked_target_file",
+                f"NR-01 target review file is symlinked and is not safe for deterministic patch materialization: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        old = read_lines(path)
+        if old is None:
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_target_file_unreadable",
+                f"NR-01 target review file is missing, broad, unsafe, or outside the repository: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        if native_pruning_has_candidate_for(old, native_capability, affected_surface):
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_already_grounded",
+                f"NR-01 target review file already contains this native replacement pruning candidate: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        new = upsert_native_pruning_block(old, native_capability, affected_surface)
+        if new is None:
+            nr01_record(
+                row,
+                patch_name,
+                "nr01_existing_section_unparseable",
+                f"NR-01 target review file has an existing Native Replacement Pruning Candidates section that could not be safely parsed without replacing existing rows: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        changes.append((rel, old, new))
+        metadata_context = row_metadata_context(row)
+        metadata_rows.append(
+            {
+                "row_id": str(row.get("row_id", "NR-01")),
+                "patch": patch_name,
+                "target_file": rel,
+                "native_capability": native_capability,
+                "affected_surface": affected_surface,
+                **metadata_context,
+            }
+        )
+        processed_targets.add(rel)
+        emitted_or_blocked = True
+
+    if changes:
+        if write_patch(patch_dir / patch_name, changes, "NR-01"):
+            patch_metadata.extend(metadata_rows)
+    elif emitted_or_blocked:
+        written_row_ids.add("NR-01")
+
+
 def hfr01_receipt_block() -> list[str]:
     return [
         "## HERMES_FOREGROUND_RUN_RECEIPT",
@@ -2013,6 +2286,7 @@ materialize_wm03()
 materialize_wm04()
 materialize_hs01()
 materialize_cr01()
+materialize_nr01()
 materialize_hfr01()
 materialize_fgr01()
 materialize_lr01()
@@ -2221,7 +2495,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     supported = bool(
-        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "HFR-01", "FGR-01", "LR-01"}
+        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "NR-01", "HFR-01", "FGR-01", "LR-01"}
         or re.search(r"\bS-05\b", row_text)
         and re.search(r"\bS-06\b", row_text)
         and re.search(r"\bS-07\b", row_text)

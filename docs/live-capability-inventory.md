@@ -11,7 +11,7 @@ The calibrated detector separates live surfaces from retained, archive, test-fix
 
 | Field | Value |
 |---|---|
-| Calibrated detector live paths | 54 |
+| Calibrated detector live paths | 55 |
 | Calibrated tracking-surface gaps closed by this PR | 33 |
 | Additional `.agents/skills` reference prompts tracked by owner review | 1 |
 | Delete/archive candidates selected here | 0 |
@@ -68,6 +68,7 @@ The calibrated detector separates live surfaces from retained, archive, test-fix
 | `scripts/pre-push-hook.sh` | runtime-loaded script | tracking-surface gap closed by this PR | Keep tracked as an owner-owned script surface. |
 | `scripts/proof-seam-closure.py` | runtime-loaded script | tracking-surface gap closed by this PR | Keep tracked as an owner-owned script surface. |
 | `scripts/replay-cr01-patch-pack.sh` | runtime-loaded script | already tracked before Issue #164 replay | Keep tracked as an owner-owned script surface. |
+| `scripts/replay-native-pruning-patch-pack.sh` | runtime-loaded script | Issue #80 native pruning replay addition | Keep tracked as an owner-owned script surface. |
 | `scripts/replay-recovery-runtime-patch-pack.sh` | runtime-loaded script | already tracked before Issue #164 replay | Keep tracked as an owner-owned script surface. |
 | `scripts/repo-optimizer.sh` | runtime-loaded script | already tracked before Issue #164 replay | Keep tracked as an owner-owned script surface. |
 | `scripts/run-live-agent-benchmark.py` | runtime-loaded script | already tracked before Issue #164 replay | Keep tracked as an owner-owned script surface. |
