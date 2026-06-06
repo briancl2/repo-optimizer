@@ -8,6 +8,7 @@ CR01_TARGET_FILE ?= docs/capability-guidance.md
 CR01_CAPABILITY ?= Hermes -z
 NR01_TARGET_FILE ?= docs/pruning-continuity.md
 NR01_NATIVE_CAPABILITY ?= repo-agent-core upstream capability intake contract
+NR01_AFFECTED_SURFACE ?= $(NR01_TARGET_FILE)
 FGR_TARGET_FILE ?=
 LR_TARGET_FILE ?=
 EXPECT_PATCHES ?=
@@ -38,7 +39,7 @@ help:
 	@echo "  make collect-live-agent-receipts FIXTURES=<path> ADAPTER=<codex|copilot|generic> OUTPUT_DIR=<dir>  Collect live receipts"
 	@echo "  make cr01-replay TARGET=<path> OUTPUT_DIR=<dir> CR01_TARGET_FILE=<path> CR01_CAPABILITY=<name>"
 	@echo "                                            Replay bounded CR-01 patch-pack read-only"
-	@echo "  make native-pruning-replay TARGET=<path> OUTPUT_DIR=<dir> NR01_TARGET_FILE=<path> NR01_NATIVE_CAPABILITY=<name>"
+	@echo "  make native-pruning-replay TARGET=<path> OUTPUT_DIR=<dir> NR01_TARGET_FILE=<review-path> NR01_NATIVE_CAPABILITY=<name> [NR01_AFFECTED_SURFACE=<path>]"
 	@echo "                                            Replay bounded NR-01 native pruning patch-pack read-only"
 	@echo "  make recovery-runtime-replay TARGET=<path> OUTPUT_DIR=<dir> [FGR_TARGET_FILE=<path>] [LR_TARGET_FILE=<path>] [FROM_ADVISOR=<OPPORTUNITIES.json>] [EXPECT_BLOCKERS=<n>]"
 	@echo "                                            Replay bounded FGR-01/LR-01 patch-pack read-only"
@@ -126,7 +127,7 @@ cr01-replay:
 	@bash scripts/replay-cr01-patch-pack.sh "$(TARGET)" "$(OUTPUT_DIR)" "$(CR01_TARGET_FILE)" "$(CR01_CAPABILITY)"
 
 native-pruning-replay:
-	@bash scripts/replay-native-pruning-patch-pack.sh "$(TARGET)" "$(OUTPUT_DIR)" "$(NR01_TARGET_FILE)" "$(NR01_NATIVE_CAPABILITY)"
+	@bash scripts/replay-native-pruning-patch-pack.sh "$(TARGET)" "$(OUTPUT_DIR)" "$(NR01_TARGET_FILE)" "$(NR01_NATIVE_CAPABILITY)" "$(NR01_AFFECTED_SURFACE)"
 
 recovery-runtime-replay:
 	@test -n "$(FGR_TARGET_FILE)$(LR_TARGET_FILE)$(FROM_ADVISOR)" || { echo "ERROR: set FGR_TARGET_FILE=<path>, LR_TARGET_FILE=<path>, and/or FROM_ADVISOR=<OPPORTUNITIES.json>"; exit 2; }
