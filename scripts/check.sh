@@ -55,7 +55,7 @@ fi
 
 # ── Inventory match ───────────────────────────────────────────────────
 echo "-- inventory --"
-EXPECTED=16  # 14 prev + bounded CR-01 and recovery-runtime replay wrappers
+EXPECTED=17  # 14 prev + bounded CR-01, NR-01, and recovery-runtime replay wrappers
 COUNTED=$(find scripts -maxdepth 1 -name '*.sh' -type f | wc -l | tr -d ' ')
 if [ "$COUNTED" != "$EXPECTED" ]; then
     echo "  WARNING: expected $EXPECTED scripts, found $COUNTED"
