@@ -10,18 +10,24 @@ LINK_PARENT="$(mktemp -d)"
 WORKTREE_REPO="$(mktemp -d)"
 trap 'rm -rf "$TARGET_REPO" "$OUTPUT_DIR" "$LINK_PARENT" "$WORKTREE_REPO"' EXIT
 
-mkdir -p "$TARGET_REPO/docs"
+mkdir -p "$TARGET_REPO/docs" "$TARGET_REPO/scripts"
 cat > "$TARGET_REPO/docs/pruning-continuity.md" <<'EOF'
 # Pruning Continuity
 
 Existing owner-review notes before replay.
+EOF
+cat > "$TARGET_REPO/scripts/local-intake-wrapper.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "custom wrapper"
 EOF
 (
     cd "$TARGET_REPO"
     git init -q
     git config user.email test@example.invalid
     git config user.name "Test User"
-    git add docs/pruning-continuity.md
+    git add docs/pruning-continuity.md scripts/local-intake-wrapper.sh
     git commit -q -m initial
 )
 
@@ -73,6 +79,7 @@ assert receipt["status"] == "completed"
 assert receipt["target_read_only"] is True
 assert receipt["target_file"] == "docs/pruning-continuity.md"
 assert receipt["native_capability"] == "repo-agent-core upstream capability intake contract"
+assert receipt["affected_surface"] == "docs/pruning-continuity.md"
 assert receipt["patches_generated"] == 1
 assert receipt["patches_valid"] == 1
 assert receipt["target_git_state_unchanged"] is True
@@ -92,6 +99,63 @@ then
 else
     echo "  ✗ NR-01 replay receipt missing expected proof"
     [ -f "$RECEIPT" ] && cat "$RECEIPT"
+	exit 1
+fi
+
+CODE_OUTPUT="$OUTPUT_DIR/affected-surface"
+if bash "$OPT_DIR/scripts/replay-native-pruning-patch-pack.sh" \
+    "$TARGET_REPO" \
+    "$CODE_OUTPUT" \
+    docs/pruning-continuity.md \
+    "repo-agent-core upstream capability intake contract" \
+    scripts/local-intake-wrapper.sh >/dev/null; then
+    echo "  ✓ NR-01 replay records separate affected custom surface"
+else
+    echo "  ✗ NR-01 replay rejected separate affected custom surface"
+    exit 1
+fi
+
+CODE_RECEIPT="$CODE_OUTPUT/NR01_REPLAY_RECEIPT.json"
+CODE_PATCH="$CODE_OUTPUT/PATCH_PACK/NR-01-native-replacement-pruning-candidate.patch"
+CODE_MANIFEST="$CODE_OUTPUT/OPTIMIZATION_PLAN.md"
+if [ -s "$CODE_MANIFEST" ] \
+    && grep -Fq '| NR-01 | native replacement pruning candidate for native capability `repo-agent-core upstream capability intake contract` in `docs/pruning-continuity.md` affected_surface: scripts/local-intake-wrapper.sh' "$CODE_MANIFEST" \
+    && [ -s "$CODE_PATCH" ] \
+    && grep -Fq '`scripts/local-intake-wrapper.sh`' "$CODE_PATCH" \
+    && ! grep -Fq 'diff --git a/scripts/local-intake-wrapper.sh b/scripts/local-intake-wrapper.sh' "$CODE_PATCH" \
+    && bash "$OPT_DIR/scripts/validate-patches.sh" "$TARGET_REPO" "$CODE_OUTPUT/PATCH_PACK" >/dev/null; then
+    echo "  ✓ NR-01 replay patch keeps custom surface review-only"
+else
+    echo "  ✗ NR-01 replay patch did not preserve review-only affected surface"
+    [ -f "$CODE_MANIFEST" ] && cat "$CODE_MANIFEST"
+    [ -f "$CODE_PATCH" ] && cat "$CODE_PATCH"
+    exit 1
+fi
+
+if [ -s "$CODE_RECEIPT" ] \
+    && python3 - "$CODE_RECEIPT" "$TARGET_REPO" <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+receipt = json.loads(Path(sys.argv[1]).read_text())
+target = Path(sys.argv[2]).resolve()
+assert receipt["status"] == "completed"
+assert receipt["target_file"] == "docs/pruning-continuity.md"
+assert receipt["affected_surface"] == "scripts/local-intake-wrapper.sh"
+assert receipt["target_git_state_unchanged"] is True
+assert receipt["before_git_head"] == receipt["after_git_head"]
+assert receipt["before_git_status"] == receipt["after_git_status"] == ""
+assert any("review targets only" in claim for claim in receipt["bounded_non_claims"])
+status = subprocess.check_output(["git", "-C", str(target), "status", "--short"], text=True)
+assert status == ""
+PY
+then
+    echo "  ✓ NR-01 replay receipt separates review file from affected surface"
+else
+    echo "  ✗ NR-01 replay receipt missed affected surface proof"
+    [ -f "$CODE_RECEIPT" ] && cat "$CODE_RECEIPT"
     exit 1
 fi
 
@@ -129,7 +193,31 @@ else
     echo "  ✓ NR-01 replay rejects manifest-breaking native capability text"
 fi
 
+if bash "$OPT_DIR/scripts/replay-native-pruning-patch-pack.sh" \
+    "$TARGET_REPO" \
+    "$OUTPUT_DIR/unsafe-affected-surface" \
+    docs/pruning-continuity.md \
+    "repo-agent-core upstream capability intake contract" \
+    ../scripts/local-intake-wrapper.sh >/dev/null 2>&1; then
+    echo "  ✗ NR-01 replay allowed unsafe affected surface"
+    exit 1
+else
+    echo "  ✓ NR-01 replay rejects unsafe affected surface"
+fi
+
 git -C "$TARGET_REPO" worktree add --detach -q "$WORKTREE_REPO" HEAD
+if bash "$OPT_DIR/scripts/replay-native-pruning-patch-pack.sh" \
+    "$WORKTREE_REPO" \
+    "$OUTPUT_DIR/git-file-affected-surface" \
+    docs/pruning-continuity.md \
+    "repo-agent-core upstream capability intake contract" \
+    .git >/dev/null 2>&1; then
+    echo "  ✗ NR-01 replay allowed .git affected surface"
+    exit 1
+else
+    echo "  ✓ NR-01 replay rejects .git affected surface"
+fi
+
 if bash "$OPT_DIR/scripts/replay-native-pruning-patch-pack.sh" \
     "$WORKTREE_REPO" \
     "$OUTPUT_DIR/worktree-replay" \
