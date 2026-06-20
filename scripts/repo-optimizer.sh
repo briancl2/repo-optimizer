@@ -1385,6 +1385,10 @@ if [ -s "$OUTPUT_DIR/OPTIMIZATION_SCORECARD.json" ]; then
         exit "$CLEANUP_CONTRACT_RC"
     fi
     echo "  ✅ cleanup contract applied"
+    python3 "$SCRIPT_DIR/delivery-admission.py" apply \
+        --output-dir "$OUTPUT_DIR" \
+        --patch-mode "$PATCH_MODE"
+    echo "  ✅ delivery admission applied"
 fi
 
 echo "  ✅ OPTIMIZATION_PLAN.md written"
@@ -1400,6 +1404,7 @@ echo "  $OUTPUT_DIR/critic-phase-receipt.json"
 echo "  $OUTPUT_DIR/synthesis-phase-receipt.json"
 echo "  $OUTPUT_DIR/OPTIMIZATION_PLAN.md"
 echo "  $OUTPUT_DIR/OPTIMIZATION_SCORECARD.json"
+echo "  $OUTPUT_DIR/DELIVERY_ADMISSION.json"
 echo "  $OUTPUT_DIR/RUNTIME_RECEIPTS.json"
 echo "================================================================"
 

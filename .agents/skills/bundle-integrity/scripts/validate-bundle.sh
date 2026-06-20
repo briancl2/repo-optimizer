@@ -44,6 +44,7 @@ echo ""
 echo "--- Optional Files ---"
 check_file "manifest.json" "no"
 check_file "PATCHABILITY_BLOCKERS.json" "no"
+check_file "DELIVERY_ADMISSION.json" "no"
 
 # Check patches if PATCH_PACK exists
 if [ -d "$OUTPUT_DIR/PATCH_PACK" ]; then
@@ -94,6 +95,31 @@ PY
         PASS=$((PASS + 1))
     else
         echo "  ✗ PATCHABILITY_BLOCKERS.json — INVALID patchability structure"
+        FAIL=$((FAIL + 1))
+    fi
+fi
+
+if [ -s "$OUTPUT_DIR/DELIVERY_ADMISSION.json" ]; then
+    echo ""
+    echo "--- Delivery Admission ---"
+    if python3 - "$OUTPUT_DIR/DELIVERY_ADMISSION.json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+assert payload.get("artifact") == "DELIVERY_ADMISSION"
+assert isinstance(payload.get("delivery_admitted"), bool)
+assert isinstance(payload.get("admission_status"), str) and payload["admission_status"]
+assert isinstance(payload.get("next_owner_action"), str) and payload["next_owner_action"]
+print(f"  Delivery admitted: {str(payload['delivery_admitted']).lower()}")
+print(f"  Admission status: {payload['admission_status']}")
+PY
+    then
+        PASS=$((PASS + 1))
+    else
+        echo "  ✗ DELIVERY_ADMISSION.json — INVALID delivery-admission structure"
         FAIL=$((FAIL + 1))
     fi
 fi
