@@ -148,6 +148,7 @@ test:
 	@bash tests/test-critic-rejects.sh
 	@bash tests/test-discovery-payload-capture.sh
 	@bash tests/test-coverage-verdicts.sh
+	@bash tests/test-delivery-admission.sh
 	@bash tests/test-audit-admission.sh
 	@bash tests/test-phase-output-classifier.sh
 	@bash tests/test-transfer-oracle-consumer.sh
