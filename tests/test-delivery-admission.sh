@@ -27,6 +27,10 @@ json_field() {
     python3 -c 'import functools,json,sys; data=json.load(open(sys.argv[1])); value=functools.reduce(lambda acc,key: acc.get(key) if isinstance(acc,dict) else None, sys.argv[2].split("."), data); print("true" if value is True else "false" if value is False else "" if value is None else value)' "$1" "$2"
 }
 
+json_failure_phases() {
+    python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); print(",".join(str(item.get("phase")) for item in data.get("pipeline_failures", []) if isinstance(item, dict)))' "$1"
+}
+
 echo "=== Delivery Admission Tests ==="
 
 REPORT_ONLY="$TEST_ROOT/report-only"
@@ -81,6 +85,48 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+COVERAGE_ONLY="$TEST_ROOT/coverage-only"
+mkdir -p "$COVERAGE_ONLY"
+printf '%s\n' '# Optimization Plan' '' 'Coverage-only fixture.' > "$COVERAGE_ONLY/OPTIMIZATION_PLAN.md"
+cat > "$COVERAGE_ONLY/OPTIMIZATION_SCORECARD.json" <<'JSON'
+{
+  "patches_generated": 0,
+  "patches_valid": 0,
+  "coverage_verdict": "partial",
+  "recommendation_strength": "diagnostic",
+  "discovery_coverage": {
+    "coverage_verdict": "partial",
+    "recommendation_strength": "diagnostic",
+    "missing_domains": ["standardization"]
+  },
+  "meta": {
+    "patch_status": "no_patches_generated"
+  }
+}
+JSON
+cat > "$COVERAGE_ONLY/RUNTIME_RECEIPTS.json" <<'JSON'
+{
+  "phases": {
+    "critic": {
+      "status": "completed",
+      "receipt_class": "terminal_markdown_captured"
+    },
+    "synthesis": {
+      "status": "completed",
+      "receipt_class": "terminal_markdown_captured"
+    },
+    "patch_generation": {
+      "status": "no_patches_generated",
+      "patches_valid": 0
+    }
+  }
+}
+JSON
+python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$COVERAGE_ONLY" --patch-mode true
+check "valid pipeline partial coverage stays coverage-blocked" "blocked_coverage" "$(json_field "$COVERAGE_ONLY/DELIVERY_ADMISSION.json" "admission_status")"
+check "valid pipeline partial coverage remains assessable" "true" "$(json_field "$COVERAGE_ONLY/DELIVERY_ADMISSION.json" "admission_assessable")"
+check "valid pipeline partial coverage has no pipeline failures" "0" "$(json_field "$COVERAGE_ONLY/DELIVERY_ADMISSION.json" "pipeline_failure_count")"
+
 PIPELINE_FAIL="$TEST_ROOT/pipeline-fail"
 mkdir -p "$PIPELINE_FAIL"
 printf '%s\n' '# Optimization Plan' '' 'Pipeline failure fixture.' > "$PIPELINE_FAIL/OPTIMIZATION_PLAN.md"
@@ -125,6 +171,7 @@ check "pipeline failure status is not coverage" "blocked_pipeline_artifact_contr
 check "pipeline failure not assessable" "false" "$(json_field "$PIPELINE_FAIL/DELIVERY_ADMISSION.json" "admission_assessable")"
 check "pipeline failure not admitted" "false" "$(json_field "$PIPELINE_FAIL/DELIVERY_ADMISSION.json" "delivery_admitted")"
 check "pipeline failure count" "2" "$(json_field "$PIPELINE_FAIL/DELIVERY_ADMISSION.json" "pipeline_failure_count")"
+check "pipeline failure phases" "critic,synthesis" "$(json_failure_phases "$PIPELINE_FAIL/DELIVERY_ADMISSION.json")"
 check "pipeline failure scorecard summary" "blocked_pipeline_artifact_contract" "$(json_field "$PIPELINE_FAIL/OPTIMIZATION_SCORECARD.json" "delivery_admission.admission_status")"
 check "pipeline failure scorecard assessable summary" "false" "$(json_field "$PIPELINE_FAIL/OPTIMIZATION_SCORECARD.json" "delivery_admission.admission_assessable")"
 
