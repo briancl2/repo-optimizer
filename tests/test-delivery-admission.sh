@@ -81,6 +81,53 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+PIPELINE_FAIL="$TEST_ROOT/pipeline-fail"
+mkdir -p "$PIPELINE_FAIL"
+printf '%s\n' '# Optimization Plan' '' 'Pipeline failure fixture.' > "$PIPELINE_FAIL/OPTIMIZATION_PLAN.md"
+cat > "$PIPELINE_FAIL/OPTIMIZATION_SCORECARD.json" <<'JSON'
+{
+  "patches_generated": 0,
+  "patches_valid": 0,
+  "coverage_verdict": "partial",
+  "recommendation_strength": "diagnostic",
+  "discovery_coverage": {
+    "coverage_verdict": "partial",
+    "recommendation_strength": "diagnostic",
+    "missing_domains": [],
+    "critic_status": "failed_artifact_contract",
+    "synthesis_status": "skipped_upstream_critic_failure"
+  },
+  "meta": {
+    "patch_status": "fail_closed_critic_missing_terminal_non_tool_message"
+  }
+}
+JSON
+cat > "$PIPELINE_FAIL/RUNTIME_RECEIPTS.json" <<'JSON'
+{
+  "phases": {
+    "critic": {
+      "status": "failed_artifact_contract",
+      "receipt_class": "missing_terminal_non_tool_message"
+    },
+    "synthesis": {
+      "status": "skipped_upstream_critic_failure",
+      "receipt_class": "upstream_critic_missing_terminal_non_tool_message"
+    },
+    "patch_generation": {
+      "status": "fail_closed_critic_missing_terminal_non_tool_message",
+      "patches_valid": 0
+    }
+  }
+}
+JSON
+python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$PIPELINE_FAIL" --patch-mode true
+check "pipeline failure status is not coverage" "blocked_pipeline_artifact_contract" "$(json_field "$PIPELINE_FAIL/DELIVERY_ADMISSION.json" "admission_status")"
+check "pipeline failure not assessable" "false" "$(json_field "$PIPELINE_FAIL/DELIVERY_ADMISSION.json" "admission_assessable")"
+check "pipeline failure not admitted" "false" "$(json_field "$PIPELINE_FAIL/DELIVERY_ADMISSION.json" "delivery_admitted")"
+check "pipeline failure count" "2" "$(json_field "$PIPELINE_FAIL/DELIVERY_ADMISSION.json" "pipeline_failure_count")"
+check "pipeline failure scorecard summary" "blocked_pipeline_artifact_contract" "$(json_field "$PIPELINE_FAIL/OPTIMIZATION_SCORECARD.json" "delivery_admission.admission_status")"
+check "pipeline failure scorecard assessable summary" "false" "$(json_field "$PIPELINE_FAIL/OPTIMIZATION_SCORECARD.json" "delivery_admission.admission_assessable")"
+
 PATCHED="$TEST_ROOT/patched"
 mkdir -p "$PATCHED/PATCH_PACK"
 printf '%s\n' '# Optimization Plan' '' 'Patch-present fixture.' > "$PATCHED/OPTIMIZATION_PLAN.md"

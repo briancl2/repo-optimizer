@@ -72,6 +72,37 @@ def blocker_codes(blockers: dict[str, Any]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
+def pipeline_artifact_contract_failures(output_dir: Path, status: str) -> list[dict[str, str]]:
+    runtime = load_json(output_dir / "RUNTIME_RECEIPTS.json")
+    phases = runtime.get("phases")
+    failures: list[dict[str, str]] = []
+    if isinstance(phases, dict):
+        for phase in ("critic", "synthesis"):
+            receipt = phases.get(phase)
+            if not isinstance(receipt, dict):
+                continue
+            phase_status = str(receipt.get("status") or "")
+            receipt_class = str(receipt.get("receipt_class") or "")
+            if phase_status in {"failed_artifact_contract", "skipped_upstream_critic_failure"}:
+                failures.append(
+                    {
+                        "phase": phase,
+                        "status": phase_status,
+                        "receipt_class": receipt_class or "unknown",
+                    }
+                )
+
+    if not failures and status.startswith(("fail_closed_critic_", "fail_closed_synthesis_")):
+        failures.append(
+            {
+                "phase": "optimizer",
+                "status": status,
+                "receipt_class": "patch_status",
+            }
+        )
+    return failures
+
+
 def admission(
     output_dir: Path,
     patch_mode: bool,
@@ -88,11 +119,16 @@ def admission(
     if not isinstance(missing_domains, list):
         missing_domains = []
 
+    pipeline_failures = pipeline_artifact_contract_failures(output_dir, status)
     coverage_limited = verdict in {"blocked", "partial", "pass_with_coverage_gap"}
     patchability_blocked = blocker_count > 0 or status == "fail_closed_patchability_blocked"
     valid_patch_set = patch_count > 0 and patches_valid == patch_count
 
-    if not patch_mode:
+    if pipeline_failures:
+        admission_status = "blocked_pipeline_artifact_contract"
+        admitted = False
+        next_owner_action = "Do not use this bundle for downstream repair selection; repair or rerun the optimizer phase artifact contract before evaluating coverage or patchability."
+    elif not patch_mode:
         admission_status = "report_only"
         admitted = False
         next_owner_action = "Use this bundle for advisory triage only; rerun with patch mode when a target owner wants deterministic patch evidence."
@@ -128,6 +164,7 @@ def admission(
         "output_dir": str(output_dir),
         "delivery_admitted": admitted,
         "admission_status": admission_status,
+        "admission_assessable": not pipeline_failures,
         "next_owner_action": next_owner_action,
         "patch_mode": patch_mode,
         "patch_status": status,
@@ -135,6 +172,8 @@ def admission(
         "patches_valid": patches_valid,
         "patchability_blocker_count": blocker_count,
         "patchability_blocker_codes": blocker_codes(blockers),
+        "pipeline_failure_count": len(pipeline_failures),
+        "pipeline_failures": pipeline_failures,
         "coverage_verdict": verdict,
         "recommendation_strength": strength,
         "missing_discovery_domains": [str(item) for item in missing_domains],
@@ -148,6 +187,7 @@ def admission(
             "Delivery admission is advisory owner-routing metadata, not target mutation authority.",
             "Generated patches remain review-only and require git apply --check plus a target owner issue/PR before use.",
             "Coverage-limited or patchability-blocked bundles must not be summarized as delivery-ready.",
+            "Pipeline/artifact-contract-blocked bundles are not valid delivery-admission evidence.",
         ],
     }
 
@@ -161,6 +201,7 @@ def section(payload: dict[str, Any]) -> str:
         "## Delivery Admission",
         "",
         f"- Delivery admitted: `{str(payload['delivery_admitted']).lower()}`",
+        f"- Admission assessable: `{str(payload['admission_assessable']).lower()}`",
         f"- Admission status: `{payload['admission_status']}`",
         f"- Recommendation strength: `{payload['recommendation_strength']}`",
         f"- Coverage verdict: `{payload['coverage_verdict']}`",
@@ -168,6 +209,7 @@ def section(payload: dict[str, Any]) -> str:
         f"- Patch status: `{payload['patch_status']}`",
         f"- Patches: {payload['patches_valid']}/{payload['patches_generated']} valid",
         f"- Patchability blockers: {payload['patchability_blocker_count']} ({blockers})",
+        f"- Pipeline artifact-contract failures: {payload['pipeline_failure_count']}",
         f"- Next owner action: {payload['next_owner_action']}",
         "",
         "### Bounded Non-Claims",
@@ -201,8 +243,10 @@ def apply(output_dir: Path, patch_mode: bool) -> int:
     scorecard["delivery_admission"] = {
         "delivery_admitted": payload["delivery_admitted"],
         "admission_status": payload["admission_status"],
+        "admission_assessable": payload["admission_assessable"],
         "next_owner_action": payload["next_owner_action"],
         "patchability_blocker_count": payload["patchability_blocker_count"],
+        "pipeline_failure_count": payload["pipeline_failure_count"],
     }
     scorecard.setdefault("meta", {})
     scorecard["meta"]["delivery_admission_status"] = payload["admission_status"]
