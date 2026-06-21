@@ -12,6 +12,7 @@
       "findings": "Transcript chunking boundary normalization",
       "files_touched": 2,
       "blocker_code": "unsupported_manifest_row",
+      "route_class": "manual_target_owner_implementation",
       "reason": "No deterministic patch materializer is implemented for TP-01."
     },
     {
@@ -19,6 +20,7 @@
       "findings": "Speaker diarization fallback contract",
       "files_touched": 3,
       "blocker_code": "unsupported_manifest_row",
+      "route_class": "manual_target_owner_implementation",
       "reason": "No deterministic patch materializer is implemented for TP-02."
     },
     {
@@ -26,6 +28,7 @@
       "findings": "OCR retry budget guidance",
       "files_touched": 2,
       "blocker_code": "unsupported_manifest_row",
+      "route_class": "manual_target_owner_implementation",
       "reason": "No deterministic patch materializer is implemented for TP-03."
     },
     {
@@ -33,6 +36,7 @@
       "findings": "Metadata provenance receipt plumbing",
       "files_touched": 4,
       "blocker_code": "unsupported_manifest_row",
+      "route_class": "manual_target_owner_implementation",
       "reason": "No deterministic patch materializer is implemented for TP-04."
     },
     {
@@ -40,6 +44,7 @@
       "findings": "Read-only pilot reporting guardrails",
       "files_touched": 2,
       "blocker_code": "unsupported_manifest_row",
+      "route_class": "manual_target_owner_implementation",
       "reason": "No deterministic patch materializer is implemented for TP-05."
     }
   ],

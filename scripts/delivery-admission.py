@@ -72,6 +72,29 @@ def blocker_codes(blockers: dict[str, Any]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
+def blocker_route_classes(blockers: dict[str, Any]) -> dict[str, int]:
+    rows = blockers.get("blockers")
+    if not isinstance(rows, list):
+        return {}
+    counts: Counter[str] = Counter()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        route_class = row.get("route_class")
+        counts[str(route_class or "unclassified")] += 1
+    return dict(sorted(counts.items()))
+
+
+def next_patchability_owner_action(route_classes: dict[str, int]) -> str:
+    if not route_classes:
+        return "Classify patchability blockers before routing target or materializer work; do not apply recommendations as patches."
+    if set(route_classes) == {"materializer_missing"}:
+        return "Open an upstream materializer issue for the classified rows; do not apply recommendations as patches."
+    if set(route_classes) == {"manual_target_owner_implementation"}:
+        return "Open a target-owner implementation issue for the classified manual rows; do not apply recommendations as patches."
+    return "Triage classified patchability blocker routes before opening target or materializer work; do not apply recommendations as patches."
+
+
 def pipeline_artifact_contract_failures(output_dir: Path, status: str) -> list[dict[str, str]]:
     runtime = load_json(output_dir / "RUNTIME_RECEIPTS.json")
     phases = runtime.get("phases")
@@ -123,6 +146,7 @@ def admission(
     coverage_limited = verdict in {"blocked", "partial", "pass_with_coverage_gap"}
     patchability_blocked = blocker_count > 0 or status == "fail_closed_patchability_blocked"
     valid_patch_set = patch_count > 0 and patches_valid == patch_count
+    route_classes = blocker_route_classes(blockers)
 
     if pipeline_failures:
         admission_status = "blocked_pipeline_artifact_contract"
@@ -135,7 +159,7 @@ def admission(
     elif coverage_limited and patchability_blocked:
         admission_status = "blocked_patchability_and_coverage"
         admitted = False
-        next_owner_action = "Do not start downstream repair from this bundle; rerun missing discovery domains or open an upstream materializer issue for unsupported rows."
+        next_owner_action = "Do not start downstream repair from this bundle; rerun missing discovery domains and triage classified patchability blocker routes."
     elif coverage_limited:
         admission_status = "blocked_coverage"
         admitted = False
@@ -143,7 +167,7 @@ def admission(
     elif patchability_blocked:
         admission_status = "blocked_patchability"
         admitted = False
-        next_owner_action = "Open an upstream materializer issue or target-owner implementation issue for the blocked rows; do not apply recommendations as patches."
+        next_owner_action = next_patchability_owner_action(route_classes)
     elif valid_patch_set:
         admission_status = "admitted_patch_review"
         admitted = True
@@ -172,6 +196,7 @@ def admission(
         "patches_valid": patches_valid,
         "patchability_blocker_count": blocker_count,
         "patchability_blocker_codes": blocker_codes(blockers),
+        "patchability_blocker_routes": route_classes,
         "pipeline_failure_count": len(pipeline_failures),
         "pipeline_failures": pipeline_failures,
         "coverage_verdict": verdict,
@@ -195,6 +220,8 @@ def admission(
 def section(payload: dict[str, Any]) -> str:
     blocker_codes = payload["patchability_blocker_codes"]
     blockers = ", ".join(f"{code}={count}" for code, count in blocker_codes.items()) or "none"
+    route_classes = payload["patchability_blocker_routes"]
+    routes = ", ".join(f"{route_class}={count}" for route_class, count in route_classes.items()) or "none"
     missing = ", ".join(payload["missing_discovery_domains"]) or "none"
     lines = [
         START_MARKER,
@@ -209,6 +236,7 @@ def section(payload: dict[str, Any]) -> str:
         f"- Patch status: `{payload['patch_status']}`",
         f"- Patches: {payload['patches_valid']}/{payload['patches_generated']} valid",
         f"- Patchability blockers: {payload['patchability_blocker_count']} ({blockers})",
+        f"- Patchability blocker routes: {routes}",
         f"- Pipeline artifact-contract failures: {payload['pipeline_failure_count']}",
         f"- Next owner action: {payload['next_owner_action']}",
         "",
@@ -246,6 +274,7 @@ def apply(output_dir: Path, patch_mode: bool) -> int:
         "admission_assessable": payload["admission_assessable"],
         "next_owner_action": payload["next_owner_action"],
         "patchability_blocker_count": payload["patchability_blocker_count"],
+        "patchability_blocker_routes": payload["patchability_blocker_routes"],
         "pipeline_failure_count": payload["pipeline_failure_count"],
     }
     scorecard.setdefault("meta", {})
