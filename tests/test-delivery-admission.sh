@@ -260,6 +260,47 @@ check "routed unsafe route counted" "1" "$(json_field "$ROUTED/DELIVERY_ADMISSIO
 check "routed contradictory route counted" "1" "$(json_field "$ROUTED/DELIVERY_ADMISSION.json" "patchability_blocker_routes.contradictory_cleanup_contract")"
 check "routed owner action avoids default materializer" "true" "$(grep -Fq 'Do not start downstream repair from this mixed-route bundle' "$ROUTED/DELIVERY_ADMISSION.json" && grep -Fq 'materializer_missing -> repo-optimizer materializer issue' "$ROUTED/DELIVERY_ADMISSION.json" && echo true || echo false)"
 
+single_route_case() {
+    local name="$1"
+    local route_class="$2"
+    local owner_path="$3"
+    local dir="$TEST_ROOT/single-$name"
+    mkdir -p "$dir"
+    printf '%s\n' '# Optimization Plan' '' "Single route fixture: $route_class." > "$dir/OPTIMIZATION_PLAN.md"
+    cat > "$dir/OPTIMIZATION_SCORECARD.json" <<'JSON'
+{
+  "patches_generated": 0,
+  "patches_valid": 0,
+  "coverage_verdict": "complete",
+  "recommendation_strength": "strong",
+  "meta": {
+    "patch_status": "fail_closed_patchability_blocked"
+  }
+}
+JSON
+    cat > "$dir/PATCHABILITY_BLOCKERS.json" <<JSON
+{
+  "artifact": "PATCHABILITY_BLOCKERS",
+  "blocker_count": 1,
+  "blockers": [
+    {
+      "row_id": "$name",
+      "blocker_code": "unsupported_manifest_row",
+      "route_class": "$route_class",
+      "reason": "Single route fixture."
+    }
+  ]
+}
+JSON
+    python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$dir" --patch-mode true
+    check "single $name route remains blocked" "blocked_patchability" "$(json_field "$dir/DELIVERY_ADMISSION.json" "admission_status")"
+    check "single $name route-specific owner action" "true" "$(grep -Fq 'Do not start downstream repair from this route-class bundle' "$dir/DELIVERY_ADMISSION.json" && grep -Fq "$route_class -> $owner_path" "$dir/DELIVERY_ADMISSION.json" && ! grep -Fq 'mixed-route bundle' "$dir/DELIVERY_ADMISSION.json" && echo true || echo false)"
+}
+
+single_route_case "unsupported" "unsupported_or_unpatchable_recommendation" "narrower advisor contract or archive/no-action"
+single_route_case "unsafe" "unsafe_or_insufficient_authorization" "operator authorization blocker"
+single_route_case "contradictory" "contradictory_cleanup_contract" "cleanup-contract reconciliation issue"
+
 echo ""
 echo "=== Delivery Admission Results: $PASS passed, $FAIL failed ==="
 if [ "$FAIL" -gt 0 ]; then
