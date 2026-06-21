@@ -12,7 +12,8 @@
       "findings": "Transcript chunking boundary normalization",
       "files_touched": 2,
       "blocker_code": "unsupported_manifest_row",
-      "route_class": "manual_target_owner_implementation",
+      "route_class": "unsupported_or_unpatchable_recommendation",
+      "route_reason": "The row is advisory, already satisfied, or too semantic to convert into a deterministic patch without a narrower contract.",
       "reason": "No deterministic patch materializer is implemented for TP-01."
     },
     {
@@ -21,6 +22,7 @@
       "files_touched": 3,
       "blocker_code": "unsupported_manifest_row",
       "route_class": "manual_target_owner_implementation",
+      "route_reason": "The row describes target-owned implementation or integration work that needs an issue-backed owner change.",
       "reason": "No deterministic patch materializer is implemented for TP-02."
     },
     {
@@ -28,7 +30,8 @@
       "findings": "OCR retry budget guidance",
       "files_touched": 2,
       "blocker_code": "unsupported_manifest_row",
-      "route_class": "manual_target_owner_implementation",
+      "route_class": "unsupported_or_unpatchable_recommendation",
+      "route_reason": "The row is advisory, already satisfied, or too semantic to convert into a deterministic patch without a narrower contract.",
       "reason": "No deterministic patch materializer is implemented for TP-03."
     },
     {
@@ -37,6 +40,7 @@
       "files_touched": 4,
       "blocker_code": "unsupported_manifest_row",
       "route_class": "manual_target_owner_implementation",
+      "route_reason": "The row describes target-owned implementation or integration work that needs an issue-backed owner change.",
       "reason": "No deterministic patch materializer is implemented for TP-04."
     },
     {
@@ -44,7 +48,8 @@
       "findings": "Read-only pilot reporting guardrails",
       "files_touched": 2,
       "blocker_code": "unsupported_manifest_row",
-      "route_class": "manual_target_owner_implementation",
+      "route_class": "unsafe_or_insufficient_authorization",
+      "route_reason": "The row is blocked by unsafe scope, safety limits, read-only constraints, or missing owner authorization.",
       "reason": "No deterministic patch materializer is implemented for TP-05."
     }
   ],
