@@ -96,7 +96,7 @@ def blocker_route_classes(blockers: dict[str, Any]) -> dict[str, int]:
 ROUTE_OWNER_PATHS = {
     "materializer_missing": "repo-optimizer materializer issue",
     "manual_target_owner_implementation": "target-owner implementation issue",
-    "unsupported_or_unpatchable_recommendation": "narrower advisor contract or archive/no-action",
+    "unsupported_or_unpatchable_recommendation": "advisor/optimizer boundary triage plus positive-path proof",
     "unsafe_or_insufficient_authorization": "operator authorization blocker",
     "contradictory_cleanup_contract": "cleanup-contract reconciliation issue",
     "unclassified": "route-classification blocker",
@@ -118,6 +118,12 @@ def next_patchability_owner_action(route_classes: dict[str, int]) -> str:
         return "Open an upstream materializer issue for the classified rows; do not apply recommendations as patches."
     if set(route_classes) == {"manual_target_owner_implementation"}:
         return "Open a target-owner implementation issue for the classified manual rows; do not apply recommendations as patches."
+    if set(route_classes) == {"unsupported_or_unpatchable_recommendation"}:
+        return (
+            "Do not start downstream repair from this route-class bundle; triage the repo-upgrade-advisor vs repo-optimizer "
+            "boundary and prove delivery admission is reachable with deterministic positive-path coverage before any target repair. "
+            "Preserve explicit blockers or downgrade the route to admission path blocked."
+        )
     if len(route_classes) == 1:
         return (
             "Do not start downstream repair from this route-class bundle; route deterministically: "
