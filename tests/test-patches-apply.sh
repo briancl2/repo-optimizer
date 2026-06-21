@@ -1987,11 +1987,38 @@ fi
 
 if [ ! -e "$BLOCKED_OUTPUT/PATCH_PACK"/*.patch ] \
     && [ -s "$BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
-    && python3 -c "import json; d=json.load(open('$BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 5; assert {row['row_id'] for row in d['blockers']} == {'TP-01','TP-02','TP-03','TP-04','TP-05'}"; then
-    echo "  ✓ unsupported transcript pilot manifest emits PATCHABILITY_BLOCKERS.json"
+    && python3 -c "import json; d=json.load(open('$BLOCKED_OUTPUT/PATCHABILITY_BLOCKERS.json')); assert d['patches_generated'] == 0; assert d['blocker_count'] == 5; assert {row['row_id'] for row in d['blockers']} == {'TP-01','TP-02','TP-03','TP-04','TP-05'}; routes={}; [routes.__setitem__(row['route_class'], routes.get(row['route_class'], 0) + 1) for row in d['blockers']]; assert routes == {'unsupported_or_unpatchable_recommendation': 2, 'manual_target_owner_implementation': 2, 'unsafe_or_insufficient_authorization': 1}; assert all(row.get('route_reason') for row in d['blockers'])"; then
+    echo "  ✓ unsupported transcript pilot manifest emits classified PATCHABILITY_BLOCKERS.json"
     PASS=$((PASS + 1))
 else
-    echo "  ✗ unsupported transcript pilot manifest did not emit PATCHABILITY_BLOCKERS.json as expected"
+    echo "  ✗ unsupported transcript pilot manifest did not emit classified PATCHABILITY_BLOCKERS.json as expected"
+    FAIL=$((FAIL + 1))
+fi
+
+ROUTE_OUTPUT="$(mktemp -d)"
+ROUTE_FINDINGS="$ROUTE_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$ROUTE_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| RC-01 | Missing patch_materializer bridge for custom adapter | 1 |
+| RC-02 | Manual target-owner implementation for settings integration | 2 |
+| RC-03 | Unsupported semantic recommendation requiring human rewrite | 1 |
+| RC-04 | Read-only protected file change without approval | 1 |
+| RC-05 | Cleanup contract conflict: delete stale doc but keep preserved owner reference | 1 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$ROUTE_FINDINGS" "$ROUTE_OUTPUT" >/dev/null \
+    && [ -s "$ROUTE_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$ROUTE_OUTPUT/PATCHABILITY_BLOCKERS.json')); routes={}; [routes.__setitem__(row['route_class'], routes.get(row['route_class'], 0) + 1) for row in d['blockers']]; assert routes == {'materializer_missing': 1, 'manual_target_owner_implementation': 1, 'unsupported_or_unpatchable_recommendation': 1, 'unsafe_or_insufficient_authorization': 1, 'contradictory_cleanup_contract': 1}; assert {row['blocker_code'] for row in d['blockers']} == {'unsupported_manifest_row'}"; then
+    echo "  ✓ unsupported manifest rows emit all route classes without changing blocker_code"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ unsupported manifest rows did not emit expected route classes"
+    [ -f "$ROUTE_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$ROUTE_OUTPUT/PATCHABILITY_BLOCKERS.json"
     FAIL=$((FAIL + 1))
 fi
 

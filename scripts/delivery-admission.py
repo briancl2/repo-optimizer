@@ -85,14 +85,35 @@ def blocker_route_classes(blockers: dict[str, Any]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
+ROUTE_OWNER_PATHS = {
+    "materializer_missing": "repo-optimizer materializer issue",
+    "manual_target_owner_implementation": "target-owner implementation issue",
+    "unsupported_or_unpatchable_recommendation": "narrower advisor contract or archive/no-action",
+    "unsafe_or_insufficient_authorization": "operator authorization blocker",
+    "contradictory_cleanup_contract": "cleanup-contract reconciliation issue",
+    "unclassified": "route-classification blocker",
+}
+
+
+def route_owner_paths(route_classes: dict[str, int]) -> str:
+    routes = route_classes or {"unclassified": 1}
+    return "; ".join(
+        f"{route_class} -> {ROUTE_OWNER_PATHS.get(route_class, 'route-classification blocker')}"
+        for route_class in sorted(routes)
+    )
+
+
 def next_patchability_owner_action(route_classes: dict[str, int]) -> str:
     if not route_classes:
-        return "Classify patchability blockers before routing target or materializer work; do not apply recommendations as patches."
+        return "Fail closed: patchability blockers lack route classes; open a route-classification blocker before any target or materializer work."
     if set(route_classes) == {"materializer_missing"}:
         return "Open an upstream materializer issue for the classified rows; do not apply recommendations as patches."
     if set(route_classes) == {"manual_target_owner_implementation"}:
         return "Open a target-owner implementation issue for the classified manual rows; do not apply recommendations as patches."
-    return "Triage classified patchability blocker routes before opening target or materializer work; do not apply recommendations as patches."
+    return (
+        "Do not start downstream repair from this mixed-route bundle; split blocker rows by route class and route deterministically: "
+        f"{route_owner_paths(route_classes)}. Do not apply recommendations as patches."
+    )
 
 
 def pipeline_artifact_contract_failures(output_dir: Path, status: str) -> list[dict[str, str]]:
@@ -159,7 +180,10 @@ def admission(
     elif coverage_limited and patchability_blocked:
         admission_status = "blocked_patchability_and_coverage"
         admitted = False
-        next_owner_action = "Do not start downstream repair from this bundle; rerun missing discovery domains and triage classified patchability blocker routes."
+        next_owner_action = (
+            "Do not start downstream repair from this bundle; rerun missing discovery domains first, then keep patchability routes fail-closed: "
+            f"{route_owner_paths(route_classes)}."
+        )
     elif coverage_limited:
         admission_status = "blocked_coverage"
         admitted = False
