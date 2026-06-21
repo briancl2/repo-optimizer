@@ -202,6 +202,7 @@ check "patch-present delivery strength" "patch_review_ready" "$(json_field "$PAT
 check "patch-present delivery readiness" "ready_for_patch_review" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "delivery_readiness")"
 check "patch-present status" "admitted_patch_review" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "admission_status")"
 check "patch-present evidence path" "PATCH_PACK" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "evidence_paths.patch_pack")"
+check "positive-path fixture proves reachable delivery admission" "true" "$(grep -Fq '"delivery_admitted": true' "$PATCHED/DELIVERY_ADMISSION.json" && grep -Fq '"delivery_readiness": "ready_for_patch_review"' "$PATCHED/DELIVERY_ADMISSION.json" && echo true || echo false)"
 
 STRONG_FULLY_BLOCKED="$TEST_ROOT/strong-fully-blocked"
 mkdir -p "$STRONG_FULLY_BLOCKED"
@@ -264,6 +265,7 @@ check "strong fully blocked delivery readiness" "not_delivery_ready" "$(json_fie
 check "strong fully blocked not admitted" "false" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "delivery_admitted")"
 check "strong fully blocked status remains patchability-blocked" "blocked_patchability" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "admission_status")"
 check "strong fully blocked unpatchable route count" "5" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "patchability_blocker_routes.unsupported_or_unpatchable_recommendation")"
+check "strong fully blocked routes to boundary proof" "true" "$(grep -Fq 'triage the repo-upgrade-advisor vs repo-optimizer boundary' "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" && grep -Fq 'prove delivery admission is reachable' "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" && echo true || echo false)"
 check "strong fully blocked scorecard delivery strength" "none" "$(json_field "$STRONG_FULLY_BLOCKED/OPTIMIZATION_SCORECARD.json" "delivery_admission.delivery_strength")"
 check "strong fully blocked scorecard recommendation scope" "discovery_advisory_not_delivery_readiness" "$(json_field "$STRONG_FULLY_BLOCKED/OPTIMIZATION_SCORECARD.json" "delivery_admission.recommendation_strength_scope")"
 check "strong fully blocked markdown separates strengths" "true" "$(grep -Fq 'Delivery strength: `none` (`not_delivery_ready`)' "$STRONG_FULLY_BLOCKED/OPTIMIZATION_PLAN.md" && grep -Fq 'Recommendation strength (discovery/advisory only): `strong`' "$STRONG_FULLY_BLOCKED/OPTIMIZATION_PLAN.md" && echo true || echo false)"
@@ -366,7 +368,37 @@ JSON
     check "single $name route-specific owner action" "true" "$(grep -Fq 'Do not start downstream repair from this route-class bundle' "$dir/DELIVERY_ADMISSION.json" && grep -Fq "$route_class -> $owner_path" "$dir/DELIVERY_ADMISSION.json" && ! grep -Fq 'mixed-route bundle' "$dir/DELIVERY_ADMISSION.json" && echo true || echo false)"
 }
 
-single_route_case "unsupported" "unsupported_or_unpatchable_recommendation" "narrower advisor contract or archive/no-action"
+UNSUPPORTED_SINGLE="$TEST_ROOT/single-unsupported"
+mkdir -p "$UNSUPPORTED_SINGLE"
+printf '%s\n' '# Optimization Plan' '' 'Single unsupported route fixture.' > "$UNSUPPORTED_SINGLE/OPTIMIZATION_PLAN.md"
+cat > "$UNSUPPORTED_SINGLE/OPTIMIZATION_SCORECARD.json" <<'JSON'
+{
+  "patches_generated": 0,
+  "patches_valid": 0,
+  "coverage_verdict": "complete",
+  "recommendation_strength": "strong",
+  "meta": {
+    "patch_status": "fail_closed_patchability_blocked"
+  }
+}
+JSON
+cat > "$UNSUPPORTED_SINGLE/PATCHABILITY_BLOCKERS.json" <<'JSON'
+{
+  "artifact": "PATCHABILITY_BLOCKERS",
+  "blocker_count": 1,
+  "blockers": [
+    {
+      "row_id": "unsupported",
+      "blocker_code": "unsupported_manifest_row",
+      "route_class": "unsupported_or_unpatchable_recommendation",
+      "reason": "Single unsupported route fixture."
+    }
+  ]
+}
+JSON
+python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$UNSUPPORTED_SINGLE" --patch-mode true
+check "single unsupported route remains blocked" "blocked_patchability" "$(json_field "$UNSUPPORTED_SINGLE/DELIVERY_ADMISSION.json" "admission_status")"
+check "single unsupported route triages boundary" "true" "$(grep -Fq 'triage the repo-upgrade-advisor vs repo-optimizer boundary' "$UNSUPPORTED_SINGLE/DELIVERY_ADMISSION.json" && grep -Fq 'prove delivery admission is reachable' "$UNSUPPORTED_SINGLE/DELIVERY_ADMISSION.json" && echo true || echo false)"
 single_route_case "unsafe" "unsafe_or_insufficient_authorization" "operator authorization blocker"
 single_route_case "contradictory" "contradictory_cleanup_contract" "cleanup-contract reconciliation issue"
 

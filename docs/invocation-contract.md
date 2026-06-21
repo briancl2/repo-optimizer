@@ -194,6 +194,17 @@ Downstream coordinators must use `delivery_admitted`, `delivery_strength`, and
 `recommendation_strength=strong`, zero generated patches, and patchability
 blockers remains fail-closed with `delivery_strength=none`.
 
+When all patchability blockers are
+`unsupported_or_unpatchable_recommendation`, the bundle is not a target repair
+candidate and not automatically a repo-optimizer materializer task. The owner
+route is boundary triage between repo-upgrade-advisor recommendation shaping,
+repo-optimizer synthesis/materialization, and their handoff contract. The route
+must preserve explicit blockers and either prove the positive delivery-admission
+path with deterministic patch evidence, or downgrade the owner action to an
+admission-path blocker. A synthetic positive path is intentionally retained in
+the delivery-admission tests so `delivery_admitted=true` remains falsifiable and
+does not become an assumed future state.
+
 ## Additive Bounded Consumer
 
 `repo-optimizer` also supports a bounded advisory-consumer path for retained
