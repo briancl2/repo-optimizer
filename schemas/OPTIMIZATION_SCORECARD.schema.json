@@ -55,7 +55,7 @@
     "recommendation_strength": {
       "type": "string",
       "enum": ["strong", "limited", "diagnostic", "none"],
-      "description": "Maximum supported recommendation strength after applying discovery coverage constraints"
+      "description": "Maximum supported discovery/advisory recommendation strength after applying discovery coverage constraints; not delivery readiness"
     },
     "discovery_coverage": {
       "type": "object",
@@ -70,7 +70,8 @@
         "coverage_reason": { "type": "string" },
         "recommendation_strength": {
           "type": "string",
-          "enum": ["strong", "limited", "diagnostic", "none"]
+          "enum": ["strong", "limited", "diagnostic", "none"],
+          "description": "Discovery/advisory strength only; use delivery_admission.delivery_strength for delivery readiness"
         },
         "expected_domains": {
           "type": "array",
@@ -101,6 +102,34 @@
           "type": "array",
           "items": { "type": "string" }
         }
+      }
+    },
+    "delivery_admission": {
+      "type": "object",
+      "description": "Additive delivery-readiness routing metadata; keeps discovery recommendation strength separate from patch-delivery readiness.",
+      "properties": {
+        "delivery_admitted": { "type": "boolean" },
+        "delivery_strength": {
+          "type": "string",
+          "enum": ["patch_review_ready", "none"]
+        },
+        "delivery_readiness": {
+          "type": "string",
+          "enum": ["ready_for_patch_review", "not_delivery_ready"]
+        },
+        "admission_status": { "type": "string" },
+        "admission_assessable": { "type": "boolean" },
+        "next_owner_action": { "type": "string" },
+        "recommendation_strength_scope": {
+          "type": "string",
+          "enum": ["discovery_advisory_not_delivery_readiness"]
+        },
+        "patchability_blocker_count": { "type": "integer", "minimum": 0 },
+        "patchability_blocker_routes": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "pipeline_failure_count": { "type": "integer", "minimum": 0 }
       }
     },
     "finding_count_agreement": {

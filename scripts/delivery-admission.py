@@ -59,6 +59,14 @@ def recommendation_strength(scorecard: dict[str, Any]) -> str:
     return str(value or "unknown")
 
 
+def delivery_strength(admitted: bool) -> str:
+    return "patch_review_ready" if admitted else "none"
+
+
+def delivery_readiness(admitted: bool) -> str:
+    return "ready_for_patch_review" if admitted else "not_delivery_ready"
+
+
 def blocker_codes(blockers: dict[str, Any]) -> dict[str, int]:
     rows = blockers.get("blockers")
     if not isinstance(rows, list):
@@ -216,6 +224,8 @@ def admission(
         "generated_at": utc_now(),
         "output_dir": str(output_dir),
         "delivery_admitted": admitted,
+        "delivery_strength": delivery_strength(admitted),
+        "delivery_readiness": delivery_readiness(admitted),
         "admission_status": admission_status,
         "admission_assessable": not pipeline_failures,
         "next_owner_action": next_owner_action,
@@ -230,6 +240,7 @@ def admission(
         "pipeline_failures": pipeline_failures,
         "coverage_verdict": verdict,
         "recommendation_strength": strength,
+        "recommendation_strength_scope": "discovery_advisory_not_delivery_readiness",
         "missing_discovery_domains": [str(item) for item in missing_domains],
         "evidence_paths": {
             "scorecard": "OPTIMIZATION_SCORECARD.json",
@@ -241,6 +252,7 @@ def admission(
             "Delivery admission is advisory owner-routing metadata, not target mutation authority.",
             "Generated patches remain review-only and require git apply --check plus a target owner issue/PR before use.",
             "Coverage-limited or patchability-blocked bundles must not be summarized as delivery-ready.",
+            "Recommendation strength is discovery/advisory strength; it is not delivery strength and does not override delivery_admitted=false.",
             "Pipeline/artifact-contract-blocked bundles are not valid delivery-admission evidence.",
         ],
     }
@@ -257,9 +269,10 @@ def section(payload: dict[str, Any]) -> str:
         "## Delivery Admission",
         "",
         f"- Delivery admitted: `{str(payload['delivery_admitted']).lower()}`",
+        f"- Delivery strength: `{payload['delivery_strength']}` (`{payload['delivery_readiness']}`)",
         f"- Admission assessable: `{str(payload['admission_assessable']).lower()}`",
         f"- Admission status: `{payload['admission_status']}`",
-        f"- Recommendation strength: `{payload['recommendation_strength']}`",
+        f"- Recommendation strength (discovery/advisory only): `{payload['recommendation_strength']}`",
         f"- Coverage verdict: `{payload['coverage_verdict']}`",
         f"- Missing discovery domains: {missing}",
         f"- Patch status: `{payload['patch_status']}`",
@@ -299,15 +312,19 @@ def apply(output_dir: Path, patch_mode: bool) -> int:
 
     scorecard["delivery_admission"] = {
         "delivery_admitted": payload["delivery_admitted"],
+        "delivery_strength": payload["delivery_strength"],
+        "delivery_readiness": payload["delivery_readiness"],
         "admission_status": payload["admission_status"],
         "admission_assessable": payload["admission_assessable"],
         "next_owner_action": payload["next_owner_action"],
+        "recommendation_strength_scope": payload["recommendation_strength_scope"],
         "patchability_blocker_count": payload["patchability_blocker_count"],
         "patchability_blocker_routes": payload["patchability_blocker_routes"],
         "pipeline_failure_count": payload["pipeline_failure_count"],
     }
     scorecard.setdefault("meta", {})
     scorecard["meta"]["delivery_admission_status"] = payload["admission_status"]
+    scorecard["meta"]["delivery_strength"] = payload["delivery_strength"]
     write_json(scorecard_path, scorecard)
 
     if plan_path.is_file():

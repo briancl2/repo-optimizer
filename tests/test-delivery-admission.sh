@@ -50,7 +50,9 @@ JSON
 python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$REPORT_ONLY" --patch-mode false
 check "report-only status" "report_only" "$(json_field "$REPORT_ONLY/DELIVERY_ADMISSION.json" "admission_status")"
 check "report-only not admitted" "false" "$(json_field "$REPORT_ONLY/DELIVERY_ADMISSION.json" "delivery_admitted")"
+check "report-only delivery strength none" "none" "$(json_field "$REPORT_ONLY/DELIVERY_ADMISSION.json" "delivery_strength")"
 check "report-only scorecard summary" "report_only" "$(json_field "$REPORT_ONLY/OPTIMIZATION_SCORECARD.json" "delivery_admission.admission_status")"
+check "report-only scorecard delivery strength" "none" "$(json_field "$REPORT_ONLY/OPTIMIZATION_SCORECARD.json" "delivery_admission.delivery_strength")"
 
 BLOCKED="$TEST_ROOT/blocked"
 mkdir -p "$BLOCKED"
@@ -196,8 +198,75 @@ cat > "$PATCHED/OPTIMIZATION_SCORECARD.json" <<'JSON'
 JSON
 python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$PATCHED" --patch-mode true
 check "patch-present admitted" "true" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "delivery_admitted")"
+check "patch-present delivery strength" "patch_review_ready" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "delivery_strength")"
+check "patch-present delivery readiness" "ready_for_patch_review" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "delivery_readiness")"
 check "patch-present status" "admitted_patch_review" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "admission_status")"
 check "patch-present evidence path" "PATCH_PACK" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "evidence_paths.patch_pack")"
+
+STRONG_FULLY_BLOCKED="$TEST_ROOT/strong-fully-blocked"
+mkdir -p "$STRONG_FULLY_BLOCKED"
+printf '%s\n' '# Optimization Plan' '' 'Strong discovery with full patchability block fixture.' > "$STRONG_FULLY_BLOCKED/OPTIMIZATION_PLAN.md"
+cat > "$STRONG_FULLY_BLOCKED/OPTIMIZATION_SCORECARD.json" <<'JSON'
+{
+  "patches_generated": 0,
+  "patches_valid": 0,
+  "coverage_verdict": "complete",
+  "recommendation_strength": "strong",
+  "meta": {
+    "patch_status": "fail_closed_patchability_blocked"
+  }
+}
+JSON
+cat > "$STRONG_FULLY_BLOCKED/PATCHABILITY_BLOCKERS.json" <<'JSON'
+{
+  "artifact": "PATCHABILITY_BLOCKERS",
+  "blocker_count": 5,
+  "patches_generated": 0,
+  "blockers": [
+    {
+      "row_id": "TP-01",
+      "blocker_code": "unsupported_manifest_row",
+      "route_class": "unsupported_or_unpatchable_recommendation",
+      "reason": "Unsupported recommendation."
+    },
+    {
+      "row_id": "TP-02",
+      "blocker_code": "unsupported_manifest_row",
+      "route_class": "unsupported_or_unpatchable_recommendation",
+      "reason": "Unsupported recommendation."
+    },
+    {
+      "row_id": "TP-03",
+      "blocker_code": "unsupported_manifest_row",
+      "route_class": "unsupported_or_unpatchable_recommendation",
+      "reason": "Unsupported recommendation."
+    },
+    {
+      "row_id": "TP-04",
+      "blocker_code": "unsupported_manifest_row",
+      "route_class": "unsupported_or_unpatchable_recommendation",
+      "reason": "Unsupported recommendation."
+    },
+    {
+      "row_id": "TP-05",
+      "blocker_code": "unsupported_manifest_row",
+      "route_class": "unsupported_or_unpatchable_recommendation",
+      "reason": "Unsupported recommendation."
+    }
+  ]
+}
+JSON
+python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$STRONG_FULLY_BLOCKED" --patch-mode true
+check "strong fully blocked recommendation remains discovery-strong" "strong" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "recommendation_strength")"
+check "strong fully blocked recommendation scope" "discovery_advisory_not_delivery_readiness" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "recommendation_strength_scope")"
+check "strong fully blocked delivery strength none" "none" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "delivery_strength")"
+check "strong fully blocked delivery readiness" "not_delivery_ready" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "delivery_readiness")"
+check "strong fully blocked not admitted" "false" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "delivery_admitted")"
+check "strong fully blocked status remains patchability-blocked" "blocked_patchability" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "admission_status")"
+check "strong fully blocked unpatchable route count" "5" "$(json_field "$STRONG_FULLY_BLOCKED/DELIVERY_ADMISSION.json" "patchability_blocker_routes.unsupported_or_unpatchable_recommendation")"
+check "strong fully blocked scorecard delivery strength" "none" "$(json_field "$STRONG_FULLY_BLOCKED/OPTIMIZATION_SCORECARD.json" "delivery_admission.delivery_strength")"
+check "strong fully blocked scorecard recommendation scope" "discovery_advisory_not_delivery_readiness" "$(json_field "$STRONG_FULLY_BLOCKED/OPTIMIZATION_SCORECARD.json" "delivery_admission.recommendation_strength_scope")"
+check "strong fully blocked markdown separates strengths" "true" "$(grep -Fq 'Delivery strength: `none` (`not_delivery_ready`)' "$STRONG_FULLY_BLOCKED/OPTIMIZATION_PLAN.md" && grep -Fq 'Recommendation strength (discovery/advisory only): `strong`' "$STRONG_FULLY_BLOCKED/OPTIMIZATION_PLAN.md" && echo true || echo false)"
 
 ROUTED="$TEST_ROOT/routed"
 mkdir -p "$ROUTED"

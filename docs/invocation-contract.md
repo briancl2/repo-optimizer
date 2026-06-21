@@ -177,6 +177,23 @@ The optimizer also writes a deterministic `## Coverage Verdict` section in
 `finding_count_agreement` object in `OPTIMIZATION_SCORECARD.json` records whether
 those plan-declared counts match the JSON scorecard counts.
 
+## Delivery Admission
+
+Patch-mode runs also write `DELIVERY_ADMISSION.json` and a marked
+`## Delivery Admission` section in `OPTIMIZATION_PLAN.md`. This contract keeps
+discovery strength separate from delivery readiness:
+
+- `recommendation_strength` is discovery/advisory strength only.
+- `delivery_strength` is delivery-readiness strength; non-admitted bundles use
+  `none`.
+- `delivery_readiness` is `ready_for_patch_review` only when
+  `delivery_admitted=true`; otherwise it is `not_delivery_ready`.
+
+Downstream coordinators must use `delivery_admitted`, `delivery_strength`, and
+`admission_status` for target delivery routing. A complete discovery bundle with
+`recommendation_strength=strong`, zero generated patches, and patchability
+blockers remains fail-closed with `delivery_strength=none`.
+
 ## Additive Bounded Consumer
 
 `repo-optimizer` also supports a bounded advisory-consumer path for retained
@@ -284,6 +301,7 @@ artifact contract:
 
 | Version | Date | Change |
 |---|---|---|
+| 1.12 | 2026-06-21 | Separated discovery recommendation strength from delivery readiness via `delivery_strength` and `delivery_readiness` |
 | 1.11 | 2026-06-01 | Added patch-pack scan-context preservation in generated patch metadata and patchability blockers |
 | 1.10 | 2026-05-09 | Blocked scan-limited and snapshot-limited completed audit evidence from normal readiness claims |
 | 1.9 | 2026-05-08 | Added additive P5 cleanup-safety contract metadata and patch fail-closed receipt for unsafe destructive cleanup recommendations |
