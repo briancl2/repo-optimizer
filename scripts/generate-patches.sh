@@ -128,6 +128,100 @@ written_row_ids: set[str] = set()
 if (patch_dir / "P4-shell-hardening.patch").exists():
     written_row_ids.add("P4")
 
+SUPPORTED_MATERIALIZER_IDS = {
+    "P4",
+    "PP-1",
+    "PP-3",
+    "PP-4",
+    "WM-01",
+    "WM-02",
+    "WM-03",
+    "WM-04",
+    "HS-01",
+    "CR-01",
+    "NR-01",
+    "HFR-01",
+    "FGR-01",
+    "LR-01",
+}
+
+ROUTE_REASONS = {
+    "materializer_missing": "The row explicitly requests a materializer or materialization path that repo-optimizer does not implement.",
+    "manual_target_owner_implementation": "The row describes target-owned implementation or integration work that needs an issue-backed owner change.",
+    "unsupported_or_unpatchable_recommendation": "The row is advisory, already satisfied, or too semantic to convert into a deterministic patch without a narrower contract.",
+    "unsafe_or_insufficient_authorization": "The row is blocked by unsafe scope, safety limits, read-only constraints, or missing owner authorization.",
+    "contradictory_cleanup_contract": "The row contains a cleanup contract conflict that must be reconciled before patch generation.",
+}
+
+
+def row_route_text(row: dict[str, object]) -> str:
+    values: list[str] = []
+    for key in ("row_id", "patch", "findings", "files_touched", "raw_row"):
+        value = row.get(key)
+        if value is not None:
+            values.append(str(value))
+    advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
+    if advisor_metadata:
+        values.extend(str(value) for value in advisor_metadata.values())
+    return " ".join(values).lower()
+
+
+def classify_patchability_route(
+    row: dict[str, object],
+    code: str,
+    reason: str,
+    *,
+    supported_materializer: bool = False,
+) -> str:
+    text = row_route_text(row)
+    code_text = code.lower()
+    reason_text = reason.lower()
+    if (
+        "contradict" in text
+        or "conflict" in text
+        or (
+            "cleanup" in text
+            and re.search(r"\b(delete|remove|drop)\b", text)
+            and re.search(r"\b(keep|retain|preserve)\b", text)
+        )
+    ):
+        return "contradictory_cleanup_contract"
+    if (
+        "unsafe" in text
+        or "unsafe" in code_text
+        or "unsafe" in reason_text
+        or "unauthoriz" in text
+        or "without approval" in text
+        or "approval required" in text
+        or "read-only" in text
+        or "protected" in text
+        or "outside the repository" in reason_text
+        or "symlink" in code_text
+        or code_text in {"patch_file_limit_exceeded", "patch_line_limit_exceeded", "patch_run_limit_exceeded"}
+    ):
+        return "unsafe_or_insufficient_authorization"
+    if supported_materializer or code == "supported_materializer_no_output":
+        return "unsupported_or_unpatchable_recommendation"
+    if (
+        "patch_materializer" in text
+        or "materializer" in text
+        or "materialization" in text
+        or code_text == "advisor_unsupported_patch_materializer"
+    ):
+        return "materializer_missing"
+    if (
+        "target-owner" in text
+        or "target owner" in text
+        or "implementation" in text
+        or "integration" in text
+        or "plumbing" in text
+        or "fallback contract" in text
+        or "business rule" in text
+        or "helper_plus_caller" in code_text
+    ):
+        return "manual_target_owner_implementation"
+    return "unsupported_or_unpatchable_recommendation"
+
 
 def has_manifest_row(row_id: str) -> bool:
     return bool(re.search(rf"(?:^|[|\n\r])\s*{re.escape(row_id)}\b", plan, re.IGNORECASE))
@@ -155,6 +249,7 @@ def record_patch_blocker(
     code: str,
     reason: str,
     source_rows: list[dict[str, object]] | None = None,
+    route_class: str | None = None,
 ) -> None:
     rows = source_rows or [
         {
@@ -173,6 +268,9 @@ def record_patch_blocker(
             "blocker_code": code,
             "reason": reason,
         }
+        resolved_route = route_class or classify_patchability_route(row, code, reason)
+        blocker["route_class"] = resolved_route
+        blocker["route_reason"] = ROUTE_REASONS[resolved_route]
         add_row_metadata(blocker, row)
         overflow_blockers.append(blocker)
 
@@ -193,6 +291,7 @@ def write_patch(
             patch_path.name,
             "patch_file_limit_exceeded",
             f"Materializer for {row_id} would touch {len(material_changes)} files, above the 6-file patch limit.",
+            source_rows,
         )
         return False
 
@@ -203,6 +302,7 @@ def write_patch(
             patch_path.name,
             "patch_line_limit_exceeded",
             f"Materializer for {row_id} would change {net_lines} net lines, above the 160-line patch limit.",
+            source_rows,
         )
         return False
 
@@ -212,6 +312,7 @@ def write_patch(
             patch_path.name,
             "patch_run_limit_exceeded",
             "This run already emitted the maximum 5 patch files; this row remains blocked for a later run.",
+            source_rows,
         )
         return False
 
@@ -438,6 +539,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     }
     if row_id in special_reasons:
         code, reason = special_reasons[row_id]
+        route_class = "manual_target_owner_implementation"
     else:
         advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
         advisor_code = advisor_metadata.get("blocker_code") if advisor_metadata else None
@@ -445,9 +547,10 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
         if isinstance(advisor_code, str) and advisor_code.startswith("advisor_"):
             code = advisor_code
             reason = str(advisor_reason or f"Advisor row {row_id} is not safe for recovery-runtime bridge materialization.")
+            route_class = classify_patchability_route(row, code, reason)
         else:
             supported = bool(
-                row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "NR-01", "HFR-01", "FGR-01", "LR-01"}
+                row_id in SUPPORTED_MATERIALIZER_IDS
                 or re.search(r"\bS-05\b", row_text)
                 and re.search(r"\bS-06\b", row_text)
                 and re.search(r"\bS-07\b", row_text)
@@ -456,14 +559,17 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
             reason = (
                 f"A deterministic materializer matched {row_id}, but the target had no apply-checkable change."
                 if supported
-                else f"No deterministic patch materializer is implemented for manifest row {row_id}."
+                else f"No deterministic patch materializer is implemented for manifest row {row_id}; owner triage is required before opening target or materializer work."
             )
+            route_class = classify_patchability_route(row, code, reason, supported_materializer=supported)
     blocker = {
         "row_id": row_id,
         "patch": row.get("patch", ""),
         "findings": row.get("findings", ""),
         "files_touched": row.get("files_touched", ""),
         "blocker_code": code,
+        "route_class": route_class,
+        "route_reason": ROUTE_REASONS[route_class],
         "reason": reason,
     }
     add_row_metadata(blocker, row)
@@ -497,6 +603,8 @@ def flush_manifest_blockers() -> None:
                 "findings": "",
                 "files_touched": "",
                 "blocker_code": "manifest_rows_not_found",
+                "route_class": "unsupported_or_unpatchable_recommendation",
+                "route_reason": ROUTE_REASONS["unsupported_or_unpatchable_recommendation"],
                 "reason": "No parseable Patch Manifest table rows were found in the optimization plan.",
             }
         ]
@@ -2335,6 +2443,100 @@ patch_dir = Path(sys.argv[2])
 out_path = Path(sys.argv[3])
 plan = findings.read_text(encoding="utf-8", errors="replace")
 
+SUPPORTED_MATERIALIZER_IDS = {
+    "P4",
+    "PP-1",
+    "PP-3",
+    "PP-4",
+    "WM-01",
+    "WM-02",
+    "WM-03",
+    "WM-04",
+    "HS-01",
+    "CR-01",
+    "NR-01",
+    "HFR-01",
+    "FGR-01",
+    "LR-01",
+}
+
+ROUTE_REASONS = {
+    "materializer_missing": "The row explicitly requests a materializer or materialization path that repo-optimizer does not implement.",
+    "manual_target_owner_implementation": "The row describes target-owned implementation or integration work that needs an issue-backed owner change.",
+    "unsupported_or_unpatchable_recommendation": "The row is advisory, already satisfied, or too semantic to convert into a deterministic patch without a narrower contract.",
+    "unsafe_or_insufficient_authorization": "The row is blocked by unsafe scope, safety limits, read-only constraints, or missing owner authorization.",
+    "contradictory_cleanup_contract": "The row contains a cleanup contract conflict that must be reconciled before patch generation.",
+}
+
+
+def row_route_text(row: dict[str, object]) -> str:
+    values: list[str] = []
+    for key in ("row_id", "patch", "findings", "files_touched", "raw_row"):
+        value = row.get(key)
+        if value is not None:
+            values.append(str(value))
+    advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
+    if advisor_metadata:
+        values.extend(str(value) for value in advisor_metadata.values())
+    return " ".join(values).lower()
+
+
+def classify_patchability_route(
+    row: dict[str, object],
+    code: str,
+    reason: str,
+    *,
+    supported_materializer: bool = False,
+) -> str:
+    text = row_route_text(row)
+    code_text = code.lower()
+    reason_text = reason.lower()
+    if (
+        "contradict" in text
+        or "conflict" in text
+        or (
+            "cleanup" in text
+            and re.search(r"\b(delete|remove|drop)\b", text)
+            and re.search(r"\b(keep|retain|preserve)\b", text)
+        )
+    ):
+        return "contradictory_cleanup_contract"
+    if (
+        "unsafe" in text
+        or "unsafe" in code_text
+        or "unsafe" in reason_text
+        or "unauthoriz" in text
+        or "without approval" in text
+        or "approval required" in text
+        or "read-only" in text
+        or "protected" in text
+        or "outside the repository" in reason_text
+        or "symlink" in code_text
+        or code_text in {"patch_file_limit_exceeded", "patch_line_limit_exceeded", "patch_run_limit_exceeded"}
+    ):
+        return "unsafe_or_insufficient_authorization"
+    if supported_materializer or code == "supported_materializer_no_output":
+        return "unsupported_or_unpatchable_recommendation"
+    if (
+        "patch_materializer" in text
+        or "materializer" in text
+        or "materialization" in text
+        or code_text == "advisor_unsupported_patch_materializer"
+    ):
+        return "materializer_missing"
+    if (
+        "target-owner" in text
+        or "target owner" in text
+        or "implementation" in text
+        or "integration" in text
+        or "plumbing" in text
+        or "fallback contract" in text
+        or "business rule" in text
+        or "helper_plus_caller" in code_text
+    ):
+        return "manual_target_owner_implementation"
+    return "unsupported_or_unpatchable_recommendation"
+
 
 def is_separator(cells: list[str]) -> bool:
     return all(re.fullmatch(r":?-{3,}:?", cell.strip() or "-") for cell in cells)
@@ -2495,7 +2697,7 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     supported = bool(
-        row_id in {"P4", "PP-1", "PP-3", "PP-4", "WM-01", "WM-02", "WM-03", "WM-04", "HS-01", "CR-01", "NR-01", "HFR-01", "FGR-01", "LR-01"}
+        row_id in SUPPORTED_MATERIALIZER_IDS
         or re.search(r"\bS-05\b", row_text)
         and re.search(r"\bS-06\b", row_text)
         and re.search(r"\bS-07\b", row_text)
@@ -2504,14 +2706,17 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     reason = (
         f"A deterministic materializer matched {row_id}, but the target had no apply-checkable change."
         if supported
-        else f"No deterministic patch materializer is implemented for manifest row {row_id}."
+        else f"No deterministic patch materializer is implemented for manifest row {row_id}; owner triage is required before opening target or materializer work."
     )
+    route_class = classify_patchability_route(row, code, reason, supported_materializer=supported)
     blocker = {
         "row_id": row_id,
         "patch": row.get("patch", ""),
         "findings": row.get("findings", ""),
         "files_touched": row.get("files_touched", ""),
         "blocker_code": code,
+        "route_class": route_class,
+        "route_reason": ROUTE_REASONS[route_class],
         "reason": reason,
     }
     add_row_metadata(blocker, row)
@@ -2528,6 +2733,8 @@ if not blockers:
             "findings": "",
             "files_touched": "",
             "blocker_code": "manifest_rows_not_found",
+            "route_class": "unsupported_or_unpatchable_recommendation",
+            "route_reason": ROUTE_REASONS["unsupported_or_unpatchable_recommendation"],
             "reason": "No parseable Patch Manifest table rows were found in the optimization plan.",
         }
     ]

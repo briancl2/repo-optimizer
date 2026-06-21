@@ -76,7 +76,9 @@ python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$BLOCKED" -
 check "blocked status combines coverage and patchability" "blocked_patchability_and_coverage" "$(json_field "$BLOCKED/DELIVERY_ADMISSION.json" "admission_status")"
 check "blocked not admitted" "false" "$(json_field "$BLOCKED/DELIVERY_ADMISSION.json" "delivery_admitted")"
 check "blocked unsupported rows counted" "5" "$(json_field "$BLOCKED/DELIVERY_ADMISSION.json" "patchability_blocker_codes.unsupported_manifest_row")"
+check "blocked route classes counted" "5" "$(json_field "$BLOCKED/DELIVERY_ADMISSION.json" "patchability_blocker_routes.manual_target_owner_implementation")"
 check "blocked plan section written" "true" "$(grep -Fq '## Delivery Admission' "$BLOCKED/OPTIMIZATION_PLAN.md" && echo true || echo false)"
+check "blocked plan section names routes" "true" "$(grep -Fq 'Patchability blocker routes: manual_target_owner_implementation=5' "$BLOCKED/OPTIMIZATION_PLAN.md" && echo true || echo false)"
 if make -C "$OPT_DIR" validate OUTPUT_DIR="$BLOCKED" >/dev/null; then
     echo "  PASS: bundle validator accepts delivery-admission artifact"
     PASS=$((PASS + 1))
@@ -194,6 +196,46 @@ python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$PATCHED" -
 check "patch-present admitted" "true" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "delivery_admitted")"
 check "patch-present status" "admitted_patch_review" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "admission_status")"
 check "patch-present evidence path" "PATCH_PACK" "$(json_field "$PATCHED/DELIVERY_ADMISSION.json" "evidence_paths.patch_pack")"
+
+ROUTED="$TEST_ROOT/routed"
+mkdir -p "$ROUTED"
+printf '%s\n' '# Optimization Plan' '' 'Route-only fixture.' > "$ROUTED/OPTIMIZATION_PLAN.md"
+cat > "$ROUTED/OPTIMIZATION_SCORECARD.json" <<'JSON'
+{
+  "patches_generated": 0,
+  "patches_valid": 0,
+  "coverage_verdict": "complete",
+  "recommendation_strength": "strong",
+  "meta": {
+    "patch_status": "fail_closed_patchability_blocked"
+  }
+}
+JSON
+cat > "$ROUTED/PATCHABILITY_BLOCKERS.json" <<'JSON'
+{
+  "artifact": "PATCHABILITY_BLOCKERS",
+  "blocker_count": 2,
+  "blockers": [
+    {
+      "row_id": "P1",
+      "blocker_code": "unsupported_manifest_row",
+      "route_class": "materializer_missing",
+      "reason": "Materializer missing."
+    },
+    {
+      "row_id": "P2",
+      "blocker_code": "unsupported_manifest_row",
+      "route_class": "manual_target_owner_implementation",
+      "reason": "Manual target-owner implementation required."
+    }
+  ]
+}
+JSON
+python3 "$OPT_DIR/scripts/delivery-admission.py" apply --output-dir "$ROUTED" --patch-mode true
+check "routed patchability remains blocked" "blocked_patchability" "$(json_field "$ROUTED/DELIVERY_ADMISSION.json" "admission_status")"
+check "routed materializer route counted" "1" "$(json_field "$ROUTED/DELIVERY_ADMISSION.json" "patchability_blocker_routes.materializer_missing")"
+check "routed target-owner route counted" "1" "$(json_field "$ROUTED/DELIVERY_ADMISSION.json" "patchability_blocker_routes.manual_target_owner_implementation")"
+check "routed owner action avoids default materializer" "true" "$(grep -Fq 'Triage classified patchability blocker routes' "$ROUTED/DELIVERY_ADMISSION.json" && echo true || echo false)"
 
 echo ""
 echo "=== Delivery Admission Results: $PASS passed, $FAIL failed ==="
