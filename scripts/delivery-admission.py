@@ -110,6 +110,11 @@ def next_patchability_owner_action(route_classes: dict[str, int]) -> str:
         return "Open an upstream materializer issue for the classified rows; do not apply recommendations as patches."
     if set(route_classes) == {"manual_target_owner_implementation"}:
         return "Open a target-owner implementation issue for the classified manual rows; do not apply recommendations as patches."
+    if len(route_classes) == 1:
+        return (
+            "Do not start downstream repair from this route-class bundle; route deterministically: "
+            f"{route_owner_paths(route_classes)}. Do not apply recommendations as patches."
+        )
     return (
         "Do not start downstream repair from this mixed-route bundle; split blocker rows by route class and route deterministically: "
         f"{route_owner_paths(route_classes)}. Do not apply recommendations as patches."
