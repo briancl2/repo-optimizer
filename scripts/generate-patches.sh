@@ -319,11 +319,12 @@ def write_patch(
 
     parts: list[str] = []
     for rel, old, new in material_changes:
+        is_new_file = old == [] and not (repo / rel).exists()
         diff = list(
             difflib.unified_diff(
                 old,
                 new,
-                fromfile=f"a/{rel}",
+                fromfile="/dev/null" if is_new_file else f"a/{rel}",
                 tofile=f"b/{rel}",
                 lineterm="",
             )
@@ -331,6 +332,8 @@ def write_patch(
         if not diff:
             continue
         parts.append(f"diff --git a/{rel} b/{rel}")
+        if is_new_file:
+            parts.append("new file mode 100644")
         parts.extend(diff)
     if parts:
         patch_path.write_text("\n".join(parts) + "\n", encoding="utf-8")
@@ -2416,6 +2419,7 @@ def as08_is_local_guidance_path(rel: str) -> bool:
             (
                 ".agents/",
                 ".claude/",
+                ".github/skills/",
                 ".github/instructions/",
                 ".github/prompts/",
                 "docs/",
@@ -2459,15 +2463,24 @@ def as08_reconstruction_block(plan_obj: dict[str, object], rel: str) -> list[str
     prompt_need = privacy_safe_text(implementation_need.get("prompt_text") if isinstance(implementation_need, dict) else None)
     docs_need = privacy_safe_text(implementation_need.get("docs") if isinstance(implementation_need, dict) else None)
     policy_need = privacy_safe_text(implementation_need.get("policy_only_guidance") if isinstance(implementation_need, dict) else None)
+    skill_need = privacy_safe_text(implementation_need.get("skill_or_capability_surface") if isinstance(implementation_need, dict) else None)
+    capability_conventions = ", ".join(
+        privacy_safe_list(plan_obj.get("target_capability_conventions"), limit=5, fallback="none declared")
+    )
+    packaging_surface = privacy_safe_text(plan_obj.get("recommended_packaging_surface"))
+    prompt_disposition = privacy_safe_text(plan_obj.get("prompt_text_packaging_disposition"))
+    runtime_truth = privacy_safe_text(plan_obj.get("model_runtime_availability_truth"))
 
     lines = [
         "## External Critique Reconstruction",
         "",
         "- Capability record: `EXTERNAL_CRITIQUE_CAPABILITY` target-local reconstruction.",
         f"- Target file: `{rel}`.",
+        f"- Target capability conventions: {capability_conventions}.",
+        f"- Recommended packaging surface: {packaging_surface}.",
         f"- Current mechanism/version: {privacy_safe_text(plan_obj.get('detected_current_mechanism_version'))}.",
         f"- Before AS-08 detector evidence: {active_classes}.",
-        "- After AS-08 validation target: local authority refs, local principles, blocker/advisory classification, loop cap, privacy boundaries, and owner routing are explicit before critique findings change owner action.",
+        "- After AS-08 validation target: a target-local skill or capability record is canonical when the repo has that convention; prompt text is only a thin entrypoint, mirror, or drift repair.",
         "- Contract references: repo-agent-core `docs/external-critique-capability-contract.md` and `templates/external-critique-capability.md`; repo-auditor AS-08 external-critique validation.",
         "- Authority refs to preserve:",
     ]
@@ -2483,12 +2496,14 @@ def as08_reconstruction_block(plan_obj: dict[str, object], rel: str) -> list[str
     lines.append("- Implementation disposition:")
     lines.extend(
         [
+            f"  - Skill/capability surface: {skill_need}",
             f"  - Runner code: {runner_need}",
-            f"  - Prompt text: {prompt_need}",
+            f"  - Prompt text: {prompt_need}; disposition: {prompt_disposition}",
             f"  - Docs: {docs_need}",
             f"  - Policy-only guidance: {policy_need}",
         ]
     )
+    lines.append(f"- Model/runtime availability truth: {runtime_truth}.")
     lines.append("- Privacy-safe patch summary:")
     lines.extend(f"  - {item}" for item in privacy_notes)
     lines.append("- Validation commands:")
@@ -2500,6 +2515,53 @@ def as08_reconstruction_block(plan_obj: dict[str, object], rel: str) -> list[str
         ]
     )
     return lines
+
+
+def as08_recommended_surface(plan_obj: dict[str, object]) -> str | None:
+    value = plan_obj.get("recommended_packaging_surface")
+    if not isinstance(value, str):
+        return None
+    rel = safe_rel_path(value)
+    if rel is None or has_git_path_component(rel):
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_./-]+", rel):
+        return None
+    return rel
+
+
+def as08_declares_skill_convention(plan_obj: dict[str, object]) -> bool:
+    values = plan_obj.get("target_capability_conventions")
+    if isinstance(values, list):
+        text = " ".join(str(value).lower() for value in values)
+        if any(token in text for token in ("skill", "capability", "agent")):
+            return True
+    implementation_need = plan_obj.get("implementation_need")
+    if isinstance(implementation_need, dict):
+        text = " ".join(str(value).lower() for value in implementation_need.values())
+        if any(token in text for token in ("skill", "capability")):
+            return True
+    recommended = as08_recommended_surface(plan_obj)
+    return bool(recommended and recommended.endswith("/SKILL.md"))
+
+
+def as08_can_create_missing_skill_file(plan_obj: dict[str, object], rel: str) -> bool:
+    recommended = as08_recommended_surface(plan_obj)
+    return (
+        recommended == rel
+        and rel.endswith("/SKILL.md")
+        and as08_is_local_guidance_path(rel)
+        and as08_declares_skill_convention(plan_obj)
+    )
+
+
+def as08_new_skill_file_lines(plan_obj: dict[str, object], rel: str) -> list[str]:
+    return [
+        "# External Critique",
+        "",
+        "Target-local external critique capability for repo-agent review.",
+        "Use this skill as an advisory risk sensor; owner issue/PR/check/merge truth remains authoritative.",
+        "",
+    ] + as08_reconstruction_block(plan_obj, rel)
 
 
 def as08_record(
@@ -2632,15 +2694,18 @@ def materialize_as08() -> None:
             continue
         old = read_lines(path)
         if old is None:
-            as08_record(
-                row,
-                patch_name,
-                "as08_target_file_unreadable",
-                f"AS-08 target file is missing, unsafe, broad, or outside the repository: {rel}",
-                "unsafe_or_insufficient_authorization",
-            )
-            emitted_or_blocked = True
-            continue
+            if as08_can_create_missing_skill_file(plan_obj, rel):
+                old = []
+            else:
+                as08_record(
+                    row,
+                    patch_name,
+                    "as08_target_file_unreadable",
+                    f"AS-08 target file is missing, unsafe, broad, or outside the repository: {rel}",
+                    "unsafe_or_insufficient_authorization",
+                )
+                emitted_or_blocked = True
+                continue
         if as08_has_reconstruction_block(old):
             as08_record(
                 row,
@@ -2650,7 +2715,10 @@ def materialize_as08() -> None:
             )
             emitted_or_blocked = True
             continue
-        new = insert_after_frontmatter_or_heading(old, as08_reconstruction_block(plan_obj, rel))
+        if old == [] and as08_can_create_missing_skill_file(plan_obj, rel):
+            new = as08_new_skill_file_lines(plan_obj, rel)
+        else:
+            new = insert_after_frontmatter_or_heading(old, as08_reconstruction_block(plan_obj, rel))
         changes.append((rel, old, new))
         metadata_context = row_metadata_context(row)
         metadata_rows.append(
@@ -2663,6 +2731,10 @@ def materialize_as08() -> None:
                     "external_critique_reconstruction_plan.plan_type",
                     "external_critique_reconstruction_plan.detected_current_mechanism_version",
                     "external_critique_reconstruction_plan.active_evidence_classes",
+                    "external_critique_reconstruction_plan.target_capability_conventions",
+                    "external_critique_reconstruction_plan.recommended_packaging_surface",
+                    "external_critique_reconstruction_plan.prompt_text_packaging_disposition",
+                    "external_critique_reconstruction_plan.model_runtime_availability_truth",
                     "external_critique_reconstruction_plan.target_repo_authority_refs",
                     "external_critique_reconstruction_plan.local_principles_to_preserve",
                     "external_critique_reconstruction_plan.portable_invariants",

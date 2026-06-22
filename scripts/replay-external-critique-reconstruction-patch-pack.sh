@@ -180,8 +180,9 @@ def compact_json(value: Any) -> str:
 def safe_summary(target: str) -> str:
     return (
         f"Adds target-local AS-08 external critique reconstruction guidance to {scrub_text(target)}; "
-        "includes before/after detector evidence, authority refs, local principles, validation commands, "
-        "and redaction boundaries without retaining raw private evidence."
+        "prefers canonical skill/capability packaging when the target declares that convention; includes "
+        "before/after detector evidence, authority refs, local principles, validation commands, and "
+        "redaction boundaries without retaining raw private evidence."
     )
 
 
@@ -359,6 +360,10 @@ consumed_fields = [
     "recommendations[].external_critique_reconstruction_plan.plan_type",
     "recommendations[].external_critique_reconstruction_plan.detected_current_mechanism_version",
     "recommendations[].external_critique_reconstruction_plan.active_evidence_classes",
+    "recommendations[].external_critique_reconstruction_plan.target_capability_conventions",
+    "recommendations[].external_critique_reconstruction_plan.recommended_packaging_surface",
+    "recommendations[].external_critique_reconstruction_plan.prompt_text_packaging_disposition",
+    "recommendations[].external_critique_reconstruction_plan.model_runtime_availability_truth",
     "recommendations[].external_critique_reconstruction_plan.target_repo_authority_refs",
     "recommendations[].external_critique_reconstruction_plan.local_principles_to_preserve",
     "recommendations[].external_critique_reconstruction_plan.portable_invariants",

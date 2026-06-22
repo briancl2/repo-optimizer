@@ -46,7 +46,7 @@ cat > "$ADVISOR_JSON" <<'EOF'
       "id": "AS08-REC-01",
       "title": "Reconstruct external critique capability locally",
       "anti_pattern_family": "external_critique_reconstruction_gap",
-      "owner_surface": "portfolio_advisor:AGENTS.md, .github/prompts/external-critique.prompt.md, docs/external-critique.md",
+      "owner_surface": "portfolio_advisor:AGENTS.md, .github/skills/external-critique/SKILL.md, .github/prompts/external-critique.prompt.md, docs/external-critique.md",
       "fix_summary": "Build a target-local external-critique reconstruction plan from AS-08 evidence classes without copying BMA wording as canonical target text.",
       "bounded_non_claim": "Repo-auditor AS-08 evidence is advisory and does not make repo-star findings owner-binding.",
       "research_standard_guardrail": "Use repo-agent-core external critique contract fields as portable invariants only.",
@@ -61,9 +61,22 @@ cat > "$ADVISOR_JSON" <<'EOF'
         "detected_current_mechanism_version": "agent_instruction, prompt, docs; local version records: docs/external-critique.md=>0.5; portable contract version 1.0",
         "active_evidence_classes": [
           "stale_bma_copy",
+          "prompt_only_capability_drift",
           "local_principle_drift",
           "privacy_boundary_missing"
         ],
+        "target_capability_conventions": [
+          "github_skill_system",
+          "repo_agent_capability"
+        ],
+        "recommended_packaging_surface": ".github/skills/external-critique/SKILL.md",
+        "prompt_text_packaging_disposition": "prompt text may remain as a thin entrypoint or mirror, but it is not the default reusable capability package",
+        "model_runtime_availability_truth": {
+          "evidence_basis": [
+            "retained external critique receipt or output evidence records observed model/runtime"
+          ],
+          "boundary": "do not add a model probe program, static routing promise, or availability guarantee"
+        },
         "target_repo_authority_refs": [
           "AGENTS.md and repo-local startup/instruction surfaces",
           "owner GitHub issue/PR/check/merge truth",
@@ -86,6 +99,7 @@ cat > "$ADVISOR_JSON" <<'EOF'
           "Remove wording that makes BMA prompt text canonical for the target repo."
         ],
         "exact_files_to_change": [
+          ".github/skills/external-critique/SKILL.md",
           ".github/prompts/external-critique.prompt.md",
           "docs/external-critique.md",
           "scripts/external_probe.py"
@@ -105,8 +119,9 @@ cat > "$ADVISOR_JSON" <<'EOF'
           "Summarize or redact private evidence; retain only owner-routable, repo-safe evidence refs."
         ],
         "implementation_need": {
+          "skill_or_capability_surface": "create or update the canonical target-local skill/capability surface when the repo has a skill system or agent-capability convention",
           "runner_code": "not required by AS-08 alone; only change if target evidence identifies an existing runner as the broken mechanism",
-          "prompt_text": "update or create when prompt surfaces are listed or no capability exists",
+          "prompt_text": "update only as a thin entrypoint, mirror, or drift repair when a canonical skill/capability surface exists",
           "docs": "update or create when docs surfaces are listed or no capability exists",
           "policy_only_guidance": "preferred default for missing_capability, stale_bma_copy, local_principle_drift, and privacy boundary repairs"
         },
@@ -141,6 +156,7 @@ BLOCKERS="$OUTPUT_DIR/PATCHABILITY_BLOCKERS.json"
 RECEIPT="$OUTPUT_DIR/EXTERNAL_CRITIQUE_RECONSTRUCTION_REPLAY_RECEIPT.json"
 
 if [ -s "$MANIFEST" ] \
+    && grep -Fq '| AS-08 | external critique reconstruction for `.github/skills/external-critique/SKILL.md`' "$MANIFEST" \
     && grep -Fq '| AS-08 | external critique reconstruction for `.github/prompts/external-critique.prompt.md`' "$MANIFEST" \
     && grep -Fq '| AS-08 | external critique reconstruction for `docs/external-critique.md`' "$MANIFEST"; then
     echo "  PASS: replay wrote AS-08 manifest rows from advisor reconstruction plan"
@@ -187,27 +203,45 @@ assert receipt_payload["target_git_state_unchanged"] is True
 assert receipt_payload["before_git_head"] == receipt_payload["after_git_head"]
 assert receipt_payload["before_git_status"] == receipt_payload["after_git_status"] == ""
 assert "recommendations[].external_critique_reconstruction_plan.exact_files_to_change" in receipt_payload["arc3_consumed_fields"]
+assert "recommendations[].external_critique_reconstruction_plan.target_capability_conventions" in receipt_payload["arc3_consumed_fields"]
+assert "recommendations[].external_critique_reconstruction_plan.recommended_packaging_surface" in receipt_payload["arc3_consumed_fields"]
+assert "recommendations[].external_critique_reconstruction_plan.prompt_text_packaging_disposition" in receipt_payload["arc3_consumed_fields"]
+assert "recommendations[].external_critique_reconstruction_plan.model_runtime_availability_truth" in receipt_payload["arc3_consumed_fields"]
 assert receipt_payload["controlled_downstream_apply"]["eligible"] is False
 assert receipt_payload["controlled_downstream_apply"]["reason"] == "apply_check_clean_but_blocked_rows_remain"
 
-assert "Before AS-08 detector evidence: stale_bma_copy, local_principle_drift, privacy_boundary_missing" in patch_text
+assert "new file mode 100644" in patch_text
+assert "diff --git a/.github/skills/external-critique/SKILL.md b/.github/skills/external-critique/SKILL.md" in patch_text
+assert "Target-local external critique capability for repo-agent review." in patch_text
+assert "Target capability conventions: github_skill_system, repo_agent_capability." in patch_text
+assert "Recommended packaging surface: .github/skills/external-critique/SKILL.md." in patch_text
+assert "Before AS-08 detector evidence: stale_bma_copy, prompt_only_capability_drift, local_principle_drift, privacy_boundary_missing" in patch_text
 assert "After AS-08 validation target" in patch_text
+assert "prompt text is only a thin entrypoint, mirror, or drift repair" in patch_text
 assert "portfolio repo source of truth" in patch_text
 assert "repo source of truth first" in patch_text
 assert "owner GitHub issue/PR/check/merge truth" in patch_text
 assert "repo-agent-core `docs/external-critique-capability-contract.md`" in patch_text
+assert "Skill/capability surface: create or update the canonical target-local skill/capability surface" in patch_text
 assert "Runner code: not required by AS-08 alone" in patch_text
+assert "Prompt text: update only as a thin entrypoint, mirror, or drift repair" in patch_text
+assert "not the default reusable capability package" in patch_text
+assert "Model/runtime availability truth:" in patch_text
+assert "static routing promise" in patch_text
+assert "model probe program" in patch_text
 assert "scripts/external_probe.py" not in patch_text
 assert "Use this exact BMA prompt wholesale" not in patch_text
 
 rows = metadata_payload["patches"]
-assert len(rows) == 2
+assert len(rows) == 3
 assert {row["target_file"] for row in rows} == {
+    ".github/skills/external-critique/SKILL.md",
     ".github/prompts/external-critique.prompt.md",
     "docs/external-critique.md",
 }
 assert all(row["row_id"] == "AS-08" for row in rows)
 assert all("privacy_safe_patch_summary" in row for row in rows)
+assert all("external_critique_reconstruction_plan.recommended_packaging_surface" in row["arc3_consumed_fields"] for row in rows)
 
 assert blocker_payload["blocker_count"] == 1
 blocker = blocker_payload["blockers"][0]
