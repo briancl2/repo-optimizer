@@ -141,6 +141,7 @@ SUPPORTED_MATERIALIZER_IDS = {
     "CR-01",
     "NR-01",
     "HFR-01",
+    "AS-08",
     "FGR-01",
     "LR-01",
 }
@@ -2366,6 +2367,326 @@ def materialize_lr01() -> None:
         written_row_ids.add("LR-01")
 
 
+def as08_manifest_rows() -> list[dict[str, object]]:
+    return [row for row in manifest_rows(plan) if str(row.get("row_id", "")) == "AS-08"]
+
+
+def as08_paths_for_row(row: dict[str, object]) -> list[str | None]:
+    text = str(row.get("raw_row", ""))
+    paths: list[str | None] = []
+    for match in re.finditer(r"`([^`]+)`", text):
+        value = match.group(1)
+        rel = safe_rel_path(value)
+        if rel is None or has_git_path_component(rel):
+            paths.append(None)
+            continue
+        if re.fullmatch(r"[A-Za-z0-9_./-]+", rel):
+            paths.append(rel)
+    return paths
+
+
+def as08_plan_for_row(row: dict[str, object]) -> dict[str, object] | None:
+    advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
+    if not advisor_metadata:
+        return None
+    plan_value = advisor_metadata.get("reconstruction_plan")
+    return plan_value if isinstance(plan_value, dict) else None
+
+
+def privacy_safe_text(value: object, fallback: str = "unspecified") -> str:
+    if value is None:
+        return fallback
+    text = markdown_table_cell(str(value))
+    text = re.sub(r"https?://\S+", "[redacted-url]", text)
+    text = re.sub(r"\b\d[\d,._-]{3,}\b", "[redacted-number]", text)
+    return text[:260] if text else fallback
+
+
+def privacy_safe_list(values: object, *, limit: int = 4, fallback: str = "unspecified") -> list[str]:
+    if not isinstance(values, list):
+        return [fallback]
+    cleaned = [privacy_safe_text(value) for value in values if privacy_safe_text(value)]
+    return cleaned[:limit] or [fallback]
+
+
+def as08_is_local_guidance_path(rel: str) -> bool:
+    return (
+        rel in {"AGENTS.md", "CLAUDE.md", "README.md"}
+        or rel.startswith(
+            (
+                ".agents/",
+                ".claude/",
+                ".github/instructions/",
+                ".github/prompts/",
+                "docs/",
+                "tests/",
+            )
+        )
+    ) and rel.endswith((".md", ".txt", ".prompt.md")) or rel.endswith("/SKILL.md")
+
+
+def as08_runner_code_required(plan_obj: dict[str, object]) -> bool:
+    implementation_need = plan_obj.get("implementation_need")
+    if not isinstance(implementation_need, dict):
+        return False
+    runner_text = str(implementation_need.get("runner_code", "")).lower()
+    if "not required" in runner_text:
+        return False
+    return any(token in runner_text for token in ("required", "broken mechanism", "runner"))
+
+
+def as08_has_reconstruction_block(lines: list[str]) -> bool:
+    text = "\n".join(lines).lower()
+    return "## external critique reconstruction" in text or (
+        "external_critique_capability" in text
+        and "as-08" in text
+        and "privacy" in text
+        and "owner" in text
+    )
+
+
+def as08_reconstruction_block(plan_obj: dict[str, object], rel: str) -> list[str]:
+    active_classes = ", ".join(privacy_safe_list(plan_obj.get("active_evidence_classes"), limit=8))
+    authority_refs = privacy_safe_list(plan_obj.get("target_repo_authority_refs"), limit=6)
+    local_principles = privacy_safe_list(plan_obj.get("local_principles_to_preserve"), limit=6)
+    portable_invariants = privacy_safe_list(plan_obj.get("portable_invariants"), limit=6)
+    bma_translation = privacy_safe_list(plan_obj.get("bma_terms_to_translate_or_remove"), limit=4)
+    changes = privacy_safe_list(plan_obj.get("minimal_wording_or_code_changes"), limit=5)
+    validation = privacy_safe_list(plan_obj.get("tests_or_validation_commands"), limit=5)
+    privacy_notes = privacy_safe_list(plan_obj.get("privacy_redaction_notes"), limit=4)
+    implementation_need = plan_obj.get("implementation_need") if isinstance(plan_obj.get("implementation_need"), dict) else {}
+    runner_need = privacy_safe_text(implementation_need.get("runner_code") if isinstance(implementation_need, dict) else None)
+    prompt_need = privacy_safe_text(implementation_need.get("prompt_text") if isinstance(implementation_need, dict) else None)
+    docs_need = privacy_safe_text(implementation_need.get("docs") if isinstance(implementation_need, dict) else None)
+    policy_need = privacy_safe_text(implementation_need.get("policy_only_guidance") if isinstance(implementation_need, dict) else None)
+
+    lines = [
+        "## External Critique Reconstruction",
+        "",
+        "- Capability record: `EXTERNAL_CRITIQUE_CAPABILITY` target-local reconstruction.",
+        f"- Target file: `{rel}`.",
+        f"- Current mechanism/version: {privacy_safe_text(plan_obj.get('detected_current_mechanism_version'))}.",
+        f"- Before AS-08 detector evidence: {active_classes}.",
+        "- After AS-08 validation target: local authority refs, local principles, blocker/advisory classification, loop cap, privacy boundaries, and owner routing are explicit before critique findings change owner action.",
+        "- Contract references: repo-agent-core `docs/external-critique-capability-contract.md` and `templates/external-critique-capability.md`; repo-auditor AS-08 external-critique validation.",
+        "- Authority refs to preserve:",
+    ]
+    lines.extend(f"  - {item}" for item in authority_refs)
+    lines.append("- Local principles to preserve:")
+    lines.extend(f"  - {item}" for item in local_principles)
+    lines.append("- Portable invariants:")
+    lines.extend(f"  - {item}" for item in portable_invariants)
+    lines.append("- Target wording guidance:")
+    lines.extend(f"  - {item}" for item in bma_translation)
+    lines.append("- Minimal local changes:")
+    lines.extend(f"  - {item}" for item in changes)
+    lines.append("- Implementation disposition:")
+    lines.extend(
+        [
+            f"  - Runner code: {runner_need}",
+            f"  - Prompt text: {prompt_need}",
+            f"  - Docs: {docs_need}",
+            f"  - Policy-only guidance: {policy_need}",
+        ]
+    )
+    lines.append("- Privacy-safe patch summary:")
+    lines.extend(f"  - {item}" for item in privacy_notes)
+    lines.append("- Validation commands:")
+    lines.extend(f"  - {item}" for item in validation)
+    lines.extend(
+        [
+            f"- Owner routing: {privacy_safe_text(plan_obj.get('owner_routing'))}.",
+            "- Bounded non-claims: this patch recipe does not apply patches, mutate target repositories, authorize live external critique probes, or create controllers, schedulers, queues, daemons, dashboards, registries, retry loops, automatic issues/PRs, central services, or background memory.",
+        ]
+    )
+    return lines
+
+
+def as08_record(
+    row: dict[str, object],
+    patch_name: str,
+    code: str,
+    reason: str,
+    route_class: str = "unsupported_or_unpatchable_recommendation",
+) -> None:
+    blocker = {
+        "row_id": str(row.get("row_id", "AS-08")),
+        "patch": row.get("patch", ""),
+        "findings": row.get("findings", ""),
+        "files_touched": row.get("files_touched", ""),
+        "blocker_code": code,
+        "route_class": route_class,
+        "route_reason": ROUTE_REASONS[route_class],
+        "reason": reason,
+    }
+    add_row_metadata(blocker, row)
+    overflow_blockers.append(blocker)
+
+
+def materialize_as08() -> None:
+    rows = as08_manifest_rows()
+    if not rows:
+        return
+
+    patch_name = "AS-08-external-critique-reconstruction.patch"
+    changes: list[tuple[str, list[str], list[str]]] = []
+    metadata_rows: list[dict[str, object]] = []
+    emitted_or_blocked = False
+    processed_targets: set[str] = set()
+    for row in rows:
+        plan_obj = as08_plan_for_row(row)
+        if plan_obj is None:
+            as08_record(
+                row,
+                patch_name,
+                "as08_missing_reconstruction_plan",
+                "AS-08 patch recipes require advisor_metadata.reconstruction_plan from repo-upgrade-advisor external_critique_reconstruction_plan.",
+            )
+            emitted_or_blocked = True
+            continue
+        if plan_obj.get("plan_type") != "target_local_external_critique_reconstruction":
+            as08_record(
+                row,
+                patch_name,
+                "as08_wrong_reconstruction_plan_type",
+                "AS-08 patch recipes require plan_type=target_local_external_critique_reconstruction.",
+            )
+            emitted_or_blocked = True
+            continue
+        paths = as08_paths_for_row(row)
+        files_touched = str(row.get("files_touched", "")).strip()
+        if any(path is None for path in paths):
+            as08_record(
+                row,
+                patch_name,
+                "as08_unsafe_named_file",
+                "AS-08 requires a safe repository-relative named target file; absolute paths, .git paths, or parent traversal are not patchable.",
+                "unsafe_or_insufficient_authorization",
+            )
+            emitted_or_blocked = True
+            continue
+        concrete_paths = [path for path in paths if path is not None]
+        if not concrete_paths:
+            as08_record(
+                row,
+                patch_name,
+                "as08_missing_named_file",
+                "AS-08 requires exactly one safe named target file in each manifest row.",
+            )
+            emitted_or_blocked = True
+            continue
+        if len(dedupe_paths(concrete_paths)) != 1:
+            as08_record(
+                row,
+                patch_name,
+                "as08_ambiguous_named_files",
+                "AS-08 requires exactly one target file per row so reconstruction does not become a broad rewrite.",
+            )
+            emitted_or_blocked = True
+            continue
+        if files_touched != "1":
+            as08_record(
+                row,
+                patch_name,
+                "as08_broad_row_scope",
+                "AS-08 requires each manifest row to be scoped to exactly one file.",
+            )
+            emitted_or_blocked = True
+            continue
+
+        rel = concrete_paths[0]
+        if rel in processed_targets:
+            as08_record(
+                row,
+                patch_name,
+                "as08_duplicate_target_file",
+                f"AS-08 target file already has a materialized reconstruction recipe in this run: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        if not as08_is_local_guidance_path(rel):
+            runner_required = as08_runner_code_required(plan_obj)
+            as08_record(
+                row,
+                patch_name,
+                "as08_runner_or_code_target_not_materialized" if not runner_required else "as08_runner_change_requires_owner_implementation",
+                (
+                    "AS-08 patch recipes prefer local prompt/docs/tests guidance; runner or code targets are blocked unless a narrower owner implementation materializer is added."
+                    if not runner_required
+                    else "AS-08 detected runner-code need, but repo-optimizer has no safe generic runner implementation materializer for this target."
+                ),
+                "manual_target_owner_implementation" if runner_required else "unsupported_or_unpatchable_recommendation",
+            )
+            emitted_or_blocked = True
+            continue
+        path = repo / rel
+        if path.is_symlink():
+            as08_record(
+                row,
+                patch_name,
+                "as08_symlinked_target_file",
+                f"AS-08 target file is symlinked and is not safe for deterministic patch materialization: {rel}",
+                "unsafe_or_insufficient_authorization",
+            )
+            emitted_or_blocked = True
+            continue
+        old = read_lines(path)
+        if old is None:
+            as08_record(
+                row,
+                patch_name,
+                "as08_target_file_unreadable",
+                f"AS-08 target file is missing, unsafe, broad, or outside the repository: {rel}",
+                "unsafe_or_insufficient_authorization",
+            )
+            emitted_or_blocked = True
+            continue
+        if as08_has_reconstruction_block(old):
+            as08_record(
+                row,
+                patch_name,
+                "as08_already_grounded",
+                f"AS-08 target file already contains external critique reconstruction guidance: {rel}",
+            )
+            emitted_or_blocked = True
+            continue
+        new = insert_after_frontmatter_or_heading(old, as08_reconstruction_block(plan_obj, rel))
+        changes.append((rel, old, new))
+        metadata_context = row_metadata_context(row)
+        metadata_rows.append(
+            {
+                "row_id": str(row.get("row_id", "AS-08")),
+                "patch": patch_name,
+                "target_file": rel,
+                "privacy_safe_patch_summary": f"Adds target-local AS-08 external critique reconstruction guidance to {rel}; includes before/after detector evidence, authority refs, local principles, validation commands, and redaction boundaries without retaining raw private evidence.",
+                "arc3_consumed_fields": [
+                    "external_critique_reconstruction_plan.plan_type",
+                    "external_critique_reconstruction_plan.detected_current_mechanism_version",
+                    "external_critique_reconstruction_plan.active_evidence_classes",
+                    "external_critique_reconstruction_plan.target_repo_authority_refs",
+                    "external_critique_reconstruction_plan.local_principles_to_preserve",
+                    "external_critique_reconstruction_plan.portable_invariants",
+                    "external_critique_reconstruction_plan.bma_terms_to_translate_or_remove",
+                    "external_critique_reconstruction_plan.exact_files_to_change",
+                    "external_critique_reconstruction_plan.minimal_wording_or_code_changes",
+                    "external_critique_reconstruction_plan.tests_or_validation_commands",
+                    "external_critique_reconstruction_plan.privacy_redaction_notes",
+                    "external_critique_reconstruction_plan.implementation_need",
+                    "external_critique_reconstruction_plan.owner_routing",
+                ],
+                **metadata_context,
+            }
+        )
+        processed_targets.add(rel)
+        emitted_or_blocked = True
+
+    if changes:
+        if write_patch(patch_dir / patch_name, changes, "AS-08"):
+            patch_metadata.extend(metadata_rows)
+    elif emitted_or_blocked:
+        written_row_ids.add("AS-08")
+
+
 def flush_patch_metadata() -> None:
     if not patch_metadata:
         return
@@ -2396,6 +2717,7 @@ materialize_hs01()
 materialize_cr01()
 materialize_nr01()
 materialize_hfr01()
+materialize_as08()
 materialize_fgr01()
 materialize_lr01()
 flush_patch_metadata()
@@ -2456,6 +2778,7 @@ SUPPORTED_MATERIALIZER_IDS = {
     "CR-01",
     "NR-01",
     "HFR-01",
+    "AS-08",
     "FGR-01",
     "LR-01",
 }

@@ -1,4 +1,4 @@
-.PHONY: review optimize transfer-oracle benchmark-optimization-workloads normalize-agent-run-receipts build-live-paired-corpus collect-live-agent-receipts cr01-replay native-pruning-replay recovery-runtime-replay patch-check test validate help install-hooks check work work-close health spec-init
+.PHONY: review optimize transfer-oracle benchmark-optimization-workloads normalize-agent-run-receipts build-live-paired-corpus collect-live-agent-receipts cr01-replay native-pruning-replay recovery-runtime-replay external-critique-reconstruction-replay patch-check test validate help install-hooks check work work-close health spec-init
 
 TARGET ?= .
 AUDIT ?= audit_output
@@ -11,6 +11,7 @@ NR01_NATIVE_CAPABILITY ?= repo-agent-core upstream capability intake contract
 NR01_AFFECTED_SURFACE ?= $(NR01_TARGET_FILE)
 FGR_TARGET_FILE ?=
 LR_TARGET_FILE ?=
+FROM_ADVISOR ?=
 EXPECT_PATCHES ?=
 EXPECT_BLOCKERS ?=
 DECISIONS ?=
@@ -43,6 +44,8 @@ help:
 	@echo "                                            Replay bounded NR-01 native pruning patch-pack read-only"
 	@echo "  make recovery-runtime-replay TARGET=<path> OUTPUT_DIR=<dir> [FGR_TARGET_FILE=<path>] [LR_TARGET_FILE=<path>] [FROM_ADVISOR=<OPPORTUNITIES.json>] [EXPECT_BLOCKERS=<n>]"
 	@echo "                                            Replay bounded FGR-01/LR-01 patch-pack read-only"
+	@echo "  make external-critique-reconstruction-replay TARGET=<path> OUTPUT_DIR=<dir> FROM_ADVISOR=<OPPORTUNITIES.json> [EXPECT_PATCHES=<n>] [EXPECT_BLOCKERS=<n>]"
+	@echo "                                            Replay bounded AS-08 patch-pack read-only"
 	@echo "  make patch-check                         Validate existing patches"
 	@echo "  make test                                Run all tests"
 	@echo "  make validate OUTPUT_DIR=<dir>           Validate generated optimizer bundle integrity"
@@ -138,6 +141,13 @@ recovery-runtime-replay:
 		$(if $(EXPECT_PATCHES),--expect-patches "$(EXPECT_PATCHES)",) \
 		$(if $(EXPECT_BLOCKERS),--expect-blockers "$(EXPECT_BLOCKERS)",)
 
+external-critique-reconstruction-replay:
+	@test -n "$(FROM_ADVISOR)" || { echo "ERROR: set FROM_ADVISOR=<OPPORTUNITIES.json>"; exit 2; }
+	@bash scripts/replay-external-critique-reconstruction-patch-pack.sh "$(TARGET)" "$(OUTPUT_DIR)" \
+		--from-advisor "$(FROM_ADVISOR)" \
+		$(if $(EXPECT_PATCHES),--expect-patches "$(EXPECT_PATCHES)",) \
+		$(if $(EXPECT_BLOCKERS),--expect-blockers "$(EXPECT_BLOCKERS)",)
+
 patch-check:
 	@bash scripts/validate-patches.sh "$(TARGET)" "$(OUTPUT_DIR)/PATCH_PACK"
 
@@ -155,6 +165,7 @@ test:
 	@bash tests/test-cr01-replay.sh
 	@bash tests/test-native-pruning-replay.sh
 	@bash tests/test-recovery-runtime-replay.sh
+	@bash tests/test-external-critique-reconstruction-replay.sh
 	@bash tests/test-patches-apply.sh
 	@bash tests/test-preflight-tiers.sh
 	@bash tests/test-target-policy-context.sh
