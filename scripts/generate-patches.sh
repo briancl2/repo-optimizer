@@ -154,6 +154,20 @@ ROUTE_REASONS = {
     "contradictory_cleanup_contract": "The row contains a cleanup contract conflict that must be reconciled before patch generation.",
 }
 
+REPORT_ONLY_FRICTION_FAMILY_REASONS = {
+    "closure_signal_integrity_gap": "closure_signal_integrity_gap is a governance/meta closure-signal candidate, not a deterministic target-file edit. It remains report-only in patch mode; no repo-optimizer materializer should be built without a narrower owner contract.",
+    "review_ergonomics_working_memory_lightness_gap": "review_ergonomics_working_memory_lightness_gap is a governance/meta review-ergonomics and working-memory-lightness candidate, not a deterministic target-file edit. It remains report-only in patch mode; no repo-optimizer materializer should be built without a narrower owner contract.",
+    "validation_integrity_format_tracking_gap": "validation_integrity_format_tracking_gap is contract-backed/report-only validation-integrity format tracking, not live drift evidence. It remains report-only in patch mode; no repo-optimizer materializer should be built.",
+}
+
+
+def report_only_friction_family_for(row_id: str, row_text: str) -> tuple[str, str] | None:
+    haystack = f"{row_id} {row_text}".lower()
+    for family, reason in REPORT_ONLY_FRICTION_FAMILY_REASONS.items():
+        if family in haystack:
+            return family, reason
+    return None
+
 
 def row_route_text(row: dict[str, object]) -> str:
     values: list[str] = []
@@ -541,9 +555,14 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
             "PP-5 requires adding a helper plus updating its callers, which is not safe as a generic patch materializer without target-owner implementation authority.",
         ),
     }
+    report_only_family = report_only_friction_family_for(row_id, row_text)
     if row_id in special_reasons:
         code, reason = special_reasons[row_id]
         route_class = "manual_target_owner_implementation"
+    elif report_only_family is not None:
+        _family, reason = report_only_family
+        code = "unsupported_or_unpatchable_recommendation"
+        route_class = "unsupported_or_unpatchable_recommendation"
     else:
         advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
         advisor_code = advisor_metadata.get("blocker_code") if advisor_metadata else None
@@ -2863,6 +2882,20 @@ ROUTE_REASONS = {
     "contradictory_cleanup_contract": "The row contains a cleanup contract conflict that must be reconciled before patch generation.",
 }
 
+REPORT_ONLY_FRICTION_FAMILY_REASONS = {
+    "closure_signal_integrity_gap": "closure_signal_integrity_gap is a governance/meta closure-signal candidate, not a deterministic target-file edit. It remains report-only in patch mode; no repo-optimizer materializer should be built without a narrower owner contract.",
+    "review_ergonomics_working_memory_lightness_gap": "review_ergonomics_working_memory_lightness_gap is a governance/meta review-ergonomics and working-memory-lightness candidate, not a deterministic target-file edit. It remains report-only in patch mode; no repo-optimizer materializer should be built without a narrower owner contract.",
+    "validation_integrity_format_tracking_gap": "validation_integrity_format_tracking_gap is contract-backed/report-only validation-integrity format tracking, not live drift evidence. It remains report-only in patch mode; no repo-optimizer materializer should be built.",
+}
+
+
+def report_only_friction_family_for(row_id: str, row_text: str) -> tuple[str, str] | None:
+    haystack = f"{row_id} {row_text}".lower()
+    for family, reason in REPORT_ONLY_FRICTION_FAMILY_REASONS.items():
+        if family in haystack:
+            return family, reason
+    return None
+
 
 def row_route_text(row: dict[str, object]) -> str:
     values: list[str] = []
@@ -3091,19 +3124,26 @@ def manifest_rows(text: str) -> list[dict[str, object]]:
 def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
-    supported = bool(
-        row_id in SUPPORTED_MATERIALIZER_IDS
-        or re.search(r"\bS-05\b", row_text)
-        and re.search(r"\bS-06\b", row_text)
-        and re.search(r"\bS-07\b", row_text)
-    )
-    code = "supported_materializer_no_output" if supported else "unsupported_manifest_row"
-    reason = (
-        f"A deterministic materializer matched {row_id}, but the target had no apply-checkable change."
-        if supported
-        else f"No deterministic patch materializer is implemented for manifest row {row_id}; owner triage is required before opening target or materializer work."
-    )
-    route_class = classify_patchability_route(row, code, reason, supported_materializer=supported)
+    supported = False
+    report_only_family = report_only_friction_family_for(row_id, row_text)
+    if report_only_family is not None:
+        _family, reason = report_only_family
+        code = "unsupported_or_unpatchable_recommendation"
+        route_class = "unsupported_or_unpatchable_recommendation"
+    else:
+        supported = bool(
+            row_id in SUPPORTED_MATERIALIZER_IDS
+            or re.search(r"\bS-05\b", row_text)
+            and re.search(r"\bS-06\b", row_text)
+            and re.search(r"\bS-07\b", row_text)
+        )
+        code = "supported_materializer_no_output" if supported else "unsupported_manifest_row"
+        reason = (
+            f"A deterministic materializer matched {row_id}, but the target had no apply-checkable change."
+            if supported
+            else f"No deterministic patch materializer is implemented for manifest row {row_id}; owner triage is required before opening target or materializer work."
+        )
+        route_class = classify_patchability_route(row, code, reason, supported_materializer=supported)
     blocker = {
         "row_id": row_id,
         "patch": row.get("patch", ""),
