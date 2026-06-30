@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.11 | Spec: 054 + 003 + 004 + 005 + 006 + 007 | Date: 2026-06-01
+> Version: 1.12 | Spec: 054 + 003 + 004 + 005 + 006 + 007 | Date: 2026-06-30
 
 ## Purpose
 
@@ -96,6 +96,19 @@ readiness, or target-local repair. `FGR-01` is a bounded deterministic
 materializer for explicit one-file manifest rows: it emits patch files that add a
 compact foreground failure-guidance/recovery block to the named safe target file
 only, and it never mutates the target repository.
+
+Governance/meta operating-friction families remain explicit report-only
+patch-mode routes when they appear in a patch manifest:
+
+| Family | Patch-mode route |
+|---|---|
+| `closure_signal_integrity_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=unsupported_or_unpatchable_recommendation`; owner action belongs on an issue/PR surface, not in a generic materializer. |
+| `review_ergonomics_working_memory_lightness_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=unsupported_or_unpatchable_recommendation`; oversized state/review-timeout signals are governance/meta evidence only. |
+| `validation_integrity_format_tracking_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=unsupported_or_unpatchable_recommendation`; this is contract-backed/report-only format tracking, not live drift evidence. |
+
+These routes do not authorize target mutation, controller/scheduler/registry
+work, or repo-optimizer materializers without a narrower deterministic patch
+contract.
 
 ## Audit Receipt Admission
 
