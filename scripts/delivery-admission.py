@@ -99,6 +99,7 @@ ROUTE_OWNER_PATHS = {
     "unsupported_or_unpatchable_recommendation": "advisor/optimizer boundary triage plus positive-path proof",
     "unsafe_or_insufficient_authorization": "operator authorization blocker",
     "contradictory_cleanup_contract": "cleanup-contract reconciliation issue",
+    "external_closure_coupling": "target-owner default-closure decoupling issue",
     "unclassified": "route-classification blocker",
 }
 

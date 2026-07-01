@@ -401,6 +401,7 @@ check "single unsupported route remains blocked" "blocked_patchability" "$(json_
 check "single unsupported route triages boundary" "true" "$(grep -Fq 'triage the repo-upgrade-advisor vs repo-optimizer boundary' "$UNSUPPORTED_SINGLE/DELIVERY_ADMISSION.json" && grep -Fq 'prove delivery admission is reachable' "$UNSUPPORTED_SINGLE/DELIVERY_ADMISSION.json" && echo true || echo false)"
 single_route_case "unsafe" "unsafe_or_insufficient_authorization" "operator authorization blocker"
 single_route_case "contradictory" "contradictory_cleanup_contract" "cleanup-contract reconciliation issue"
+single_route_case "external-closure" "external_closure_coupling" "target-owner default-closure decoupling issue"
 
 echo ""
 echo "=== Delivery Admission Results: $PASS passed, $FAIL failed ==="

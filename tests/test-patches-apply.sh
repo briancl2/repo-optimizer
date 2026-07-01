@@ -2022,6 +2022,29 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+AS56_OUTPUT="$(mktemp -d)"
+AS56_FINDINGS="$AS56_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$AS56_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| AS-56 | external_closure_coupling_gap: default closure gate reaches $HOME/repos/repo-auditor from scripts/work-close.sh and leaves PRE/POST/DELTA unknown; report-only until a target owner names the exact decoupling change | scripts/work-close.sh |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$AS56_FINDINGS" "$AS56_OUTPUT" >/dev/null \
+    && [ -s "$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json')); row=d['blockers'][0]; assert d['blocker_count'] == 1; assert row['row_id'] == 'AS-56'; assert row['blocker_code'] == 'advisor_external_closure_coupling_gap'; assert row['route_class'] == 'external_closure_coupling'; assert 'target owner names an exact file/change contract' in row['reason']"; then
+    echo "  ✓ AS-56 external closure coupling emits explicit patchability route"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ AS-56 external closure coupling did not emit explicit patchability route"
+    [ -f "$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
 cat > "$BLOCKED_AUDIT_INPUT/SCORECARD.json" <<'EOF'
 {
   "composite": 81,

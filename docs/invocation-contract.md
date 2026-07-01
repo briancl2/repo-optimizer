@@ -97,6 +97,13 @@ materializer for explicit one-file manifest rows: it emits patch files that add 
 compact foreground failure-guidance/recovery block to the named safe target file
 only, and it never mutates the target repository.
 
+Repo-auditor AS-56 / advisor `external_closure_coupling_gap` rows are explicit
+patchability blockers under `route_class=external_closure_coupling` unless a
+target owner names an exact file/change contract for deterministic closure
+decoupling. Governance-first or GitHub-native-default recommendations remain
+report-only/blocker evidence; optimizer patch mode must not synthesize target
+edits from hidden sibling-repo coupling findings alone.
+
 ## Audit Receipt Admission
 
 Normal optimizer runs are strict consumers of repo-auditor completion receipts.
