@@ -46,6 +46,8 @@ CAP_OUTPUT="$(mktemp -d)"
 LIMIT_OUTPUT="$(mktemp -d)"
 MIXED_OUTPUT="$(mktemp -d)"
 STALE_OUTPUT="$(mktemp -d)"
+FLEET_REPORT_ONLY_OUTPUT="$(mktemp -d)"
+AS56_OUTPUT="$(mktemp -d)"
 REAL_OUTPUT="$(mktemp -d)"
 HS_OUTPUT="$(mktemp -d)"
 HS_BLOCKED_OUTPUT="$(mktemp -d)"
@@ -74,7 +76,7 @@ PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$NR_OUTPUT" "$NR_APPEND_OUTPUT" "$NR_BLOCKED_OUTPUT" "$NR_CONTEXT_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$FGR_OUTPUT" "$FGR_BLOCKED_OUTPUT" "$FGR_CONTEXT_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$LR_CONTEXT_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$FLEET_REPORT_ONLY_OUTPUT" "$AS56_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$NR_OUTPUT" "$NR_APPEND_OUTPUT" "$NR_BLOCKED_OUTPUT" "$NR_CONTEXT_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$FGR_OUTPUT" "$FGR_BLOCKED_OUTPUT" "$FGR_CONTEXT_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$LR_CONTEXT_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -1961,7 +1963,7 @@ fi
 BLOCKED_OUTPUT="$(mktemp -d)"
 BLOCKED_AUDIT_INPUT="$(mktemp -d)"
 BLOCKED_PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$FLEET_REPORT_ONLY_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT" "$BLOCKED_OUTPUT" "$BLOCKED_AUDIT_INPUT" "$BLOCKED_PIPELINE_OUTPUT"' EXIT
 BLOCKED_FINDINGS="$BLOCKED_OUTPUT/OPTIMIZATION_PLAN.md"
 cat > "$BLOCKED_FINDINGS" <<'EOF'
 # Optimization Plan
@@ -2022,7 +2024,6 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-AS56_OUTPUT="$(mktemp -d)"
 AS56_FINDINGS="$AS56_OUTPUT/OPTIMIZATION_PLAN.md"
 cat > "$AS56_FINDINGS" <<'EOF'
 # Optimization Plan
@@ -2042,6 +2043,55 @@ if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$AS56_FINDINGS" "
 else
     echo "  ✗ AS-56 external closure coupling did not emit explicit patchability route"
     [ -f "$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+FLEET_REPORT_ONLY_FINDINGS="$FLEET_REPORT_ONLY_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$FLEET_REPORT_ONLY_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| closure_signal_integrity_gap | AS-54 closure signal integrity is a keep-candidate governance/meta friction class, not a target-file patch. | 0 |
+| review_ergonomics_working_memory_lightness_gap | AS-55 review ergonomics and working-memory lightness is a governance/meta friction class from oversized state/review timeout signals. | 0 |
+| validation_integrity_format_tracking_gap | Validation integrity format tracking is contract-backed/report-only with no live drift claim. | 0 |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$FLEET_REPORT_ONLY_FINDINGS" "$FLEET_REPORT_ONLY_OUTPUT" >/dev/null \
+    && ! compgen -G "$FLEET_REPORT_ONLY_OUTPUT/PATCH_PACK/*.patch" >/dev/null \
+    && [ -s "$FLEET_REPORT_ONLY_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 - "$FLEET_REPORT_ONLY_OUTPUT/PATCHABILITY_BLOCKERS.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+
+expected = {
+    "closure_signal_integrity_gap",
+    "review_ergonomics_working_memory_lightness_gap",
+    "validation_integrity_format_tracking_gap",
+}
+assert data["patches_generated"] == 0
+assert data["blocker_count"] == 3
+rows = {row["row_id"]: row for row in data["blockers"]}
+assert set(rows) == expected
+for row in rows.values():
+    assert row["blocker_code"] == "unsupported_or_unpatchable_recommendation"
+    assert row["route_class"] == "unsupported_or_unpatchable_recommendation"
+    assert row["route_reason"]
+    assert "report-only" in row["reason"]
+    assert "materializer" in row["reason"]
+PY
+then
+    echo "  ✓ fleet governance/meta friction families stay report-only patchability blockers"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ fleet governance/meta friction families did not stay report-only"
+    find "$FLEET_REPORT_ONLY_OUTPUT" -maxdepth 3 -type f -print
+    [ -f "$FLEET_REPORT_ONLY_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$FLEET_REPORT_ONLY_OUTPUT/PATCHABILITY_BLOCKERS.json"
     FAIL=$((FAIL + 1))
 fi
 

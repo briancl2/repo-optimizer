@@ -1,6 +1,6 @@
 # Invocation Contract -- repo-optimizer
 
-> Version: 1.11 | Spec: 054 + 003 + 004 + 005 + 006 + 007 | Date: 2026-06-01
+> Version: 1.12 | Spec: 054 + 003 + 004 + 005 + 006 + 007 | Date: 2026-06-30
 
 ## Purpose
 
@@ -103,6 +103,20 @@ target owner names an exact file/change contract for deterministic closure
 decoupling. Governance-first or GitHub-native-default recommendations remain
 report-only/blocker evidence; optimizer patch mode must not synthesize target
 edits from hidden sibling-repo coupling findings alone.
+
+Governance/meta operating-friction families remain explicit report-only
+patch-mode routes when they appear in a patch manifest:
+
+| Family | Patch-mode route |
+|---|---|
+| `closure_signal_integrity_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=unsupported_or_unpatchable_recommendation`; owner action belongs on an issue/PR surface, not in a generic materializer. |
+| `review_ergonomics_working_memory_lightness_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=unsupported_or_unpatchable_recommendation`; oversized state/review-timeout signals are governance/meta evidence only. |
+| `validation_integrity_format_tracking_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=unsupported_or_unpatchable_recommendation`; this is contract-backed/report-only format tracking, not live drift evidence. |
+| `external_closure_coupling_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=external_closure_coupling`; hidden sibling-repo/default closure coupling requires target-owner decoupling, not a generic materializer. |
+
+These routes do not authorize target mutation, controller/scheduler/registry
+work, or repo-optimizer materializers without a narrower deterministic patch
+contract.
 
 ## Audit Receipt Admission
 

@@ -155,6 +155,20 @@ ROUTE_REASONS = {
     "external_closure_coupling": "AS-56 external closure coupling needs target-owner decoupling of hidden/default closure dependencies before any deterministic patch route.",
 }
 
+REPORT_ONLY_FRICTION_FAMILY_REASONS = {
+    "closure_signal_integrity_gap": "closure_signal_integrity_gap is a governance/meta closure-signal candidate, not a deterministic target-file edit. It remains report-only in patch mode; no repo-optimizer materializer should be built without a narrower owner contract.",
+    "review_ergonomics_working_memory_lightness_gap": "review_ergonomics_working_memory_lightness_gap is a governance/meta review-ergonomics and working-memory-lightness candidate, not a deterministic target-file edit. It remains report-only in patch mode; no repo-optimizer materializer should be built without a narrower owner contract.",
+    "validation_integrity_format_tracking_gap": "validation_integrity_format_tracking_gap is contract-backed/report-only validation-integrity format tracking, not live drift evidence. It remains report-only in patch mode; no repo-optimizer materializer should be built.",
+}
+
+
+def report_only_friction_family_for(row_id: str, row_text: str) -> tuple[str, str] | None:
+    haystack = f"{row_id} {row_text}".lower()
+    for family, reason in REPORT_ONLY_FRICTION_FAMILY_REASONS.items():
+        if family in haystack:
+            return family, reason
+    return None
+
 
 def row_route_text(row: dict[str, object]) -> str:
     values: list[str] = []
@@ -556,8 +570,13 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
             "manual_target_owner_implementation",
         ),
     }
+    report_only_family = report_only_friction_family_for(row_id, row_text)
     if row_id in special_reasons:
         code, reason, route_class = special_reasons[row_id]
+    elif report_only_family is not None:
+        _family, reason = report_only_family
+        code = "unsupported_or_unpatchable_recommendation"
+        route_class = "unsupported_or_unpatchable_recommendation"
     else:
         advisor_metadata = row.get("advisor_metadata") if isinstance(row.get("advisor_metadata"), dict) else None
         advisor_code = advisor_metadata.get("blocker_code") if advisor_metadata else None
@@ -2878,6 +2897,20 @@ ROUTE_REASONS = {
     "external_closure_coupling": "AS-56 external closure coupling needs target-owner decoupling of hidden/default closure dependencies before any deterministic patch route.",
 }
 
+REPORT_ONLY_FRICTION_FAMILY_REASONS = {
+    "closure_signal_integrity_gap": "closure_signal_integrity_gap is a governance/meta closure-signal candidate, not a deterministic target-file edit. It remains report-only in patch mode; no repo-optimizer materializer should be built without a narrower owner contract.",
+    "review_ergonomics_working_memory_lightness_gap": "review_ergonomics_working_memory_lightness_gap is a governance/meta review-ergonomics and working-memory-lightness candidate, not a deterministic target-file edit. It remains report-only in patch mode; no repo-optimizer materializer should be built without a narrower owner contract.",
+    "validation_integrity_format_tracking_gap": "validation_integrity_format_tracking_gap is contract-backed/report-only validation-integrity format tracking, not live drift evidence. It remains report-only in patch mode; no repo-optimizer materializer should be built.",
+}
+
+
+def report_only_friction_family_for(row_id: str, row_text: str) -> tuple[str, str] | None:
+    haystack = f"{row_id} {row_text}".lower()
+    for family, reason in REPORT_ONLY_FRICTION_FAMILY_REASONS.items():
+        if family in haystack:
+            return family, reason
+    return None
+
 
 def row_route_text(row: dict[str, object]) -> str:
     values: list[str] = []
@@ -3113,11 +3146,15 @@ def manifest_rows(text: str) -> list[dict[str, object]]:
 def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
+    report_only_family = report_only_friction_family_for(row_id, row_text)
     if row_id == "AS-56" or "external_closure_coupling" in row_text.lower() or "external closure coupling" in row_text.lower():
-        supported = False
         code = "advisor_external_closure_coupling_gap"
         reason = "AS-56 external closure coupling requires target-owner decoupling of default closure dependencies. Keep this report-only unless a target owner names an exact file/change contract for deterministic patch generation."
         route_class = "external_closure_coupling"
+    elif report_only_family is not None:
+        _family, reason = report_only_family
+        code = "unsupported_or_unpatchable_recommendation"
+        route_class = "unsupported_or_unpatchable_recommendation"
     else:
         supported = bool(
             row_id in SUPPORTED_MATERIALIZER_IDS
