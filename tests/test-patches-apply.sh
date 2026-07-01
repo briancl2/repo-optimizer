@@ -47,6 +47,7 @@ LIMIT_OUTPUT="$(mktemp -d)"
 MIXED_OUTPUT="$(mktemp -d)"
 STALE_OUTPUT="$(mktemp -d)"
 FLEET_REPORT_ONLY_OUTPUT="$(mktemp -d)"
+AS56_OUTPUT="$(mktemp -d)"
 REAL_OUTPUT="$(mktemp -d)"
 HS_OUTPUT="$(mktemp -d)"
 HS_BLOCKED_OUTPUT="$(mktemp -d)"
@@ -75,7 +76,7 @@ PP4_RUNTIME_REPO="$(mktemp -d)"
 PP4_UNSAFE_OUTPUT="$(mktemp -d)"
 AUDIT_INPUT="$(mktemp -d)"
 PIPELINE_OUTPUT="$(mktemp -d)"
-trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$FLEET_REPORT_ONLY_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$NR_OUTPUT" "$NR_APPEND_OUTPUT" "$NR_BLOCKED_OUTPUT" "$NR_CONTEXT_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$FGR_OUTPUT" "$FGR_BLOCKED_OUTPUT" "$FGR_CONTEXT_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$LR_CONTEXT_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
+trap 'rm -rf "$TARGET_REPO" "$EXTERNAL_FIXTURE" "$OUTPUT_DIR" "$PP_OUTPUT" "$PP3_OUTPUT" "$CAP_OUTPUT" "$LIMIT_OUTPUT" "$MIXED_OUTPUT" "$STALE_OUTPUT" "$FLEET_REPORT_ONLY_OUTPUT" "$AS56_OUTPUT" "$REAL_OUTPUT" "$HS_OUTPUT" "$HS_BLOCKED_OUTPUT" "$CR_OUTPUT" "$CR_BLOCKED_OUTPUT" "$NR_OUTPUT" "$NR_APPEND_OUTPUT" "$NR_BLOCKED_OUTPUT" "$NR_CONTEXT_OUTPUT" "$HFR_OUTPUT" "$HFR_BLOCKED_OUTPUT" "$FGR_OUTPUT" "$FGR_BLOCKED_OUTPUT" "$FGR_CONTEXT_OUTPUT" "$LR_OUTPUT" "$LR_BLOCKED_OUTPUT" "$LR_CONTEXT_OUTPUT" "$WM02_SAFE_REPO" "$WM02_SAFE_OUTPUT" "$WM02_CLEAN_OUTPUT" "$WM02_BLOCKED_REPO" "$WM02_BLOCKED_OUTPUT" "$WM02_NO_ANCHOR_REPO" "$WM02_NO_ANCHOR_OUTPUT" "$PP4_RUNTIME_REPO" "$PP4_UNSAFE_OUTPUT" "$AUDIT_INPUT" "$PIPELINE_OUTPUT"' EXIT
 
 mkdir -p "$TARGET_REPO/scripts" "$TARGET_REPO/.agents/skills/reviewing-code-locally/scripts" "$TARGET_REPO/.agents/skills/template-validation" "$TARGET_REPO/.agents/skills/already-ready" "$TARGET_REPO/.agents/skills/metadata-target" "$TARGET_REPO/.agents/skills/escaped" "$TARGET_REPO/.agents/skills/out-of-row" "$TARGET_REPO/.agents/skills/anti-pattern-check" "$TARGET_REPO/.agents/skills/quality-benchmark" "$TARGET_REPO/.agents/skills/transcript-processing" "$TARGET_REPO/.agents/skills/glitch-detection" "$TARGET_REPO/.github/agents" "$TARGET_REPO/docs"
 for n in 1 2 3 4 5 6 7; do
@@ -2020,6 +2021,28 @@ if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$ROUTE_FINDINGS" 
 else
     echo "  ✗ unsupported manifest rows did not emit expected route classes"
     [ -f "$ROUTE_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$ROUTE_OUTPUT/PATCHABILITY_BLOCKERS.json"
+    FAIL=$((FAIL + 1))
+fi
+
+AS56_FINDINGS="$AS56_OUTPUT/OPTIMIZATION_PLAN.md"
+cat > "$AS56_FINDINGS" <<'EOF'
+# Optimization Plan
+
+## Patch Manifest
+
+| Patch # | Findings | Files touched |
+|---|---|---:|
+| AS-56 | external_closure_coupling_gap: default closure gate reaches $HOME/repos/repo-auditor from scripts/work-close.sh and leaves PRE/POST/DELTA unknown; report-only until a target owner names the exact decoupling change | scripts/work-close.sh |
+EOF
+
+if bash "$OPT_DIR/scripts/generate-patches.sh" "$TARGET_REPO" "$AS56_FINDINGS" "$AS56_OUTPUT" >/dev/null \
+    && [ -s "$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json" ] \
+    && python3 -c "import json; d=json.load(open('$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json')); row=d['blockers'][0]; assert d['blocker_count'] == 1; assert row['row_id'] == 'AS-56'; assert row['blocker_code'] == 'advisor_external_closure_coupling_gap'; assert row['route_class'] == 'external_closure_coupling'; assert 'target owner names an exact file/change contract' in row['reason']"; then
+    echo "  ✓ AS-56 external closure coupling emits explicit patchability route"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ AS-56 external closure coupling did not emit explicit patchability route"
+    [ -f "$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json" ] && cat "$AS56_OUTPUT/PATCHABILITY_BLOCKERS.json"
     FAIL=$((FAIL + 1))
 fi
 

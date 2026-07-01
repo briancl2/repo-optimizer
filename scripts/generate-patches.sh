@@ -152,6 +152,7 @@ ROUTE_REASONS = {
     "unsupported_or_unpatchable_recommendation": "The row is advisory, already satisfied, or too semantic to convert into a deterministic patch without a narrower contract.",
     "unsafe_or_insufficient_authorization": "The row is blocked by unsafe scope, safety limits, read-only constraints, or missing owner authorization.",
     "contradictory_cleanup_contract": "The row contains a cleanup contract conflict that must be reconciled before patch generation.",
+    "external_closure_coupling": "AS-56 external closure coupling needs target-owner decoupling of hidden/default closure dependencies before any deterministic patch route.",
 }
 
 REPORT_ONLY_FRICTION_FAMILY_REASONS = {
@@ -201,6 +202,13 @@ def classify_patchability_route(
         )
     ):
         return "contradictory_cleanup_contract"
+    if (
+        "external_closure_coupling" in text
+        or "external closure coupling" in text
+        or "hidden sibling" in text
+        or code_text == "advisor_external_closure_coupling_gap"
+    ):
+        return "external_closure_coupling"
     if (
         "unsafe" in text
         or "unsafe" in code_text
@@ -546,19 +554,25 @@ def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
     special_reasons = {
+        "AS-56": (
+            "advisor_external_closure_coupling_gap",
+            "AS-56 external closure coupling requires target-owner decoupling of default closure dependencies. Keep this report-only unless a target owner names an exact file/change contract for deterministic patch generation.",
+            "external_closure_coupling",
+        ),
         "PP-2": (
             "unsupported_semantic_refactor",
             "PP-2 requires semantic extraction/deduplication across target documentation and must remain blocked until a target owner issue names the exact keep/reference set.",
+            "manual_target_owner_implementation",
         ),
         "PP-5": (
             "unsupported_helper_plus_caller_update",
             "PP-5 requires adding a helper plus updating its callers, which is not safe as a generic patch materializer without target-owner implementation authority.",
+            "manual_target_owner_implementation",
         ),
     }
     report_only_family = report_only_friction_family_for(row_id, row_text)
     if row_id in special_reasons:
-        code, reason = special_reasons[row_id]
-        route_class = "manual_target_owner_implementation"
+        code, reason, route_class = special_reasons[row_id]
     elif report_only_family is not None:
         _family, reason = report_only_family
         code = "unsupported_or_unpatchable_recommendation"
@@ -2880,6 +2894,7 @@ ROUTE_REASONS = {
     "unsupported_or_unpatchable_recommendation": "The row is advisory, already satisfied, or too semantic to convert into a deterministic patch without a narrower contract.",
     "unsafe_or_insufficient_authorization": "The row is blocked by unsafe scope, safety limits, read-only constraints, or missing owner authorization.",
     "contradictory_cleanup_contract": "The row contains a cleanup contract conflict that must be reconciled before patch generation.",
+    "external_closure_coupling": "AS-56 external closure coupling needs target-owner decoupling of hidden/default closure dependencies before any deterministic patch route.",
 }
 
 REPORT_ONLY_FRICTION_FAMILY_REASONS = {
@@ -2929,6 +2944,13 @@ def classify_patchability_route(
         )
     ):
         return "contradictory_cleanup_contract"
+    if (
+        "external_closure_coupling" in text
+        or "external closure coupling" in text
+        or "hidden sibling" in text
+        or code_text == "advisor_external_closure_coupling_gap"
+    ):
+        return "external_closure_coupling"
     if (
         "unsafe" in text
         or "unsafe" in code_text
@@ -3124,9 +3146,12 @@ def manifest_rows(text: str) -> list[dict[str, object]]:
 def blocker_for(row: dict[str, object]) -> dict[str, object]:
     row_text = " ".join(str(value) for value in row.values())
     row_id = str(row.get("row_id", "unknown"))
-    supported = False
     report_only_family = report_only_friction_family_for(row_id, row_text)
-    if report_only_family is not None:
+    if row_id == "AS-56" or "external_closure_coupling" in row_text.lower() or "external closure coupling" in row_text.lower():
+        code = "advisor_external_closure_coupling_gap"
+        reason = "AS-56 external closure coupling requires target-owner decoupling of default closure dependencies. Keep this report-only unless a target owner names an exact file/change contract for deterministic patch generation."
+        route_class = "external_closure_coupling"
+    elif report_only_family is not None:
         _family, reason = report_only_family
         code = "unsupported_or_unpatchable_recommendation"
         route_class = "unsupported_or_unpatchable_recommendation"

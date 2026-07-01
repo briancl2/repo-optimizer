@@ -97,6 +97,13 @@ materializer for explicit one-file manifest rows: it emits patch files that add 
 compact foreground failure-guidance/recovery block to the named safe target file
 only, and it never mutates the target repository.
 
+Repo-auditor AS-56 / advisor `external_closure_coupling_gap` rows are explicit
+patchability blockers under `route_class=external_closure_coupling` unless a
+target owner names an exact file/change contract for deterministic closure
+decoupling. Governance-first or GitHub-native-default recommendations remain
+report-only/blocker evidence; optimizer patch mode must not synthesize target
+edits from hidden sibling-repo coupling findings alone.
+
 Governance/meta operating-friction families remain explicit report-only
 patch-mode routes when they appear in a patch manifest:
 
@@ -105,6 +112,7 @@ patch-mode routes when they appear in a patch manifest:
 | `closure_signal_integrity_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=unsupported_or_unpatchable_recommendation`; owner action belongs on an issue/PR surface, not in a generic materializer. |
 | `review_ergonomics_working_memory_lightness_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=unsupported_or_unpatchable_recommendation`; oversized state/review-timeout signals are governance/meta evidence only. |
 | `validation_integrity_format_tracking_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=unsupported_or_unpatchable_recommendation`; this is contract-backed/report-only format tracking, not live drift evidence. |
+| `external_closure_coupling_gap` | Emit zero patches and a `PATCHABILITY_BLOCKERS.json` row with `route_class=external_closure_coupling`; hidden sibling-repo/default closure coupling requires target-owner decoupling, not a generic materializer. |
 
 These routes do not authorize target mutation, controller/scheduler/registry
 work, or repo-optimizer materializers without a narrower deterministic patch
